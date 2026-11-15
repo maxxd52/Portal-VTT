@@ -350,8 +350,21 @@ export const BoardViewMethods = {
 
     // 11. Atajos de Teclado
     document.addEventListener('keydown', (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
       const k = e.key.toLowerCase();
+      if (k === 'escape') {
+        if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+          document.activeElement.blur();
+        }
+        Service.state.wallAnchor = null;
+        Service.state.sheetOpen = false;
+        Service.state.drawerOpen = false;
+        Service.clearDiceHand();
+        if (this.setDicePopoverOpen) this.setDicePopoverOpen(false);
+        this.hideContextMenu();
+        Service.notify();
+        return;
+      }
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
       if ((e.ctrlKey || e.metaKey) && k === 'z') {
         e.preventDefault();
         const ok = e.shiftKey ? Service.redo() : Service.undo();
@@ -371,12 +384,6 @@ export const BoardViewMethods = {
       else if (k === 'g') Service.setTool('ping');
       else if (k === 'c') {
         Service.state.sheetOpen = !Service.state.sheetOpen;
-        Service.notify();
-      } else if (k === 'escape') {
-        Service.state.wallAnchor = null;
-        Service.clearDiceHand();
-        if (this.setDicePopoverOpen) this.setDicePopoverOpen(false);
-        this.hideContextMenu();
         Service.notify();
       }
     });
