@@ -5,7 +5,7 @@ import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
 import { WebPConverter } from '../utils/webpConverter.js?v=20261114m';
 import { createInitialState, generateRoomCode } from '../core/model.js';
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115n';
+import { Service } from '../core/service.js?v=20261115o';
 
 /**
  * Room/Cartridge/Shelf modal, Google Drive modal, Sync/Event Log modal & Handouts modal.

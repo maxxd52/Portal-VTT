@@ -2,7 +2,7 @@
    DICE VIEW: DOCK, HISTORIAL, OVERLAY 3D Y PERSONALIZACIÓN DE DADOS
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261115n';
+import { Service } from '../core/service.js?v=20261115o';
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
 
 export const DiceViewMethods = {
