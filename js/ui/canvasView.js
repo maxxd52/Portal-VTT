@@ -1,5 +1,5 @@
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115m';
+import { Service } from '../core/service.js?v=20261115n';
 
 /**
  * Canvas, Fog of War, Map Notes & Vector Overlay rendering methods mixed into View.
