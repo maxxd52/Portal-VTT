@@ -1,0 +1,1119 @@
+/* ==========================================================================
+   MOTOR 3D DE DADOS POLIÉDRICOS CON CARAS NUMERADAS (THREE.JS)
+   Soporta d4, d6, d8, d10 (trapezoedro pentagonal), d12, d20 y d100 (2×d10)
+   ========================================================================== */
+
+const DiceAudio = {
+  ctx: null,
+  noiseBuffer: null,
+
+  getContext() {
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+      return this.ctx;
+    }
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    this.ctx = new AudioCtx();
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    return this.ctx;
+  },
+
+  getNoiseBuffer(ctx) {
+    if (this.noiseBuffer) return this.noiseBuffer;
+    const len = Math.floor(ctx.sampleRate * 0.08);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    this.noiseBuffer = buf;
+    return buf;
+  },
+
+  // Impacto físico sin ondas senoidales: solo ruido filtrado en banda de madera + chasquido de resina
+  playWoodTap(intensity = 1, delaySec = 0) {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const t0 = ctx.currentTime + delaySec;
+      const level = Math.max(0.03, Math.min(1, intensity));
+      const jitter = 0.86 + Math.random() * 0.28;
+
+      // 1. Golpe seco de arista acrílica/resina
+      const snapSrc = ctx.createBufferSource();
+      snapSrc.buffer = this.getNoiseBuffer(ctx);
+      const snapFilter = ctx.createBiquadFilter();
+      snapFilter.type = 'bandpass';
+      snapFilter.frequency.value = 2250 * jitter;
+      snapFilter.Q.value = 1.6;
+      const snapGain = ctx.createGain();
+      snapGain.gain.setValueAtTime(0.32 * level, t0);
+      snapGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.011);
+      snapSrc.connect(snapFilter);
+      snapFilter.connect(snapGain);
+      snapGain.connect(ctx.destination);
+      snapSrc.start(t0);
+      snapSrc.stop(t0 + 0.014);
+
+      // 2. Resonancia mate de mesa de madera (banda media-grave, sin tono electrónico)
+      const bodySrc = ctx.createBufferSource();
+      bodySrc.buffer = this.getNoiseBuffer(ctx);
+      const bodyFilter = ctx.createBiquadFilter();
+      bodyFilter.type = 'bandpass';
+      bodyFilter.frequency.value = 430 * jitter;
+      bodyFilter.Q.value = 1.3;
+      const bodyGain = ctx.createGain();
+      bodyGain.gain.setValueAtTime(0.36 * level, t0);
+      bodyGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.024);
+      bodySrc.connect(bodyFilter);
+      bodyFilter.connect(bodyGain);
+      bodyGain.connect(ctx.destination);
+      bodySrc.start(t0);
+      bodySrc.stop(t0 + 0.028);
+    } catch (_) {}
+  },
+
+  playPickup(count = 1) {
+    this.playWoodTap(0.28, 0);
+    if (count > 1) {
+      this.playWoodTap(0.20, 0.022 + Math.random() * 0.012);
+    }
+  },
+
+  playThrow() {
+    this.playWoodTap(0.14, 0);
+  }
+};
+
+export const Dice3DEngine = {
+  renderer: null,
+  scene: null,
+  camera: null,
+  diceGroup: null,
+  animId: null,
+  canvas: null,
+  overlayEl: null,
+  trayEl: null,
+  isFlying: false,
+  textureCache: new Map(),
+  previewRenderer: null,
+  previewScene: null,
+  previewCamera: null,
+  previewDie: null,
+  previewTargetQuat: null,
+  previewAnimId: null,
+
+  setupSceneLights(sceneObj) {
+    const THREE = window.THREE;
+    const hemi = new THREE.HemisphereLight(0xf8fafc, 0x1e293b, 0.62);
+    const keyLight = new THREE.DirectionalLight(0xfffaf0, 1.05);
+    keyLight.position.set(2.5, 4.2, 5.2);
+    const fillLight = new THREE.DirectionalLight(0xc4b5fd, 0.36);
+    fillLight.position.set(-3.2, -2.0, 3.0);
+    const rimLight = new THREE.DirectionalLight(0xe0e7ff, 0.48);
+    rimLight.position.set(-1.6, 3.6, -2.4);
+    sceneObj.add(hemi, keyLight, fillLight, rimLight);
+  },
+
+  init(canvas, { overlayEl = null, trayEl = null } = {}) {
+    if (!canvas || typeof window.THREE === 'undefined') return;
+    this.canvas = canvas;
+    this.overlayEl = overlayEl;
+    this.trayEl = trayEl;
+    try {
+      this.renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+      this.scene = new window.THREE.Scene();
+      this.camera = new window.THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 120);
+      this.camera.position.set(0, 0, 24);
+
+      this.setupSceneLights(this.scene);
+    } catch (_) {}
+  },
+
+  clear() {
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    this.isFlying = false;
+    this.disposeGroup();
+    if (this.renderer && this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
+    }
+    if (this.canvas) {
+      this.canvas.classList.add('hidden');
+    }
+  },
+
+  clearTextureCache() {
+    this.textureCache.forEach((tex) => {
+      if (tex && typeof tex.dispose === 'function') tex.dispose();
+    });
+    this.textureCache.clear();
+  },
+
+  disposeObjectTree(sceneObj, group) {
+    if (!group || !sceneObj) return;
+    sceneObj.remove(group);
+    group.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (Array.isArray(obj.material)) {
+        obj.material.forEach((m) => m.dispose());
+      } else if (obj.material) {
+        obj.material.dispose();
+      }
+    });
+  },
+
+  updatePreview(previewCanvas, style, showMinFace = false) {
+    if (!previewCanvas || typeof window.THREE === 'undefined') return;
+    const THREE = window.THREE;
+    try {
+      if (!this.previewRenderer) {
+        this.previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true });
+        this.previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.previewRenderer.setSize(previewCanvas.width, previewCanvas.height, false);
+        this.previewScene = new THREE.Scene();
+        this.previewCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 20);
+        this.previewCamera.position.set(0, 0, 4.4);
+        this.setupSceneLights(this.previewScene);
+      }
+
+      if (this.previewDie) {
+        this.disposeObjectTree(this.previewScene, this.previewDie);
+        this.previewDie = null;
+      }
+
+      const targetIdx = showMinFace ? 0 : 19;
+      const built = this.buildNumberedDie(20, style, targetIdx, null, true);
+      const sz = Math.max(0.75, Math.min(1.35, Number(style && style.sizeScale) || 1));
+      built.mesh.scale.setScalar(0.84 + (sz - 1) * 0.42);
+      this.previewDie = built.mesh;
+      this.previewTargetQuat = built.targetQuat;
+      this.previewScene.add(this.previewDie);
+
+      if (!this.previewAnimId) {
+        const start = performance.now();
+        const wobbleQ = new THREE.Quaternion();
+        const wobbleEuler = new THREE.Euler();
+        const loop = (now) => {
+          if (!this.previewDie || !this.previewRenderer) {
+            this.previewAnimId = null;
+            return;
+          }
+          const elapsed = (now - start) * 0.001;
+          wobbleEuler.set(Math.sin(elapsed * 1.4) * 0.22, Math.sin(elapsed * 1.1) * 0.32, 0);
+          wobbleQ.setFromEuler(wobbleEuler);
+          this.previewDie.quaternion.copy(this.previewTargetQuat).premultiply(wobbleQ);
+          this.previewRenderer.render(this.previewScene, this.previewCamera);
+          this.previewAnimId = requestAnimationFrame(loop);
+        };
+        this.previewAnimId = requestAnimationFrame(loop);
+      }
+    } catch (_) {}
+  },
+
+  stopPreview() {
+    if (this.previewAnimId) {
+      cancelAnimationFrame(this.previewAnimId);
+      this.previewAnimId = null;
+    }
+    if (this.previewDie) {
+      this.disposeObjectTree(this.previewScene, this.previewDie);
+      this.previewDie = null;
+    }
+  },
+
+  hexToRgba(hex, alpha = 1) {
+    if (typeof hex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      return `rgba(15, 23, 42, ${alpha})`;
+    }
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  },
+
+  getFaceTexture(label, styleOrColor, fontScale = 1, outerEdgesUV = null, sides = 6) {
+    const style = typeof styleOrColor === 'string' ? { bodyColor: styleOrColor } : styleOrColor || {};
+    const bgColorHex = style.bodyColor || '#8b5cf6';
+    const bevelColor = style.bevelColor || '#0f172a';
+    const bevelSize = style.bevelSize !== undefined ? Math.max(0, Math.min(2, Number(style.bevelSize))) : 1;
+    const numberColor = style.numberColor || '#ffffff';
+
+    const cacheKey = `${sides}::${bgColorHex}::${bevelColor}::${bevelSize.toFixed(2)}::${numberColor}::${fontScale.toFixed(2)}::${label}`;
+    if (this.textureCache.has(cacheKey)) {
+      return this.textureCache.get(cacheKey);
+    }
+
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = bgColorHex;
+    ctx.fillRect(0, 0, size, size);
+
+    // Sutil viñeta radial para dar profundidad a cada cara
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size * 0.65);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.14)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.24)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Bisel poligonal siguiendo el perímetro exacto de la cara
+    if (bevelSize > 0.02 && outerEdgesUV && outerEdgesUV.length > 0) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Borde exterior con color y grosor personalizables
+      ctx.strokeStyle = this.hexToRgba(bevelColor, 0.62);
+      ctx.lineWidth = Math.max(1.5, 5 * bevelSize);
+      ctx.beginPath();
+      for (const [[u1, v1], [u2, v2]] of outerEdgesUV) {
+        ctx.moveTo(u1 * size, (1 - v1) * size);
+        ctx.lineTo(u2 * size, (1 - v2) * size);
+      }
+      ctx.stroke();
+
+      // Filo interior luminoso (efecto bisel 3D)
+      const inset = Math.max(0.76, 0.90 - 0.04 * bevelSize);
+      const half = size / 2;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.24)';
+      ctx.lineWidth = Math.max(1, 2 * bevelSize);
+      ctx.beginPath();
+      for (const [[u1, v1], [u2, v2]] of outerEdgesUV) {
+        const x1 = half + (u1 * size - half) * inset;
+        const y1 = half + ((1 - v1) * size - half) * inset;
+        const x2 = half + (u2 * size - half) * inset;
+        const y2 = half + ((1 - v2) * size - half) * inset;
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Número, ASCII o emoji centrado proporcional al tipo de cara
+    const text = String(label);
+    const isEmoji = /\p{Extended_Pictographic}/u.test(text);
+    const charUnits = Array.from(text).length;
+    const baseSize = charUnits >= 3 ? 20 : charUnits === 2 ? 25 : 34;
+    const fontSize = Math.round(baseSize * fontScale * (isEmoji ? 1.08 : 1));
+    ctx.font = isEmoji
+      ? `${fontSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif`
+      : `700 ${fontSize}px "JetBrains Mono", "Segoe UI Symbol", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (isEmoji) {
+      ctx.save();
+      ctx.fillStyle = numberColor;
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.85)';
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetY = 1;
+      ctx.fillText(text, size / 2, size / 2 + 1);
+      ctx.restore();
+    } else {
+      ctx.lineWidth = Math.max(3, Math.round(4 * fontScale));
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.72)';
+      ctx.strokeText(text, size / 2, size / 2 + 1);
+
+      ctx.fillStyle = numberColor;
+      ctx.fillText(text, size / 2, size / 2 + 1);
+    }
+
+    // Subrayado discreto para distinguir 6 y 9
+    if (text === '6' || text === '9') {
+      ctx.fillStyle = numberColor;
+      const underY = size / 2 + Math.round(fontSize * 0.54);
+      const underW = Math.round(fontSize * 0.46);
+      ctx.fillRect(size / 2 - underW / 2, underY, underW, Math.max(2, Math.round(2.5 * fontScale)));
+    }
+
+    const texture = new window.THREE.CanvasTexture(canvas);
+    texture.anisotropy = 4;
+    this.textureCache.set(cacheKey, texture);
+    return texture;
+  },
+
+  /**
+   * Mapa de relieve cacheado (128x128) para tallar bajorrelieve en números y chaflán del bisel.
+   */
+  getFaceBumpTexture(label, bevelSize = 1, fontScale = 1, outerEdgesUV = null, sides = 6) {
+    const text = String(label);
+    const isEmoji = /\p{Extended_Pictographic}/u.test(text);
+    const bClamped = Math.max(0, Math.min(2, Number(bevelSize)));
+    const edgeSig = outerEdgesUV && outerEdgesUV.length > 0
+      ? outerEdgesUV.map(([p1]) => `${Math.round(p1[0] * 32)},${Math.round(p1[1] * 32)}`).join(';')
+      : '0';
+    const cacheKey = `bump::${sides}::${bClamped.toFixed(2)}::${fontScale.toFixed(2)}::${isEmoji ? 'E' : text}::${edgeSig}`;
+    if (this.textureCache.has(cacheKey)) {
+      return this.textureCache.get(cacheKey);
+    }
+
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(0, 0, size, size);
+
+    if (bClamped > 0.02 && outerEdgesUV && outerEdgesUV.length > 0) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#4e4e4e';
+      ctx.lineWidth = Math.max(2, 5 * bClamped);
+      ctx.beginPath();
+      for (const [[u1, v1], [u2, v2]] of outerEdgesUV) {
+        ctx.moveTo(u1 * size, (1 - v1) * size);
+        ctx.lineTo(u2 * size, (1 - v2) * size);
+      }
+      ctx.stroke();
+
+      const inset = Math.max(0.76, 0.90 - 0.04 * bClamped);
+      const half = size / 2;
+      ctx.strokeStyle = '#bcbcbc';
+      ctx.lineWidth = Math.max(1.5, 2.5 * bClamped);
+      ctx.beginPath();
+      for (const [[u1, v1], [u2, v2]] of outerEdgesUV) {
+        ctx.moveTo(half + (u1 * size - half) * inset, half + ((1 - v1) * size - half) * inset);
+        ctx.lineTo(half + (u2 * size - half) * inset, half + ((1 - v2) * size - half) * inset);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (!isEmoji) {
+      const charUnits = Array.from(text).length;
+      const baseSize = charUnits >= 3 ? 20 : charUnits === 2 ? 25 : 34;
+      const fontSize = Math.round(baseSize * fontScale);
+      ctx.font = `700 ${fontSize}px "JetBrains Mono", "Segoe UI Symbol", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, Math.round(2.5 * fontScale));
+      ctx.strokeStyle = '#686868';
+      ctx.strokeText(text, size / 2, size / 2 + 1);
+      ctx.fillStyle = '#343434';
+      ctx.fillText(text, size / 2, size / 2 + 1);
+
+      if (text === '6' || text === '9') {
+        const underY = size / 2 + Math.round(fontSize * 0.54);
+        const underW = Math.round(fontSize * 0.46);
+        ctx.fillRect(size / 2 - underW / 2, underY, underW, Math.max(2, Math.round(2.5 * fontScale)));
+      }
+    }
+
+    const texture = new window.THREE.CanvasTexture(canvas);
+    this.textureCache.set(cacheKey, texture);
+    return texture;
+  },
+
+  /**
+   * Trapezoedro pentagonal exacto (d10) con 10 caras cometa perfectamente planares.
+   */
+  createD10Geometry(radius = 1.38, height = 1.36) {
+    const THREE = window.THREE;
+    const cos36 = Math.cos(Math.PI / 5);
+    const yr = height * ((1 - cos36) / (1 + cos36));
+
+    const topApex = [0, height, 0];
+    const botApex = [0, -height, 0];
+    const ring = [];
+    for (let k = 0; k < 10; k++) {
+      const angle = (k * Math.PI) / 5;
+      const y = k % 2 === 0 ? yr : -yr;
+      ring.push([radius * Math.cos(angle), y, radius * Math.sin(angle)]);
+    }
+
+    const positions = [];
+    const pushTri = (a, b, c) => {
+      positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+    };
+
+    for (let i = 0; i < 5; i++) {
+      // 5 caras superiores (cometas)
+      const u0 = ring[(2 * i) % 10];
+      const d1 = ring[(2 * i + 1) % 10];
+      const u2 = ring[(2 * i + 2) % 10];
+      pushTri(topApex, u2, d1);
+      pushTri(topApex, d1, u0);
+
+      // 5 caras inferiores (cometas)
+      const l0 = ring[(2 * i + 1) % 10];
+      const up1 = ring[(2 * i + 2) % 10];
+      const l2 = ring[(2 * i + 3) % 10];
+      pushTri(botApex, l0, up1);
+      pushTri(botApex, up1, l2);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geom;
+  },
+
+  /**
+   * Triacontaedro rómbico exacto (d30) con 30 caras rómbicas planares.
+   */
+  createD30Geometry(scale = 0.84) {
+    const THREE = window.THREE;
+    const phi = (1 + Math.sqrt(5)) / 2;
+    const inv = 1 / phi;
+
+    const D = [];
+    for (const x of [-1, 1]) {
+      for (const y of [-1, 1]) {
+        for (const z of [-1, 1]) D.push([x, y, z]);
+      }
+    }
+    for (const a of [-inv, inv]) {
+      for (const b of [-phi, phi]) D.push([0, a, b], [b, 0, a], [a, b, 0]);
+    }
+
+    const I = [];
+    for (const a of [-1, 1]) {
+      for (const b of [-phi, phi]) I.push([0, b, a], [a, 0, b], [b, a, 0]);
+    }
+
+    const dist2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+    const edgeD2 = (2 / phi) ** 2;
+    const positions = [];
+
+    const pushTri = (a, b, c) => {
+      positions.push(
+        a[0] * scale, a[1] * scale, a[2] * scale,
+        b[0] * scale, b[1] * scale, b[2] * scale,
+        c[0] * scale, c[1] * scale, c[2] * scale
+      );
+    };
+
+    for (let i = 0; i < D.length; i++) {
+      for (let j = i + 1; j < D.length; j++) {
+        if (Math.abs(dist2(D[i], D[j]) - edgeD2) > 1e-5) continue;
+        const sx = D[i][0] + D[j][0];
+        const sy = D[i][1] + D[j][1];
+        const sz = D[i][2] + D[j][2];
+
+        let i1 = null;
+        let i2 = null;
+        for (let a = 0; a < I.length && !i1; a++) {
+          for (let b = a + 1; b < I.length; b++) {
+            if (
+              Math.abs(I[a][0] + I[b][0] - sx) < 1e-5 &&
+              Math.abs(I[a][1] + I[b][1] - sy) < 1e-5 &&
+              Math.abs(I[a][2] + I[b][2] - sz) < 1e-5
+            ) {
+              i1 = I[a];
+              i2 = I[b];
+              break;
+            }
+          }
+        }
+        if (!i1) continue;
+
+        // Verificar orientación hacia afuera mediante producto cruzado
+        const u = [i1[0] - D[i][0], i1[1] - D[i][1], i1[2] - D[i][2]];
+        const v = [D[j][0] - D[i][0], D[j][1] - D[i][1], D[j][2] - D[i][2]];
+        const nx = u[1] * v[2] - u[2] * v[1];
+        const ny = u[2] * v[0] - u[0] * v[2];
+        const nz = u[0] * v[1] - u[1] * v[0];
+
+        if (nx * sx + ny * sy + nz * sz > 0) {
+          pushTri(D[i], i1, D[j]);
+          pushTri(D[i], D[j], i2);
+        } else {
+          pushTri(D[i], D[j], i1);
+          pushTri(D[i], i2, D[j]);
+        }
+      }
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geom;
+  },
+
+  createBaseGeometry(sides) {
+    const THREE = window.THREE;
+    if (sides === 4) return new THREE.TetrahedronGeometry(1.42);
+    if (sides === 6) return new THREE.BoxGeometry(1.62, 1.62, 1.62);
+    if (sides === 8) return new THREE.OctahedronGeometry(1.42);
+    if (sides === 10) return this.createD10Geometry();
+    if (sides === 12) return new THREE.DodecahedronGeometry(1.34);
+    if (sides === 30) return this.createD30Geometry();
+    return new THREE.IcosahedronGeometry(1.38);
+  },
+
+  /**
+   * Agrupa triángulos coplanares, proyecta UVs por cara y calcula el quaternion
+   * que orienta cada cara mirando directo a la cámara (+Z) con el número derecho (+Y).
+   */
+  buildNumberedDie(sides, styleOrColor, targetFaceIndex, labelsList, applyCustomSymbols = true) {
+    const THREE = window.THREE;
+    const rawGeom = this.createBaseGeometry(sides);
+    const geom = rawGeom.index ? rawGeom.toNonIndexed() : rawGeom;
+    if (rawGeom !== geom) rawGeom.dispose();
+
+    const posAttr = geom.getAttribute('position');
+    const triCount = posAttr.count / 3;
+
+    // Agrupar triángulos por normal cuantizada (d6 tiene 2 tri/cara, d10 tiene 2 tri/cara, d12 tiene 3 tri/cara)
+    const faceMap = new Map();
+    const faces = [];
+
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const cb = new THREE.Vector3();
+    const ab = new THREE.Vector3();
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3;
+      vA.fromBufferAttribute(posAttr, i0);
+      vB.fromBufferAttribute(posAttr, i0 + 1);
+      vC.fromBufferAttribute(posAttr, i0 + 2);
+
+      cb.subVectors(vC, vB);
+      ab.subVectors(vA, vB);
+      cb.cross(ab).normalize();
+
+      const q = (v) => (Math.abs(v) < 0.01 ? '0.00' : v.toFixed(2));
+      const key = `${q(cb.x)},${q(cb.y)},${q(cb.z)}`;
+      let face = faceMap.get(key);
+      if (!face) {
+        face = { normal: cb.clone(), triIndices: [] };
+        faceMap.set(key, face);
+        faces.push(face);
+      }
+      face.triIndices.push(t);
+    }
+
+    const newPositions = new Float32Array(posAttr.count * 3);
+    const newUvs = new Float32Array(posAttr.count * 2);
+    geom.clearGroups();
+
+    const faceOrientations = [];
+    const facePerimeterUVs = [];
+    let writeVertex = 0;
+
+    // Escala tipográfica por forma de cara (cuadrados y pentágonos admiten números más grandes)
+    const fontScale = sides === 6 || sides === 12 ? 1.65 : sides === 10 || sides === 100 ? 0.95 : 1.12;
+
+    faces.forEach((face, faceIdx) => {
+      const n = face.normal;
+
+      const centroid = new THREE.Vector3();
+      let vertTotal = 0;
+      for (const t of face.triIndices) {
+        for (let k = 0; k < 3; k++) {
+          vA.fromBufferAttribute(posAttr, t * 3 + k);
+          centroid.add(vA);
+          vertTotal += 1;
+        }
+      }
+      centroid.divideScalar(vertTotal);
+
+      // Alinear vAxis con la simetría propia de la cara (arista en d6, vértice/ápice en el resto)
+      const vAxis = new THREE.Vector3();
+      if (sides === 6) {
+        const t0 = face.triIndices[0] * 3;
+        vA.fromBufferAttribute(posAttr, t0);
+        vB.fromBufferAttribute(posAttr, t0 + 1);
+        vC.fromBufferAttribute(posAttr, t0 + 2);
+        const dAB = vA.distanceToSquared(vB);
+        const dBC = vB.distanceToSquared(vC);
+        const dCA = vC.distanceToSquared(vA);
+        if (dAB <= dBC && dAB <= dCA) vAxis.subVectors(vB, vA);
+        else if (dBC <= dAB && dBC <= dCA) vAxis.subVectors(vC, vB);
+        else vAxis.subVectors(vA, vC);
+      } else if (sides === 30) {
+        // En el d30, alinear vAxis con la diagonal corta del rombo (vértice más cercano al centroide)
+        let bestDist = Infinity;
+        for (const t of face.triIndices) {
+          for (let k = 0; k < 3; k++) {
+            vA.fromBufferAttribute(posAttr, t * 3 + k);
+            const d = vA.distanceToSquared(centroid);
+            if (d < bestDist) {
+              bestDist = d;
+              vAxis.subVectors(vA, centroid);
+            }
+          }
+        }
+      } else {
+        let bestDist = -1;
+        for (const t of face.triIndices) {
+          for (let k = 0; k < 3; k++) {
+            vA.fromBufferAttribute(posAttr, t * 3 + k);
+            const d = vA.distanceToSquared(centroid);
+            if (d > bestDist) {
+              bestDist = d;
+              vAxis.subVectors(vA, centroid);
+            }
+          }
+        }
+      }
+      // Proyectar vAxis ortogonal a la normal y normalizar
+      vAxis.addScaledVector(n, -vAxis.dot(n)).normalize();
+      const uAxis = new THREE.Vector3().crossVectors(vAxis, n).normalize();
+
+      let maxR = 0.001;
+      for (const t of face.triIndices) {
+        for (let k = 0; k < 3; k++) {
+          vA.fromBufferAttribute(posAttr, t * 3 + k).sub(centroid);
+          const px = vA.dot(uAxis);
+          const py = vA.dot(vAxis);
+          maxR = Math.max(maxR, Math.hypot(px, py));
+        }
+      }
+
+      const startVertex = writeVertex;
+      const edgeCounts = new Map();
+      const span = maxR * 1.08;
+
+      for (const t of face.triIndices) {
+        const triVerts = [];
+        for (let k = 0; k < 3; k++) {
+          vA.fromBufferAttribute(posAttr, t * 3 + k);
+          newPositions[writeVertex * 3] = vA.x;
+          newPositions[writeVertex * 3 + 1] = vA.y;
+          newPositions[writeVertex * 3 + 2] = vA.z;
+
+          vB.copy(vA).sub(centroid);
+          const u = 0.5 + vB.dot(uAxis) / (2 * span);
+          const v = 0.5 + vB.dot(vAxis) / (2 * span);
+          newUvs[writeVertex * 2] = u;
+          newUvs[writeVertex * 2 + 1] = v;
+          triVerts.push({
+            key: `${vA.x.toFixed(3)},${vA.y.toFixed(3)},${vA.z.toFixed(3)}`,
+            uv: [u, v]
+          });
+          writeVertex += 1;
+        }
+
+        for (let e = 0; e < 3; e++) {
+          const p1 = triVerts[e];
+          const p2 = triVerts[(e + 1) % 3];
+          const edgeKey = p1.key < p2.key ? `${p1.key}|${p2.key}` : `${p2.key}|${p1.key}`;
+          const existing = edgeCounts.get(edgeKey);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            edgeCounts.set(edgeKey, { count: 1, uvPair: [p1.uv, p2.uv] });
+          }
+        }
+      }
+
+      const outerEdges = [];
+      edgeCounts.forEach((val) => {
+        if (val.count === 1) outerEdges.push(val.uvPair);
+      });
+      facePerimeterUVs.push(outerEdges);
+
+      geom.addGroup(startVertex, writeVertex - startVertex, faceIdx);
+
+      const basis = new THREE.Matrix4().makeBasis(uAxis, vAxis, n);
+      const targetQuat = new THREE.Quaternion().setFromRotationMatrix(basis.transpose());
+      faceOrientations.push(targetQuat);
+    });
+
+    geom.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
+    geom.setAttribute('uv', new THREE.BufferAttribute(newUvs, 2));
+    geom.computeVertexNormals();
+
+    const styleObj = typeof styleOrColor === 'string' ? { bodyColor: styleOrColor } : styleOrColor || {};
+    const maxSym = applyCustomSymbols && styleObj.maxSymbol ? String(styleObj.maxSymbol).trim() : '';
+    const minSym = applyCustomSymbols && styleObj.minSymbol ? String(styleObj.minSymbol).trim() : '';
+
+    const safeIdx = Math.max(0, Math.min(faces.length - 1, targetFaceIndex));
+    const bevelSize = styleObj.bevelSize !== undefined ? Number(styleObj.bevelSize) : 1;
+    const materials = faces.map((_, idx) => {
+      let label = labelsList ? labelsList[idx % labelsList.length] : idx + 1;
+      if (idx === faces.length - 1 && maxSym) label = maxSym;
+      else if (idx === 0 && minSym) label = minSym;
+      const faceTexture = this.getFaceTexture(label, styleObj, fontScale, facePerimeterUVs[idx], sides);
+      const bumpTexture = this.getFaceBumpTexture(label, bevelSize, fontScale, facePerimeterUVs[idx], sides);
+      const isTargetFace = idx === safeIdx;
+
+      return new THREE.MeshStandardMaterial({
+        map: faceTexture,
+        bumpMap: bumpTexture,
+        bumpScale: 0.032,
+        emissiveMap: isTargetFace ? faceTexture : null,
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: 0,
+        roughness: 0.28,
+        metalness: 0.14
+      });
+    });
+
+    const targetMaterial = materials[safeIdx] || null;
+    const otherMaterials = materials.filter((_, idx) => idx !== safeIdx);
+
+    return {
+      mesh: new THREE.Mesh(geom, materials),
+      targetQuat: faceOrientations[safeIdx],
+      targetMaterial,
+      otherMaterials
+    };
+  },
+
+  disposeGroup() {
+    this.disposeObjectTree(this.scene, this.diceGroup);
+    this.diceGroup = null;
+  },
+
+  playPickup(count = 1) {
+    DiceAudio.playPickup(count);
+  },
+
+  /**
+   * Textura radial cacheada para simular sombra de contacto y altura sobre la mesa.
+   */
+  getShadowTexture() {
+    const cacheKey = 'dice::soft-shadow';
+    if (this.textureCache.has(cacheKey)) {
+      return this.textureCache.get(cacheKey);
+    }
+
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.49);
+    grad.addColorStop(0, 'rgba(2, 6, 14, 0.96)');
+    grad.addColorStop(0.42, 'rgba(2, 6, 14, 0.78)');
+    grad.addColorStop(0.72, 'rgba(2, 6, 14, 0.34)');
+    grad.addColorStop(1, 'rgba(2, 6, 14, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    const texture = new window.THREE.CanvasTexture(canvas);
+    this.textureCache.set(cacheKey, texture);
+    return texture;
+  },
+
+  updateActorShadow(actor, dieScale, camZ) {
+    if (!actor.shadowMesh) return;
+    const h = Math.max(0, actor.mesh.position.z);
+    const dieRadius = 1.50 * dieScale;
+    const shadowZ = -1.68 * dieScale;
+
+    // Desplazamiento abajo-izquierda acorde a keyLight (2.5, 4, 5)
+    const tx = actor.mesh.position.x - 0.28 * dieRadius - 0.16 * h;
+    const ty = actor.mesh.position.y - 0.36 * dieRadius - 0.22 * h;
+    const zComp = (camZ - shadowZ) / camZ;
+
+    actor.shadowMesh.position.set(tx * zComp, ty * zComp, shadowZ);
+    const size = (3.65 * dieScale) * (1 + h * 0.14);
+    actor.shadowMesh.scale.set(size * 1.08, size * 0.96, 1);
+    actor.shadowMesh.material.opacity = 0.68 / (1 + h * 0.38);
+  },
+
+  computeResultHighlight(progress) {
+    const g = Math.max(0, Math.min(1, progress));
+    const peakAt = 0.28;
+    const peakEmissive = 0.85;
+    const steadyEmissive = 0.24;
+
+    const emissiveIntensity = g < peakAt
+      ? peakEmissive * Math.sin((g / peakAt) * Math.PI * 0.5)
+      : steadyEmissive + (peakEmissive - steadyEmissive) * 0.5 * (1 + Math.cos(((g - peakAt) / (1 - peakAt)) * Math.PI));
+
+    const dimEase = 0.5 * (1 - Math.cos(Math.min(1, g / 0.35) * Math.PI));
+    const neighborShade = 1 - 0.24 * dimEase;
+    return { emissiveIntensity, neighborShade };
+  },
+
+  roll(sides, colorHex = '#8b5cf6', rolledValue = null) {
+    this.rollHand([{ sides, colorHex, value: rolledValue }]);
+  },
+
+  rollHand(items, { targetX = null, targetY = null, style = null } = {}) {
+    if (!this.renderer || !this.scene || typeof window.THREE === 'undefined') return;
+    if (!Array.isArray(items) || items.length === 0) return;
+    if (this.animId) cancelAnimationFrame(this.animId);
+    this.disposeGroup();
+
+    const THREE = window.THREE;
+    this.diceGroup = new THREE.Group();
+    const actors = [];
+
+    // Expandir cada dado (d100 se desdobla en par de d10)
+    const builtMeshes = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const sides = Number(item.sides) || 20;
+      const dieStyle = { ...(style || {}), bodyColor: (style && style.bodyColor) || item.colorHex || '#8b5cf6' };
+      const value = item.value !== null && item.value !== undefined
+        ? item.value
+        : Math.floor(Math.random() * sides) + 1;
+
+      if (sides === 100) {
+        const tensIdx = value === 100 ? 0 : Math.floor(value / 10);
+        const unitsIdx = value === 100 ? 0 : value % 10;
+        const tensLabels = ['00', '10', '20', '30', '40', '50', '60', '70', '80', '90'];
+        const unitsLabels = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        builtMeshes.push(this.buildNumberedDie(10, dieStyle, tensIdx, tensLabels, false));
+        builtMeshes.push(this.buildNumberedDie(10, { ...dieStyle, bodyColor: '#334155' }, unitsIdx, unitsLabels, false));
+      } else {
+        const labels = sides === 10 ? ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] : null;
+        const targetIdx = Math.max(0, Math.min(sides - 1, value - 1));
+        builtMeshes.push(this.buildNumberedDie(sides, dieStyle, targetIdx, labels, true));
+      }
+    }
+
+    const totalDice = builtMeshes.length;
+    if (!this.canvas) return;
+
+    this.isFlying = true;
+    this.canvas.classList.remove('hidden');
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const flyCamZ = 24;
+    const tanHalfFov = Math.tan((20 * Math.PI) / 180);
+
+    this.renderer.setSize(vw, vh, false);
+    this.camera.aspect = vw / vh;
+    this.camera.position.set(0, 0, flyCamZ);
+    this.camera.updateProjectionMatrix();
+
+    const visH = 2 * flyCamZ * tanHalfFov;
+    const visW = visH * (vw / vh);
+    const pxPerUnit = vh / visH;
+
+    const screenToWorld = (sx, sy) => ({
+      x: (sx / vw - 0.5) * visW,
+      y: (0.5 - sy / vh) * visH
+    });
+
+    const trayTop = this.trayEl ? this.trayEl.getBoundingClientRect().top : vh - 80;
+    const overlayClearance = totalDice > 8 ? 196 : totalDice > 1 ? 180 : 148;
+    const openOverlayTop = this.overlayEl && this.overlayEl.classList.contains('is-open')
+      ? this.overlayEl.getBoundingClientRect().top - 26
+      : Infinity;
+    const zoneBottomSy = Math.min(trayTop - overlayClearance, openOverlayTop);
+
+    // Zona fija sobre la tarjeta de tirada donde se reúnen y descansan sin cambiar de cámara
+    const sizeScale = Math.max(0.75, Math.min(1.35, Number(style && style.sizeScale) || 1));
+    const groupScale = totalDice === 1 ? sizeScale : Math.min(sizeScale, 1.18);
+    const cols = totalDice === 1 ? 1 : totalDice === 2 ? 2 : Math.min(7, Math.ceil(Math.sqrt(totalDice * 1.45)));
+    const rows = Math.ceil(totalDice / cols);
+    const maxZoneW = Math.min(vw * 0.68, 580 * Math.max(1, groupScale));
+    const maxZoneH = Math.min(vh * 0.28, 210 * Math.max(1, groupScale), Math.max(96, zoneBottomSy - 84));
+    const cellPx = totalDice === 1 ? 96 * sizeScale : Math.min(84 * groupScale, maxZoneW / (cols * 1.14), maxZoneH / (rows * 1.06));
+    const cellStepX = cellPx * 1.14;
+    const cellStepY = cellPx * 1.06;
+    const dieScale = (cellPx * 0.78 / pxPerUnit) / 2.2;
+
+    const zoneH = rows * cellStepY;
+    const zoneCx = vw * 0.5;
+    const zoneCy = Math.max(zoneH * 0.5 + 76, zoneBottomSy - zoneH * 0.5);
+
+    const aimX = targetX !== null ? targetX : vw * 0.5;
+    const aimY = targetY !== null ? targetY : vh * 0.35;
+    const shadowTex = this.getShadowTexture();
+
+    for (let idx = 0; idx < totalDice; idx++) {
+      const die = builtMeshes[idx];
+      die.mesh.scale.setScalar(dieScale);
+      this.diceGroup.add(die.mesh);
+
+      const shadowMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: shadowTex,
+          transparent: true,
+          opacity: 0.68,
+          depthWrite: false
+        })
+      );
+      this.diceGroup.add(shadowMesh);
+
+      const r = Math.floor(idx / cols);
+      const c = idx % cols;
+      const rowCount = r === rows - 1 ? totalDice - r * cols : cols;
+      const jitterX = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.04;
+      const jitterY = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.06;
+      const endSx = zoneCx + (c - (rowCount - 1) / 2) * cellStepX + jitterX;
+      const endSy = zoneCy + (r - (rows - 1) / 2) * cellStepY + jitterY;
+
+      const fanNorm = totalDice === 1 ? 0 : (idx / (totalDice - 1)) * 2 - 1;
+      const sx0 = Math.max(48, Math.min(vw - 48, vw * 0.5 + fanNorm * Math.min(260, vw * 0.24) + (Math.random() - 0.5) * 90));
+      const sy0 = vh + 36 + Math.random() * 48;
+
+      const scatterSpread = totalDice === 1 ? 0 : fanNorm * Math.min(vw * 0.36, 400);
+      const px0 = Math.max(64, Math.min(vw - 64, aimX + scatterSpread + (Math.random() - 0.5) * 140));
+      const py0 = totalDice === 1
+        ? Math.max(58, Math.min(aimY * 0.25, 110))
+        : Math.max(58, Math.min(vh * 0.44, 72 + Math.random() * 195));
+
+      const sideDir = px0 >= endSx ? -1 : 1;
+      const startW = screenToWorld(sx0, sy0);
+      const peakW = screenToWorld(px0, py0);
+      const endW = screenToWorld(endSx, endSy);
+
+      // Punto de control Bézier para curvar suavemente tras el rebote y frenar alineado a endW
+      const ctrlSx = (px0 + endSx) * 0.5 + sideDir * (35 + Math.random() * 65);
+      const ctrlSy = (py0 + endSy) * 0.5 - (25 + Math.random() * 45);
+      const ctrlW = screenToWorld(ctrlSx, ctrlSy);
+
+      const bounceT = totalDice === 1 ? 0.32 : 0.28 + Math.random() * 0.1;
+      const startDelay = totalDice === 1 ? 0 : Math.random() * 0.07;
+      const zArc = 2.4 + Math.random() * 2.4;
+
+      const zTwist = (Math.random() - 0.5) * 95;
+      const upAxis = new THREE.Vector3(py0 - sy0, px0 - sx0, zTwist).normalize();
+      const downAxis = new THREE.Vector3(endSy - ctrlSy, endSx - ctrlSx, -zTwist * 0.6).normalize();
+      const launchAngle = Math.PI * (1.85 + Math.random() * 0.55);
+      const returnAngle = Math.PI * (2.35 + Math.random() * 0.65);
+      // Pequeña inclinación orgánica en reposo (±6°..10°) para romper alineación robótica
+      const restTwist = (Math.random() - 0.5) * (totalDice === 1 ? 0.20 : 0.34);
+      const finalQuat = new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(0, 0, 1), restTwist)
+        .multiply(die.targetQuat);
+      const impactQuat = new THREE.Quaternion()
+        .setFromAxisAngle(downAxis, -returnAngle)
+        .multiply(finalQuat);
+
+      actors.push({
+        mesh: die.mesh,
+        shadowMesh,
+        targetQuat: finalQuat,
+        targetMaterial: die.targetMaterial,
+        otherMaterials: die.otherMaterials,
+        bouncesSounded: 0,
+        startDelay,
+        bounceT,
+        startW,
+        peakW,
+        ctrlW,
+        endW,
+        zArc,
+        upAxis,
+        downAxis,
+        launchAngle,
+        returnAngle,
+        impactQuat
+      });
+    }
+
+    this.scene.add(this.diceGroup);
+
+    let overlayShown = this.overlayEl ? this.overlayEl.classList.contains('is-open') : false;
+    let poseSettled = false;
+    let lastAudioTapMs = 0;
+    const tapAtten = 1 / Math.sqrt(Math.max(1, totalDice));
+    const durationMs = totalDice === 1 ? 1240 : 1420;
+    const glowDurationMs = 780;
+    const startTime = performance.now();
+    const tmpQuat = new THREE.Quaternion();
+
+    DiceAudio.playThrow();
+
+    const triggerBounceAudio = (nowMs, baseLevel) => {
+      if (nowMs - lastAudioTapMs < 18) return;
+      lastAudioTapMs = nowMs;
+      DiceAudio.playWoodTap(Math.max(0.08, Math.min(0.95, baseLevel * tapAtten)), 0);
+    };
+
+    const step = (now = performance.now()) => {
+      const elapsed = Math.max(0, now - startTime);
+      const rawT = Math.min(1, elapsed / durationMs);
+
+      if (!poseSettled) {
+        for (let i = 0; i < actors.length; i++) {
+          const a = actors[i];
+          const localT = Math.min(1, Math.max(0, (rawT - a.startDelay) / (1 - a.startDelay)));
+
+          if (localT <= a.bounceT) {
+            const u1 = localT / a.bounceT;
+            const airEase = Math.pow(u1, 0.86);
+            a.mesh.position.x = a.startW.x + (a.peakW.x - a.startW.x) * airEase;
+            a.mesh.position.y = a.startW.y + (a.peakW.y - a.startW.y) * airEase;
+            // Arco parabólico en el aire que toca el plano de la mesa (z=0) al impactar
+            a.mesh.position.z = Math.sin(u1 * Math.PI) * a.zArc;
+
+            const launchSpin = Math.pow(u1, 0.85);
+            tmpQuat.setFromAxisAngle(a.upAxis, -a.launchAngle * (1 - launchSpin));
+            a.mesh.quaternion.copy(a.impactQuat).premultiply(tmpQuat);
+          } else {
+            if (a.bouncesSounded === 0) {
+              a.bouncesSounded = 1;
+              triggerBounceAudio(now, 0.78 + Math.random() * 0.18);
+              if (!overlayShown && this.overlayEl) {
+                this.overlayEl.classList.add('is-open');
+                overlayShown = true;
+              }
+            }
+            const u2 = (localT - a.bounceT) / (1 - a.bounceT);
+            // Desaceleración en posición Bézier y rotación con dos botes decrecientes reales
+            const sPos = 1 - Math.pow(1 - u2, 2.45);
+            const sRot = 1 - Math.pow(1 - u2, 2.75);
+            const invS = 1 - sPos;
+            a.mesh.position.x = invS * invS * a.peakW.x + 2 * invS * sPos * a.ctrlW.x + sPos * sPos * a.endW.x;
+            a.mesh.position.y = invS * invS * a.peakW.y + 2 * invS * sPos * a.ctrlW.y + sPos * sPos * a.endW.y;
+
+            if (u2 < 0.36) {
+              a.mesh.position.z = Math.sin((u2 / 0.36) * Math.PI) * (a.zArc * 0.28);
+            } else if (u2 < 0.58) {
+              if (a.bouncesSounded < 2) {
+                a.bouncesSounded = 2;
+                triggerBounceAudio(now, 0.42 + Math.random() * 0.12);
+              }
+              a.mesh.position.z = Math.sin(((u2 - 0.36) / 0.22) * Math.PI) * (a.zArc * 0.08);
+            } else {
+              if (a.bouncesSounded < 3 && totalDice <= 6) {
+                a.bouncesSounded = 3;
+                triggerBounceAudio(now, 0.18);
+              }
+              a.mesh.position.z = 0;
+            }
+
+            tmpQuat.setFromAxisAngle(a.downAxis, -a.returnAngle * (1 - sRot));
+            a.mesh.quaternion.copy(a.targetQuat).premultiply(tmpQuat);
+          }
+          this.updateActorShadow(a, dieScale, flyCamZ);
+        }
+        if (rawT >= 1) {
+          poseSettled = true;
+          this.isFlying = false;
+        }
+      }
+
+      let glowDone = false;
+      if (rawT >= 1) {
+        const g = Math.min(1, (elapsed - durationMs) / glowDurationMs);
+        const { emissiveIntensity, neighborShade } = this.computeResultHighlight(g);
+        for (let i = 0; i < actors.length; i++) {
+          const a = actors[i];
+          if (a.targetMaterial) a.targetMaterial.emissiveIntensity = emissiveIntensity;
+          for (let m = 0; m < a.otherMaterials.length; m++) {
+            a.otherMaterials[m].color.setRGB(neighborShade, neighborShade, neighborShade);
+          }
+        }
+        glowDone = g >= 1;
+      }
+
+      this.renderer.render(this.scene, this.camera);
+
+      if (!glowDone) {
+        this.animId = requestAnimationFrame(step);
+      } else {
+        this.animId = null;
+      }
+    };
+    step(startTime);
+  }
+};

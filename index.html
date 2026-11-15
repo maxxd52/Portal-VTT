@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="slate">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OWL-TABLE // VTT — Mesa Virtual Minimalista</title>
+
+  <!-- Tailwind CSS, Three.js (r128) & fflate (Empaquetador Binario .owltable ZIP) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+
+  <!-- Tipografías: Plus Jakarta Sans (UI) + JetBrains Mono (Telemetría/Dados) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="css/styles.css?v=20261115k" />
+</head>
+<body>
+  <!-- ========================================================================
+       1. LIENZO TÁCTICO DE PANTALLA COMPLETA (OWLBEAR RODEO STYLE)
+       ======================================================================== -->
+  <main id="vttStage" aria-label="Mesa Virtual Táctica">
+    <div id="worldTransformLayer">
+      <canvas id="mapCanvas" width="2400" height="1600"></canvas>
+      <img id="customMapImg" alt="" class="hidden" draggable="false" />
+      <canvas id="gridCanvas" width="2400" height="1600"></canvas>
+      <canvas id="drawCanvas" width="2400" height="1600"></canvas>
+      <div id="tokensLayer"></div>
+      <canvas id="fogCanvas" width="2400" height="1600"></canvas>
+      <svg id="overlayVectorSvg" width="2400" height="1600" viewBox="0 0 2400 1600"></svg>
+      <div id="mapNotesLayer" class="absolute inset-0 pointer-events-none"></div>
+    </div>
+
+    <!-- Overlay Drag & Drop para Cartuchos .owltable / .owl.json / Imágenes -->
+    <div
+      id="dropModuleOverlay"
+      class="hidden fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none bg-black/40"
+    >
+      <div class="owl-panel rounded-3xl p-8 max-w-md text-center border-2 border-dashed" style="border-color: var(--accent-primary);">
+        <div class="text-3xl mb-2">📦</div>
+        <h2 class="text-base font-bold mb-1">Soltar Cartucho (.owltable / .json) o Mapa</h2>
+        <p class="text-xs opacity-80">Las imágenes se optimizan automáticamente a WebP y los cartuchos restauran toda la escena.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       2. BARRA SUPERIOR FLOTANTE (SALA, ESTANTERÍA MÓDULOS, GRILLA, ROL, SYNC)
+       ======================================================================== -->
+  <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Bloque Izquierdo: Identidad, Sala Efímera, Selector de Mesas/SRD, Grilla y Rol -->
+    <div class="owl-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+      <div class="flex items-center gap-1.5 xl:pr-2 xl:border-r" style="border-color: var(--border-subtle);" title="OWL-TABLE">
+        <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: var(--accent-primary);"></span>
+        <span class="font-bold text-xs tracking-tight hidden xl:inline">OWL-TABLE</span>
+      </div>
+
+      <!-- Botón Sala Efímera & Taller de Cartuchos -->
+      <button
+        type="button"
+        id="btnOpenRoomModal"
+        class="owl-subpanel owl-btn px-2 py-1 rounded-lg font-mono-tech text-[11px] font-semibold"
+        title="Sala Efímera, Estantería y Cartuchos .owltable"
+      >
+        <strong id="lblActiveRoomCode" style="color: var(--accent-primary);">MESA-01</strong>
+      </button>
+
+      <!-- Botón Configuración Grilla -->
+      <div class="relative">
+        <button
+          type="button"
+          id="btnToggleGridPopover"
+          class="owl-subpanel owl-btn px-2 py-1 text-xs font-medium"
+          title="Configurar cuadrícula táctica"
+        >
+          <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M5.5 2.5v11M10.5 2.5v11M2.5 5.5h11M2.5 10.5h11" />
+          </svg>
+        </button>
+
+        <div
+          id="gridPopover"
+          class="owl-panel owl-pop absolute left-0 mt-2 w-64 rounded-2xl p-3 flex flex-col gap-3 text-xs z-40"
+        >
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold">Tamaño de celda</span>
+              <span id="lblGridSizeDetail" class="text-[11px] opacity-65 tabular-nums">80px · 1.5m</span>
+            </div>
+            <div class="owl-stepper justify-between w-full px-1 py-0.5">
+              <button type="button" id="btnGridSizeMinus" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="-1px (Shift: -5px)">
+                <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+              </button>
+              <div class="flex items-center gap-0.5">
+                <input type="number" id="inpGridSize" min="16" max="300" step="0.1" value="80" class="owl-num-input w-11 text-xs font-semibold" />
+                <span class="text-[10px] opacity-55">px</span>
+              </div>
+              <button type="button" id="btnGridSizePlus" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="+1px (Shift: +5px)">
+                <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold">Desfase</span>
+              <button type="button" id="btnGridResetOffset" class="text-[10px] opacity-60 hover:opacity-100 transition-opacity">Centrar</button>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <div class="owl-stepper justify-between px-1 py-0.5">
+                <button type="button" id="btnGridOffXMinus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Izquierda">
+                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                </button>
+                <div class="flex items-center gap-0.5">
+                  <span class="text-[10px] opacity-50">X</span>
+                  <input type="number" id="inpGridOffX" min="-300" max="300" step="1" value="0" class="owl-num-input w-8 text-[11px] font-semibold" />
+                </div>
+                <button type="button" id="btnGridOffXPlus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Derecha">
+                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                </button>
+              </div>
+              <div class="owl-stepper justify-between px-1 py-0.5">
+                <button type="button" id="btnGridOffYMinus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Arriba">
+                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                </button>
+                <div class="flex items-center gap-0.5">
+                  <span class="text-[10px] opacity-50">Y</span>
+                  <input type="number" id="inpGridOffY" min="-300" max="300" step="1" value="0" class="owl-num-input w-8 text-[11px] font-semibold" />
+                </div>
+                <button type="button" id="btnGridOffYPlus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Abajo">
+                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <span class="font-semibold">Ajustar al mapa (Cols × Filas)</span>
+            <div class="flex items-center gap-1.5">
+              <input type="number" id="inpGridCols" min="2" max="150" placeholder="Cols" class="owl-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
+              <span class="text-[10px] opacity-55">×</span>
+              <input type="number" id="inpGridRows" min="2" max="150" placeholder="Filas" class="owl-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
+              <button type="button" id="btnFitGridToMap" class="owl-btn owl-btn-accent px-2.5 py-1 rounded-lg text-[11px] font-semibold ml-auto">Ajustar</button>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold">Opacidad</span>
+              <span id="lblGridOpacity" class="text-[11px] opacity-65 tabular-nums">28%</span>
+            </div>
+            <input type="range" id="rngGridOpacity" min="0" max="80" step="1" value="28" class="owl-slider" />
+          </div>
+
+          <label class="flex items-center justify-between pt-2.5 border-t cursor-pointer" style="border-color: var(--hairline);">
+            <span class="font-medium">Imán a grilla</span>
+            <span class="owl-switch">
+              <input type="checkbox" id="chkGridSnap" checked class="owl-switch-input" />
+              <span class="owl-switch-track"></span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Selector Rol GM / Jugador -->
+      <div id="roleSwitchGroup" class="owl-seg grid-cols-2 min-w-[120px]">
+        <button type="button" id="btnRoleGM" class="owl-seg-btn is-active">GM</button>
+        <button type="button" id="btnRolePlayer" class="owl-seg-btn">Jugador</button>
+      </div>
+    </div>
+
+    <!-- Bloque Derecho: Combate, Ficha, Drive, Compendio, P2P y Tema -->
+    <div class="owl-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+      <button
+        type="button"
+        id="btnToggleCombat"
+        class="owl-subpanel owl-btn px-2 py-1 text-xs"
+        title="Combate / Tracker de Iniciativa"
+        aria-label="Combate"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2" />
+          <path d="M9.5 17.5L21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2" opacity="0.6" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        id="btnToggleSheet"
+        class="owl-subpanel owl-btn px-2 py-1 text-xs"
+        title="Ficha de Personaje [C]"
+        aria-label="Ficha de Personaje"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="3" width="16" height="18" rx="2.5" />
+          <circle cx="12" cy="10" r="2.5" />
+          <path d="M8.5 17a3.5 3.5 0 0 1 7 0" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        id="btnOpenDriveModal"
+        class="owl-subpanel owl-btn px-2 py-1 text-xs"
+        title="Carpeta y Enlaces de Google Drive"
+        aria-label="Google Drive"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        id="btnToggleTokenDrawer"
+        class="owl-subpanel owl-btn px-2 py-1 text-xs gap-1.5"
+        title="Abrir/Cerrar Compendio Arrastrable"
+        aria-label="Compendio"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+        </svg>
+        <span id="lblActiveTokensCount" class="font-mono-tech text-[10px] px-1.5 py-0.2 rounded-full owl-btn-accent">4</span>
+      </button>
+
+      <button
+        type="button"
+        id="btnOpenSyncModal"
+        class="owl-subpanel owl-btn px-2 py-1 font-mono-tech text-[11px] font-semibold gap-1"
+        title="Estado P2P WebRTC, Event-Log y Google Sheets"
+        aria-label="Estado P2P"
+      >
+        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+        <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" />
+        </svg>
+        <span id="lblSyncBadge">1</span>
+      </button>
+
+      <div class="relative">
+        <button
+          type="button"
+          id="btnToggleTheme"
+          class="owl-subpanel owl-btn px-2 py-1 text-xs"
+          title="Tema de la mesa e interfaz"
+        >
+          ◐
+        </button>
+        <div
+          id="themePopover"
+          class="owl-panel owl-pop absolute right-0 mt-2 w-44 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
+        >
+          <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Estilo de mesa</span>
+          <button type="button" data-theme-pick="slate" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#8b5cf6"></span>
+            <span>Pizarra</span>
+          </button>
+          <button type="button" data-theme-pick="parchment" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#007aff"></span>
+            <span>Pergamino</span>
+          </button>
+          <button type="button" data-theme-pick="fantasy" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#d97706"></span>
+            <span>Fantasía</span>
+          </button>
+          <button type="button" data-theme-pick="scifi" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#06b6d4"></span>
+            <span>Ciencia Ficción</span>
+          </button>
+          <button type="button" data-theme-pick="horror" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#e11d48"></span>
+            <span>Terror</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       3. PANEL LATERAL IZQUIERDO: FICHA DE PERSONAJE ACTIVA (FOUNDRY DROPZONE)
+       ======================================================================== -->
+  <aside
+    id="characterSheetDrawer"
+    class="owl-panel owl-drawer-left fixed top-16 left-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-2.5 z-20 flex flex-col gap-2 overflow-y-auto"
+    aria-label="Ficha de Personaje Activa"
+  >
+    <div class="flex items-center justify-between pb-1.5 border-b" style="border-color: var(--hairline);">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div id="sheetPortraitBox" class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 overflow-hidden border border-white/25"></div>
+        <div class="min-w-0">
+          <input
+            type="text"
+            id="inpSheetName"
+            class="font-semibold text-sm bg-transparent border-b border-transparent focus:border-violet-400 outline-none w-full truncate"
+            placeholder="Nombre Personaje"
+          />
+          <input
+            type="text"
+            id="inpSheetRole"
+            class="text-[11px] opacity-70 bg-transparent border-b border-transparent focus:border-violet-400 outline-none w-full truncate"
+            placeholder="Especie · Clase · Trasfondo"
+          />
+        </div>
+      </div>
+      <button type="button" id="btnCloseSheet" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 flex-shrink-0" title="Cerrar">
+        <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+      </button>
+    </div>
+
+    <!-- Salud (HP) y Clase de Armadura (CA) -->
+    <div class="grid grid-cols-2 gap-1.5">
+      <div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col gap-1">
+        <div class="flex items-center justify-between text-[11px] gap-1">
+          <span class="font-medium opacity-70">Salud</span>
+          <div class="flex items-center gap-0.5 font-semibold tabular-nums">
+            <span id="lblSheetHpCur">18</span>
+            <span class="opacity-50">/</span>
+            <input type="number" id="inpSheetMaxHp" min="1" max="999" value="18" class="owl-num-input w-10 text-right text-[11px] font-semibold bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="HP Máximo" />
+          </div>
+        </div>
+        <div class="flex items-center justify-between gap-1.5">
+          <button type="button" id="btnSheetHpMinus" class="owl-btn owl-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center flex-shrink-0" title="Restar HP">
+            <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+          </button>
+          <div class="flex-1 h-1.5 rounded-full bg-black/25 overflow-hidden">
+            <div id="barSheetHpFill" class="h-full bg-emerald-400 rounded-full transition-all" style="width: 100%;"></div>
+          </div>
+          <button type="button" id="btnSheetHpPlus" class="owl-btn owl-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center flex-shrink-0" title="Sumar HP">
+            <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col justify-between gap-1">
+        <span class="text-[11px] font-medium opacity-70">Defensa · CA</span>
+        <div class="flex items-center justify-between gap-1">
+          <input type="number" id="inpSheetAc" min="1" max="40" value="14" class="owl-num-input w-10 text-base font-semibold tabular-nums leading-none bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="Clase de Armadura" />
+          <button type="button" id="btnSheetRollInit" class="owl-btn owl-btn-accent rounded-full px-2.5 py-0.5 text-[11px] font-semibold">
+            Iniciativa
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nivel, Bono de Competencia y Velocidad (D&D 5.5e) -->
+    <div class="grid grid-cols-3 gap-1.5 text-[10px]">
+      <label class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
+        <span class="opacity-65 font-medium">Nivel</span>
+        <input type="number" id="inpSheetLevel" min="1" max="20" value="1" class="owl-num-input w-8 text-right text-[11px] font-semibold bg-transparent outline-none" />
+      </label>
+      <div class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1" title="Bono de Competencia (calculado por nivel)">
+        <span class="opacity-65 font-medium">BC</span>
+        <strong id="lblSheetPb" class="text-[11px] font-semibold tabular-nums">+2</strong>
+      </div>
+      <label class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
+        <span class="opacity-65 font-medium">Vel.</span>
+        <input type="text" id="inpSheetSpeed" value="30 ft" class="w-11 text-right text-[11px] font-semibold bg-transparent outline-none" placeholder="30 ft" />
+      </label>
+    </div>
+
+    <!-- Selector Único de 6 Secciones (3x2 estilo Apple) -->
+    <div id="sheetTopTabs" class="owl-seg grid-cols-3 gap-0.5 text-[10px]">
+      <button type="button" data-sheet-tab="attrs" class="owl-seg-btn is-active">Atributos</button>
+      <button type="button" data-sheet-tab="skills" class="owl-seg-btn">Habilidades</button>
+      <button type="button" data-sheet-tab="traits" class="owl-seg-btn">Rasgos</button>
+      <button type="button" data-sheet-tab="equipment" class="owl-seg-btn">Equipo</button>
+      <button type="button" data-sheet-tab="consumable" class="owl-seg-btn">Consum.</button>
+      <button type="button" data-sheet-tab="ability" class="owl-seg-btn">Capac.</button>
+    </div>
+
+    <!-- Panel Único de Contenido (Dropzone para arrastrar complementos desde el Compendio) -->
+    <div
+      id="sheetInventoryDropzone"
+      class="owl-subpanel rounded-xl p-2 flex-1 flex flex-col gap-1.5 border border-dashed transition-colors min-h-0"
+      style="border-color: var(--border-subtle);"
+      title="Arrastra complementos desde el Compendio"
+    >
+      <!-- Vista: Atributos -->
+      <div id="sheetPaneAttrs" class="flex-1 flex flex-col gap-2 overflow-y-auto min-h-0">
+        <div id="sheetStatsGrid" class="grid grid-cols-3 gap-1.5 text-center"></div>
+      </div>
+
+      <!-- Vista: Habilidades / Pericias -->
+      <div id="sheetPaneSkills" class="hidden flex-1 flex-col gap-1.5 min-h-0">
+        <div class="flex items-center justify-between gap-1.5 shrink-0">
+          <button type="button" id="btnToggleSkillForm" class="owl-btn owl-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Habilidad</button>
+          <button type="button" id="btnLoadDnd55Skills" class="owl-btn owl-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold" title="Cargar las 18 habilidades de D&D 5.5e">Cargar 5.5e</button>
+        </div>
+        <form id="sheetSkillForm" class="hidden items-center gap-1 shrink-0">
+          <input type="text" id="inpSheetSkillName" placeholder="Habilidad..." required class="owl-input px-2 py-1 text-[11px] flex-1 min-w-0" />
+          <input type="number" id="inpSheetSkillMod" value="0" min="-20" max="30" class="owl-num-input w-11 py-1 text-[11px] font-semibold text-center" title="Modificador" />
+          <button type="submit" class="owl-btn owl-btn-accent w-7 h-7 p-0 rounded-lg flex items-center justify-center shrink-0" title="Añadir habilidad">+</button>
+        </form>
+        <div id="sheetSkillsList" class="flex-1 flex flex-col gap-1 overflow-y-auto min-h-0"></div>
+      </div>
+
+      <!-- Vista: Rasgos / Ventajas / Notas -->
+      <div id="sheetPaneTraits" class="hidden flex-1 flex-col gap-1.5 min-h-0">
+        <div class="flex items-center justify-end shrink-0">
+          <button type="button" id="btnToggleTraitForm" class="owl-btn owl-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Rasgo</button>
+        </div>
+        <form id="sheetTraitForm" class="hidden flex-col gap-1 shrink-0">
+          <div class="flex items-center gap-1.5">
+            <input type="text" id="inpSheetTraitTitle" placeholder="Rasgo o ventaja..." required class="owl-input px-2 py-1 text-[11px] flex-1 min-w-0" />
+            <button type="submit" class="owl-btn owl-btn-accent w-7 h-7 p-0 rounded-lg flex items-center justify-center shrink-0" title="Añadir rasgo">+</button>
+          </div>
+          <textarea id="inpSheetTraitDesc" rows="1" placeholder="Detalle breve (opcional)..." class="owl-input px-2 py-1 text-[10px] resize-y min-h-[28px] max-h-20"></textarea>
+        </form>
+        <div id="sheetTraitsList" class="flex-1 flex flex-col gap-1 overflow-y-auto min-h-0"></div>
+      </div>
+
+      <!-- Vista: Equipo / Consumibles / Capacidades -->
+      <div id="sheetPaneInv" class="hidden flex-1 flex-col gap-1 min-h-0">
+        <div id="sheetInventoryList" class="flex-1 flex flex-col gap-0.5 overflow-y-auto min-h-0"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       4. PANEL LATERAL DERECHO: COMPENDIO ARRASTRABLE (PERSONAJES / OBJETOS / MAPAS)
+       ======================================================================== -->
+  <aside
+    id="tokenDrawer"
+    class="owl-panel owl-drawer-right is-open fixed top-16 right-3 bottom-20 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5"
+    aria-label="Compendio Arrastrable"
+  >
+    <div class="flex items-center justify-between">
+      <span class="font-semibold text-xs tracking-tight">Compendio</span>
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          id="btnNewCompendiumFolder"
+          class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-80"
+          title="Nueva carpeta"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /><path d="M8 7v3M6.5 8.5h3" /></svg>
+        </button>
+        <button
+          type="button"
+          id="btnToggleCustomToken"
+          class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center"
+          title="Crear nuevo elemento"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10" /></svg>
+        </button>
+        <button type="button" id="btnCloseTokenDrawer" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75" title="Cerrar">
+          <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Pestañas de Categoría (Segmented estilo Apple) -->
+    <div id="compendiumTabs" class="owl-seg grid-cols-3">
+      <button type="button" data-comp-tab="actors" class="owl-seg-btn is-active">Personajes</button>
+      <button type="button" data-comp-tab="items" class="owl-seg-btn">Complementos</button>
+      <button type="button" data-comp-tab="maps" class="owl-seg-btn">Escenarios</button>
+    </div>
+
+    <input
+      type="search"
+      id="inpCompendiumSearch"
+      placeholder="Buscar en el compendio..."
+      class="owl-input rounded-xl px-3 py-1.5 text-xs"
+    />
+
+    <datalist id="compendiumFolderList"></datalist>
+
+    <!-- Creador rápido de carpeta -->
+    <form id="compendiumFolderForm" class="hidden owl-subpanel rounded-xl p-2 flex items-center gap-1.5">
+      <input type="text" id="inpNewFolderName" placeholder="Nombre de carpeta..." required class="owl-input px-2.5 py-1 text-xs flex-1 min-w-0" />
+      <button type="submit" class="owl-btn owl-btn-accent px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0">Crear</button>
+    </form>
+
+    <!-- Creador de Personaje -->
+    <form id="customTokenForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <span id="lblCustomFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo personaje</span>
+        <button type="button" id="btnCancelCustomToken" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
+      </div>
+      <div class="grid grid-cols-2 gap-1.5">
+        <input type="text" id="inpCustomTokenName" placeholder="Nombre..." required class="owl-input px-2.5 py-1 text-xs" />
+        <input type="text" id="inpCustomTokenRole" placeholder="Rol / Clase" class="owl-input px-2.5 py-1 text-xs" />
+      </div>
+      <div class="grid grid-cols-[1fr_1fr_1.3fr] gap-1.5 items-center">
+        <label class="owl-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
+          <span class="opacity-60">HP</span>
+          <input type="number" id="inpCustomTokenHp" value="16" min="1" max="999" class="owl-num-input w-9 text-xs font-semibold" />
+        </label>
+        <label class="owl-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
+          <span class="opacity-60">CA</span>
+          <input type="number" id="inpCustomTokenAc" value="13" min="1" max="35" class="owl-num-input w-8 text-xs font-semibold" />
+        </label>
+        <select id="selCustomTokenAlly" class="owl-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
+          <option value="ally">Aliado</option>
+          <option value="enemy">Enemigo</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-3 gap-1">
+        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+          <span class="opacity-55">FUE</span>
+          <input type="number" id="inpCustomStr" value="1" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+        </label>
+        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+          <span class="opacity-55">DES</span>
+          <input type="number" id="inpCustomDex" value="1" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+        </label>
+        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+          <span class="opacity-55">CON</span>
+          <input type="number" id="inpCustomCon" value="1" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+        </label>
+        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+          <span class="opacity-55">INT</span>
+          <input type="number" id="inpCustomInt" value="0" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+        </label>
+        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+          <span class="opacity-55">SAB</span>
+          <input type="number" id="inpCustomWis" value="0" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+        </label>
+        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+          <span class="opacity-55">CAR</span>
+          <input type="number" id="inpCustomCha" value="0" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+        </label>
+      </div>
+      <div class="grid grid-cols-2 gap-1.5">
+        <div class="flex items-center gap-1 min-w-0">
+          <input type="text" id="inpCustomTokenImg" placeholder="URL imagen..." class="owl-input px-2 py-1 text-[11px] min-w-0 flex-1" />
+          <label for="fileCustomTokenImg" class="owl-btn owl-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir imagen local">
+            <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 12.5h10" /></svg>
+          </label>
+          <input type="file" id="fileCustomTokenImg" accept="image/*" class="hidden" />
+        </div>
+        <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="owl-input px-2.5 py-1 text-[11px]" />
+      </div>
+      <div class="flex items-center justify-between gap-2">
+        <div id="customTokenColorGrid" class="grid grid-cols-6 gap-1.5"></div>
+        <button type="submit" id="btnCustomFormSubmit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
+      </div>
+    </form>
+
+    <!-- Creador de Complemento (Arma, Hechizo, Armadura, Poción, Luz) -->
+    <form id="customItemForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold opacity-80">Nuevo complemento</span>
+        <button type="button" id="btnCancelCustomItem" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
+      </div>
+      <div class="grid grid-cols-2 gap-1.5">
+        <input type="text" id="inpCustomItemName" placeholder="Nombre..." required class="owl-input px-2.5 py-1 text-xs" />
+        <select id="selCustomItemKind" class="owl-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
+          <option value="equipment">Equipo</option>
+          <option value="consumable">Consumible</option>
+          <option value="ability">Capacidad</option>
+        </select>
+      </div>
+      <div id="customItemValWrap" class="owl-input px-2.5 py-1 flex items-center justify-between gap-2 text-[10px]">
+        <span id="lblCustomItemVal" class="opacity-65">Bono pasivo</span>
+        <div class="flex items-center gap-1.5">
+          <input type="number" id="inpCustomItemVal" value="0" min="-20" max="99" class="owl-num-input w-11 text-xs font-semibold" />
+          <select id="selCustomItemTarget" class="owl-subpanel rounded-md px-1.5 py-0.5 text-[11px] font-semibold cursor-pointer outline-none">
+            <option value="ac">CA</option>
+            <option value="str">FUE</option>
+            <option value="dex">DES</option>
+            <option value="con">CON</option>
+            <option value="int">INT</option>
+            <option value="wis">SAB</option>
+            <option value="cha">CAR</option>
+            <option value="maxHp">HP Máx</option>
+          </select>
+        </div>
+      </div>
+      <div id="customItemIconGrid" class="grid grid-cols-6 gap-1"></div>
+      <div id="customItemFormulaBuilder" class="owl-subpanel rounded-xl p-2 flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">Fórmula visual</span>
+          <button type="button" id="btnClearFormulaChips" class="text-[10px] opacity-60 hover:opacity-100">Limpiar</button>
+        </div>
+        <div id="formulaChipsPreview" class="owl-input min-h-[28px] px-2 py-1 flex flex-wrap items-center gap-1 text-[11px]"></div>
+        <div class="grid grid-cols-6 gap-1">
+          <button type="button" data-fb-die="4" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d4</button>
+          <button type="button" data-fb-die="6" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d6</button>
+          <button type="button" data-fb-die="8" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d8</button>
+          <button type="button" data-fb-die="10" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d10</button>
+          <button type="button" data-fb-die="12" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d12</button>
+          <button type="button" data-fb-die="20" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d20</button>
+        </div>
+        <div class="grid grid-cols-4 gap-1">
+          <button type="button" data-fb-stat="fue" data-fb-label="FUE" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">FUE</button>
+          <button type="button" data-fb-stat="des" data-fb-label="DES" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">DES</button>
+          <button type="button" data-fb-stat="con" data-fb-label="CON" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">CON</button>
+          <button type="button" data-fb-stat="int" data-fb-label="INT" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">INT</button>
+          <button type="button" data-fb-stat="sab" data-fb-label="SAB" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">SAB</button>
+          <button type="button" data-fb-stat="car" data-fb-label="CAR" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">CAR</button>
+          <button type="button" data-fb-flat="-1" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">−1</button>
+          <button type="button" data-fb-flat="1" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">+1</button>
+        </div>
+      </div>
+      <textarea id="inpCustomItemMsg" rows="2" placeholder="Descripción o efecto en mesa (opcional)..." class="owl-input px-2.5 py-1.5 text-[11px] resize-y min-h-[46px] max-h-28"></textarea>
+      <input type="text" id="inpCustomItemFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="owl-input px-2.5 py-1 text-[11px]" />
+      <div class="flex items-center justify-between gap-2">
+        <div id="customItemColorGrid" class="grid grid-cols-6 gap-1.5"></div>
+        <button type="submit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
+      </div>
+    </form>
+
+    <!-- Creador de Escenario -->
+    <form id="customMapForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <span id="lblCustomMapFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo escenario</span>
+        <button type="button" id="btnCancelCustomMap" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
+      </div>
+      <input type="text" id="inpCustomMapName" placeholder="Nombre del escenario..." required class="owl-input px-2.5 py-1 text-xs" />
+      <div class="flex items-center gap-1.5">
+        <input type="text" id="inpCustomMapImg" placeholder="URL imagen o sube archivo local..." required class="owl-input px-2.5 py-1 text-[11px] min-w-0 flex-1" />
+        <label for="fileCustomMapImg" class="owl-btn owl-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir mapa local">
+          <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 12.5h10" /></svg>
+        </label>
+        <input type="file" id="fileCustomMapImg" accept="image/*" class="hidden" />
+      </div>
+      <div class="flex items-center gap-1.5">
+        <input type="text" id="inpCustomMapDesc" placeholder="Descripción breve..." class="owl-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
+        <input type="text" id="inpCustomMapFolder" list="compendiumFolderList" placeholder="Carpeta" class="owl-input px-2 py-1 text-[11px] w-24" />
+        <button type="submit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
+      </div>
+    </form>
+
+    <!-- Lista de tarjetas arrastrables (100% del alto disponible) -->
+    <div id="tokenTemplatesGrid" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
+  </aside>
+
+  <!-- ========================================================================
+       5. BANDEJA INFERIOR DE DADOS 3D & VISOR THREE.JS
+       ======================================================================== -->
+  <div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-none w-max max-w-[calc(100vw-24px)]">
+    <!-- Visor Numérico Flotante de Tirada (Dynamic HUD) -->
+    <div
+      id="dice3dOverlay"
+      class="owl-panel owl-pop owl-roll-card rounded-2xl px-5 pt-3 pb-3 flex flex-col items-center text-center gap-1.5 pointer-events-auto max-w-[min(92vw,340px)]"
+    >
+      <button type="button" id="btnCloseDice3d" class="owl-roll-close" title="Cerrar">✕</button>
+      <div class="flex items-center justify-center gap-1.5 px-6 max-w-full">
+        <span id="lblDiceFormula" class="owl-roll-pill font-mono-tech truncate max-w-[230px]">1d20 + 0</span>
+        <span id="lblDiceBadge" class="owl-roll-pill hidden shrink-0"></span>
+      </div>
+      <div id="lblDiceTotal" class="text-4xl font-bold leading-none tracking-tight tabular-nums py-0.5" style="color: var(--accent-primary);">20</div>
+      <div id="diceRollChips" class="hidden flex-wrap items-center justify-center gap-1.5 py-0.5"></div>
+      <p id="lblDiceMessage" class="hidden text-[11px] leading-snug opacity-85 max-w-full max-h-24 overflow-y-auto px-1 text-center" style="overflow-wrap: anywhere;"></p>
+      <div id="lblDiceDetail" class="text-[11px] font-medium opacity-70 tabular-nums">Natural: 20</div>
+      <div id="diceRollActions" class="hidden items-center justify-center gap-1.5 pt-1.5 mt-0.5 border-t w-full" style="border-color: var(--hairline);">
+        <button type="button" id="btnDiceApplyDmg" class="owl-btn owl-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-rose-400 hover:opacity-100" title="Restar al token seleccionado">− Daño</button>
+        <button type="button" id="btnDiceApplyHalfDmg" class="owl-btn owl-subpanel px-2 py-1 rounded-full text-[10px] font-semibold opacity-80 hover:opacity-100" title="Restar mitad al token seleccionado">½</button>
+        <button type="button" id="btnDiceApplyHeal" class="owl-btn owl-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-emerald-400 hover:opacity-100" title="Curar al token seleccionado">+ Curar</button>
+      </div>
+    </div>
+
+    <!-- Barra Compacta de Dados (Dock estilo Apple) -->
+    <div id="diceTrayBar" class="owl-panel owl-dock rounded-2xl px-2 py-1.5 flex flex-nowrap items-center justify-start md:justify-center gap-1.5 pointer-events-auto max-w-[calc(100vw-16px)] overflow-x-auto">
+      <div class="flex items-center gap-0.5 shrink-0">
+        <button type="button" data-die="4" class="owl-die-btn" title="d4">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 3.5 21 19.5 3 19.5" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d4</span>
+        </button>
+        <button type="button" data-die="6" class="owl-die-btn" title="d6">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="3.2" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d6</span>
+        </button>
+        <button type="button" data-die="8" class="owl-die-btn" title="d8">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.5 20.5 12 12 21.5 3.5 12" /><path d="M3.5 12h17" opacity="0.45" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d8</span>
+        </button>
+        <button type="button" data-die="10" class="owl-die-btn" title="d10">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.5 20 10.5 12 21.5 4 10.5" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d10</span>
+        </button>
+        <button type="button" data-die="12" class="owl-die-btn" title="d12">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.8 20.5 9 17.3 19.2 6.7 19.2 3.5 9" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d12</span>
+        </button>
+        <button type="button" data-die="20" class="owl-die-btn is-featured" title="d20">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.5 20 7 20 17 12 21.5 4 17 4 7" /><polygon points="12 6.5 17 15.5 7 15.5" opacity="0.55" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-bold leading-none">d20</span>
+        </button>
+        <button type="button" data-die="30" class="owl-die-btn" title="d30">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="8.5 3 15.5 3 21 8.5 21 15.5 15.5 21 8.5 21 3 15.5 3 8.5" /><polygon points="12 7 16.5 12 12 17 7.5 12" opacity="0.5" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d30</span>
+        </button>
+        <button type="button" data-die="100" class="owl-die-btn" title="d100">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><polygon points="9.5 3.5 15.5 10 9.5 19.5 3.5 10" /><polygon points="15 4.5 20.5 11 15 20.5 11.5 15" opacity="0.6" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d100</span>
+        </button>
+      </div>
+
+      <span class="owl-dock-sep hidden md:block"></span>
+
+      <!-- Stepper iOS para modificador -->
+      <div class="owl-stepper font-mono-tech text-xs shrink-0">
+        <button type="button" id="btnDiceModMinus" class="owl-stepper-btn" title="Restar modificador">−</button>
+        <span id="lblDiceMod" class="px-1.5 min-w-[26px] text-center font-semibold tabular-nums">+0</span>
+        <button type="button" id="btnDiceModPlus" class="owl-stepper-btn" title="Sumar modificador">+</button>
+      </div>
+
+      <span class="owl-dock-sep hidden md:block"></span>
+
+      <!-- Selector segmentado de lectura de resultado -->
+      <div id="diceResultSeg" class="owl-seg grid-cols-4 shrink-0" title="Cómo mostrar y calcular el resultado">
+        <button type="button" data-result-mode="sum" class="owl-seg-btn is-active !px-1.5" title="Sumar todos los dados + modificador">Total</button>
+        <button type="button" data-result-mode="each" class="owl-seg-btn !px-1.5" title="Cada dado por separado + modificador">c/u</button>
+        <button type="button" data-result-mode="max" class="owl-seg-btn !px-1.5" title="Dado más alto + modificador">Máx</button>
+        <button type="button" data-result-mode="min" class="owl-seg-btn !px-1.5" title="Dado más bajo + modificador">Mín</button>
+      </div>
+
+      <span class="owl-dock-sep hidden md:block"></span>
+
+      <!-- Selector segmentado de visibilidad de tirada (Pública / Privada) -->
+      <div id="diceVisibilitySeg" class="owl-seg grid-cols-2 shrink-0" title="Visibilidad de tirada">
+        <button type="button" data-dice-vis="public" class="owl-seg-btn is-active !px-1.5" title="Pública: la ven todos">Púb</button>
+        <button type="button" data-dice-vis="private" class="owl-seg-btn !px-1.5" title="Privada: jugador → DJ, o solo DJ">Priv</button>
+      </div>
+
+      <span class="owl-dock-sep hidden md:block"></span>
+
+      <!-- Muestra viva del estilo actual de dados -->
+      <button type="button" id="btnDiceCustomize" class="owl-style-chip shrink-0" title="Personalizar dados" style="background:#8b5cf6;border-color:#0f172a;">
+        <span id="diceStyleDot" class="w-2 h-2 rounded-full" style="background:#ffffff;"></span>
+      </button>
+
+      <!-- Botón compacto de historial de tiradas -->
+      <button type="button" id="btnDiceHistory" class="owl-btn owl-subpanel w-7 h-7 p-0 rounded-lg shrink-0 flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity" title="Historial de tiradas" aria-label="Historial de tiradas">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+          <path d="M3 3v5h5" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Popover de Historial de Tiradas -->
+  <div
+    id="diceHistoryPopover"
+    class="owl-panel owl-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
+  >
+    <div class="flex items-center justify-between">
+      <button type="button" id="btnClearDiceHistory" class="text-[11px] opacity-60 hover:opacity-100 transition-opacity">Limpiar</button>
+      <span class="font-semibold text-xs tracking-tight">Historial</span>
+      <button type="button" id="btnCloseDiceHistory" class="owl-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
+    </div>
+    <div id="diceHistoryList" class="flex flex-col gap-1.5 max-h-[260px] overflow-y-auto pr-0.5">
+      <div class="text-[11px] opacity-55 text-center py-6">Sin tiradas recientes.</div>
+    </div>
+  </div>
+
+  <!-- Popover de Personalización de Dados (Estilo Curado) -->
+  <div
+    id="diceStylePopover"
+    class="owl-panel owl-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
+  >
+    <div class="flex items-center justify-between">
+      <button type="button" id="btnResetDiceStyle" class="text-[11px] opacity-60 hover:opacity-100 transition-opacity">Restablecer</button>
+      <span class="font-semibold text-xs tracking-tight">Dados</span>
+      <button type="button" id="btnCloseDiceStyle" class="owl-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
+    </div>
+
+    <!-- Vista previa 3D viva -->
+    <div class="owl-preview-stage rounded-xl py-1 flex items-center justify-center">
+      <canvas id="dicePreviewCanvas" width="112" height="112" class="w-[96px] h-[96px] block"></canvas>
+    </div>
+
+    <!-- Color del cuerpo -->
+    <div class="flex flex-col gap-1.5">
+      <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Acabado</span>
+      <div class="flex items-center justify-between gap-1.5">
+        <button type="button" data-body-swatch="#8b5cf6" class="owl-swatch" style="background:#8b5cf6" title="Arcano"></button>
+        <button type="button" data-body-swatch="#1e293b" class="owl-swatch" style="background:#1e293b" title="Obsidiana"></button>
+        <button type="button" data-body-swatch="#e11d48" class="owl-swatch" style="background:#e11d48" title="Carmesí"></button>
+        <button type="button" data-body-swatch="#059669" class="owl-swatch" style="background:#059669" title="Esmeralda"></button>
+        <button type="button" data-body-swatch="#2563eb" class="owl-swatch" style="background:#2563eb" title="Cobalto"></button>
+        <button type="button" data-body-swatch="#d97706" class="owl-swatch" style="background:#d97706" title="Ámbar"></button>
+        <button type="button" data-body-swatch="#cbd5e1" class="owl-swatch" style="background:#cbd5e1" title="Marfil"></button>
+        <label class="owl-swatch owl-swatch-custom" title="Color personalizado">
+          <span>+</span>
+          <input type="color" id="inpDiceBodyColor" value="#8b5cf6" class="absolute inset-0 opacity-0 cursor-pointer" />
+        </label>
+      </div>
+    </div>
+
+    <!-- Bisel y Tinta -->
+    <div class="owl-hairline pt-2.5 grid grid-cols-2 gap-4">
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Bisel</span>
+        <div class="flex items-center gap-2">
+          <button type="button" data-bevel-swatch="#0f172a" class="owl-swatch" style="background:#0f172a" title="Oscuro"></button>
+          <button type="button" data-bevel-swatch="#f59e0b" class="owl-swatch" style="background:#f59e0b" title="Oro"></button>
+          <button type="button" data-bevel-swatch="#e2e8f0" class="owl-swatch" style="background:#e2e8f0" title="Plata"></button>
+          <label class="owl-swatch owl-swatch-custom" title="Color de bisel">
+            <span>+</span>
+            <input type="color" id="inpDiceBevelColor" value="#0f172a" class="absolute inset-0 opacity-0 cursor-pointer" />
+          </label>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Tinta</span>
+        <div class="flex items-center gap-2">
+          <button type="button" data-number-swatch="#ffffff" class="owl-swatch" style="background:#ffffff" title="Blanco"></button>
+          <button type="button" data-number-swatch="#0f172a" class="owl-swatch" style="background:#0f172a" title="Tinta"></button>
+          <button type="button" data-number-swatch="#fde68a" class="owl-swatch" style="background:#fde68a" title="Dorado"></button>
+          <label class="owl-swatch owl-swatch-custom" title="Color de número">
+            <span>+</span>
+            <input type="color" id="inpDiceNumberColor" value="#ffffff" class="absolute inset-0 opacity-0 cursor-pointer" />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controles segmentados: Tamaño y Relieve -->
+    <div class="owl-hairline pt-2.5 flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Tamaño</span>
+        <div class="owl-seg grid-cols-3 w-[204px] shrink-0">
+          <button type="button" data-dice-size="0.82" class="owl-seg-btn">Chico</button>
+          <button type="button" data-dice-size="1" class="owl-seg-btn is-active">Normal</button>
+          <button type="button" data-dice-size="1.26" class="owl-seg-btn">Grande</button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Relieve</span>
+        <div class="owl-seg grid-cols-3 w-[204px] shrink-0">
+          <button type="button" data-dice-bevel="0" class="owl-seg-btn">Plano</button>
+          <button type="button" data-dice-bevel="0.9" class="owl-seg-btn is-active">Sutil</button>
+          <button type="button" data-dice-bevel="1.65" class="owl-seg-btn">Marcado</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Caras especiales: Crítico | Pifia -->
+    <div class="owl-hairline pt-2.5 flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Cara especial</span>
+        <div class="owl-seg grid-cols-2 w-[204px] shrink-0">
+          <button type="button" data-symbol-tab="maxSymbol" class="owl-seg-btn is-active">Crítico</button>
+          <button type="button" data-symbol-tab="minSymbol" class="owl-seg-btn">Pifia</button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-1">
+        <button type="button" data-dice-glyph="" class="owl-seg-btn owl-subpanel h-7 px-2.5 text-[10px] is-active">Número</button>
+        <button type="button" data-dice-glyph="★" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">★</button>
+        <button type="button" data-dice-glyph="♪" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">♪</button>
+        <button type="button" data-dice-glyph="⚔" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">⚔</button>
+        <button type="button" data-dice-glyph="👑" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">👑</button>
+        <button type="button" data-dice-glyph="🔥" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">🔥</button>
+        <button type="button" data-dice-glyph="💀" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">💀</button>
+        <input
+          type="text"
+          id="inpDiceCustomSymbol"
+          maxlength="3"
+          placeholder="Otro"
+          class="owl-input h-7 w-12 px-1 py-0 text-[11px] leading-none text-center font-mono-tech"
+          title="ASCII o emoji personalizado"
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       6. MENÚ CONTEXTUAL DE ICONOS AL CLIC DERECHO (PALETA VISUAL)
+       ======================================================================== -->
+  <div
+    id="contextIconMenu"
+    class="owl-panel owl-pop fixed z-50 rounded-2xl p-2 flex flex-col gap-2 min-w-[264px]"
+    role="menu"
+    aria-label="Paleta rápida de herramientas"
+  >
+    <!-- Fila 1: Herramientas del tablero con iconos SVG -->
+    <div class="grid grid-cols-6 gap-1">
+      <button type="button" data-ctx-tool="select" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Mover / Seleccionar [V]">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 2-3 7z"/></svg>
+      </button>
+      <button type="button" data-ctx-tool="ruler" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Regla Láser [R]">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.3 8.7L8.7 21.3c-1 1-2.5 1-3.4 0l-2.6-2.6c-1-1-1-2.5 0-3.4L15.3 2.7c1-1 2.5-1 3.4 0l2.6 2.6c1 1 1 2.5 0 3.4Z"/><path d="m7.5 10.5 2 2M10.5 7.5l2 2M13.5 4.5l2 2"/></svg>
+      </button>
+      <button type="button" data-ctx-tool="draw" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Marcador Táctico [P]">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+      </button>
+      <button type="button" data-ctx-tool="fog" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Pincel Niebla Manual [F]">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+      </button>
+      <button type="button" data-ctx-tool="wall" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Muros y Puertas (Luz Dinámica) [W]">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v6M15 10v5M9 15v5"/></svg>
+      </button>
+      <button type="button" data-ctx-tool="ping" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Ping Radar [G]">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg>
+      </button>
+    </div>
+
+    <!-- Fila 2: Acciones rápidas dinámicas (sobre ficha o sobre casilla vacía) -->
+    <div id="contextDynamicRow" class="grid grid-cols-5 gap-1 pt-1 border-t" style="border-color: var(--border-subtle);"></div>
+
+    <!-- Fila 3: Sub-opciones visuales (Colores de marcador / Modo Niebla / Muros) -->
+    <div id="contextSubOptionsRow" class="hidden items-center justify-between gap-1 pt-1 border-t" style="border-color: var(--border-subtle);"></div>
+  </div>
+
+  <!-- Píldora flotante de Combate / Turnos (solo visible en combate activo) -->
+  <div
+    id="combatTrackerPill"
+    class="hidden owl-panel rounded-2xl px-2.5 py-1.5 fixed top-16 left-1/2 -translate-x-1/2 z-30 items-center gap-2 max-w-[92vw] pointer-events-auto"
+  >
+    <span id="lblCombatRound" class="text-[11px] font-semibold opacity-75 whitespace-nowrap px-1">Ronda 1</span>
+    <div id="combatOrderList" class="flex items-center gap-1 overflow-x-auto max-w-[52vw]"></div>
+    <button type="button" id="btnNextTurn" class="owl-btn owl-btn-accent rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">
+      Siguiente
+    </button>
+    <button type="button" id="btnEndCombat" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-70" title="Finalizar combate">
+      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+    </button>
+  </div>
+
+  <!-- Selector de plantilla de área para Regla (solo visible cuando tool === 'ruler') -->
+  <div
+    id="rulerShapePill"
+    class="hidden owl-panel rounded-full p-1 fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
+  >
+    <div id="rulerShapeSeg" class="owl-seg grid-cols-4 min-w-[240px]">
+      <button type="button" data-ruler-shape="line" class="owl-seg-btn is-active">Línea</button>
+      <button type="button" data-ruler-shape="circle" class="owl-seg-btn">Esfera</button>
+      <button type="button" data-ruler-shape="cone" class="owl-seg-btn">Cono</button>
+      <button type="button" data-ruler-shape="cube" class="owl-seg-btn">Cubo</button>
+    </div>
+  </div>
+
+  <!-- Editor compacto de Nota / Pin en el mapa -->
+  <div id="noteEditorModal" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4">
+    <form id="noteEditorForm" class="owl-panel w-full max-w-xs rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-xs">Nota en el escenario</span>
+        <button type="button" id="btnCloseNoteModal" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75">
+          <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
+      <input type="text" id="inpNoteTitle" placeholder="Título de la nota..." required class="owl-input px-2.5 py-1.5 text-xs font-semibold" />
+      <textarea id="inpNoteBody" rows="3" placeholder="Detalles, pista, trampa o descripción..." class="owl-input px-2.5 py-1.5 text-xs resize-none"></textarea>
+      <label class="flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] opacity-80">Solo visible para GM</span>
+        <span class="owl-switch">
+          <input type="checkbox" id="chkNoteGmOnly" class="owl-switch-input" />
+          <span class="owl-switch-track"></span>
+        </span>
+      </label>
+      <div class="flex items-center justify-between gap-2 pt-1">
+        <button type="button" id="btnDeleteNote" class="hidden owl-btn text-red-400 text-[11px] font-semibold px-2 py-1">Eliminar</button>
+        <button type="submit" class="owl-btn owl-btn-accent rounded-full px-3.5 py-1.5 text-[11px] font-semibold ml-auto">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Toast flotante de feedback -->
+  <div
+    id="vttActionToast"
+    class="owl-panel owl-toast fixed bottom-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
+    style="overflow-wrap: anywhere;"
+  ></div>
+
+  <!-- ========================================================================
+       7. MODAL SALAS EFÍMERAS, ESTANTERÍA SOLO LECTURA & CARTUCHOS (.OWLTABLE)
+       ======================================================================== -->
+  <div id="roomModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="owl-panel w-full max-w-xl rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b pb-2.5" style="border-color: var(--border-subtle);">
+        <div>
+          <h2 class="text-sm font-bold">Salas Efímeras &amp; Cartuchos Portátiles (.owltable)</h2>
+          <p class="text-[11px] opacity-75">Empaqueta tu mesa con imágenes WebP y enlázala desde Dropbox o GitHub en solo lectura.</p>
+        </div>
+        <button type="button" id="btnCloseRoomModal" class="owl-btn p-1.5">✕</button>
+      </div>
+
+      <div id="roomToastBox" class="hidden px-3 py-2 rounded-xl font-mono-tech text-[11px] owl-subpanel" style="border-color: var(--accent-primary);"></div>
+
+      <!-- Instancia Activa -->
+      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <span class="font-mono-tech text-[10px] uppercase opacity-75">Instancia Activa</span>
+          <button type="button" id="btnCreateNewRoom" class="owl-btn owl-btn-accent px-2.5 py-1 text-[11px] font-semibold">
+            + Nueva Sala Aleatoria
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 font-mono-tech text-[11px]">
+          <div>
+            <span class="opacity-70 block text-[10px]">Código de Sala</span>
+            <strong id="lblModalRoomCode" class="text-sm">MESA-01</strong>
+          </div>
+          <div>
+            <span class="opacity-70 block text-[10px]">Rol en Sesión</span>
+            <strong id="lblModalRoomRole" class="text-sm">DIRECTOR (GM)</strong>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5 mt-1">
+          <div class="flex items-center gap-1.5">
+            <input type="text" id="inpPlayerInviteUrl" readonly class="owl-input px-2 py-1 font-mono-tech text-[10px]" />
+            <button type="button" id="btnCopyPlayerUrl" class="owl-btn owl-subpanel px-2.5 py-1 font-mono-tech text-[10px] whitespace-nowrap">
+              Copiar Jugador
+            </button>
+          </div>
+          <div id="gmInviteRow" class="flex items-center gap-1.5">
+            <input type="text" id="inpGmInviteUrl" readonly class="owl-input px-2 py-1 font-mono-tech text-[10px]" />
+            <button type="button" id="btnCopyGmUrl" class="owl-btn owl-subpanel px-2.5 py-1 font-mono-tech text-[10px] whitespace-nowrap">
+              Copiar GM
+            </button>
+          </div>
+          <div class="pt-1 border-t flex items-center justify-between gap-2" style="border-color: var(--border-subtle);">
+            <span class="font-mono-tech text-[10px] uppercase opacity-70">Conectados</span>
+            <div id="roomPresenceList" class="flex flex-wrap items-center gap-1 justify-end"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compartir Handout (Imagen en mesa para todos) -->
+      <div id="handoutShareBox" class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <span class="font-mono-tech text-[10px] uppercase opacity-75">Handout (Mostrar imagen en mesa)</span>
+          <label class="owl-btn owl-subpanel px-2 py-0.5 text-[10px] font-semibold cursor-pointer">
+            Subir
+            <input type="file" id="inpHandoutFile" accept="image/*" class="hidden" />
+          </label>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input type="text" id="inpHandoutTitle" placeholder="Título (opcional)" class="owl-input px-2 py-1 text-[11px] w-1/3" />
+          <input type="url" id="inpHandoutUrl" placeholder="URL de imagen o Drive..." class="owl-input px-2 py-1 text-[11px] flex-1" />
+          <button type="button" id="btnShowHandout" class="owl-btn owl-btn-accent px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">Mostrar</button>
+        </div>
+      </div>
+
+      <!-- Unirse por código (útil dentro de Google Sites iframes) -->
+      <form id="joinRoomForm" class="owl-subpanel rounded-xl p-3 flex items-center gap-2">
+        <input type="text" id="inpJoinRoomCode" placeholder="Código de sala (ej. MESA-84K)" class="owl-input px-2.5 py-1.5 font-mono-tech text-xs uppercase" />
+        <button type="submit" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
+          Entrar a Sala
+        </button>
+      </form>
+
+      <!-- Selector de Escena / Paquete SRD o Mesa Enlazada -->
+      <div class="owl-subpanel rounded-xl p-3 flex items-center justify-between gap-2">
+        <div>
+          <span class="font-mono-tech text-[10px] uppercase opacity-75 block">Escena Activa / Paquete SRD</span>
+          <span class="text-[10px] opacity-70">Cambia entre mapas base o tus mesas enlazadas</span>
+        </div>
+        <div class="relative flex items-center">
+          <select
+            id="mapSelector"
+            class="owl-input owl-select rounded-lg pl-2.5 pr-7 py-1.5 text-xs font-medium cursor-pointer outline-none max-w-[220px]"
+            aria-label="Seleccionar mesa, módulo enlazado o paquete SRD"
+          >
+            <optgroup label="Paquetes SRD Base">
+              <option value="bastion">SRD: Bastión Subterráneo</option>
+              <option value="forest">SRD: Claro del Bosque</option>
+              <option value="tavern">SRD: Taberna Engranaje</option>
+            </optgroup>
+            <optgroup id="shelfDropdownGroup" label="Mis Mesas Enlazadas (Dropbox / URL)"></optgroup>
+          </select>
+          <svg class="w-3 h-3 opacity-60 pointer-events-none absolute right-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6l3.5 4 3.5-4" /></svg>
+        </div>
+      </div>
+
+      <!-- Taller de Creación: Subir Mapa Local (Auto-WebP) + Empaquetar Cartucho .owltable -->
+      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <span class="font-mono-tech text-[10px] uppercase opacity-75">Taller de Cartucho Binario (.owltable · ZIP + WebP)</span>
+          <label for="inpLocalMapWebp" class="owl-btn owl-panel px-2.5 py-1 text-[11px] font-semibold cursor-pointer" title="Convierte tu mapa PNG/JPG a WebP optimizado dentro de la mesa">
+            🖼️ Subir Mapa Local (Auto-WebP)
+          </label>
+          <input type="file" id="inpLocalMapWebp" accept="image/*" class="hidden" />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="text" id="inpModuleTitle" value="Aventura_Bastion" class="owl-input px-2.5 py-1.5 text-xs" />
+          <button type="button" id="btnExportModule" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
+            ⬇ Exportar .owltable
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <label for="inpModuleFile" class="owl-btn owl-panel px-3 py-1.5 text-xs font-semibold cursor-pointer">
+            📂 Abrir .owltable / .json local
+          </label>
+          <input type="file" id="inpModuleFile" accept=".owltable,.zip,.json" class="hidden" />
+          <span class="text-[10px] opacity-70">O arrástralo directo sobre el tablero</span>
+        </div>
+      </div>
+
+      <!-- Estantería de Enlaces en Solo Lectura (Dropbox / GitHub / URL directa) -->
+      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <div>
+          <span class="font-mono-tech text-[10px] uppercase opacity-75 block">Estantería de Mesas en Solo Lectura (BYOS)</span>
+          <span class="text-[10px] opacity-75">Sube tu <code>.owltable</code> a Dropbox o GitHub, pega su enlace público y cárgalo desde el menú superior.</span>
+        </div>
+        <form id="addShelfModuleForm" class="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-1.5">
+          <input type="text" id="inpShelfTitle" placeholder="Nombre (ej. Campaña CoS)" required class="owl-input px-2.5 py-1.5 text-xs" />
+          <input type="url" id="inpShelfUrl" placeholder="Enlace Dropbox o GitHub .owltable" required class="owl-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
+          <button type="submit" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
+            + Enlazar
+          </button>
+        </form>
+        <div id="shelfModulesList" class="flex flex-col gap-1.5 max-h-32 overflow-y-auto"></div>
+      </div>
+
+      <!-- Memoria Persistente del Navegador (IndexedDB) -->
+      <div class="owl-subpanel rounded-xl p-3 flex items-center justify-between gap-2">
+        <div>
+          <span class="font-bold block">Memoria Local del Navegador (IndexedDB)</span>
+          <span class="text-[10px] opacity-75">Guarda automáticamente tu mesa y tu estantería al recargar.</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnResetVaultStep1" class="owl-btn owl-panel px-2.5 py-1.5 text-[11px] text-red-400">
+            Reiniciar Mesa
+          </button>
+          <button type="button" id="btnResetVaultConfirm" class="owl-btn hidden px-2.5 py-1.5 text-[11px] bg-red-600 text-white font-bold">
+            Confirmar Borrado
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       8. MODAL BIBLIOTECA GOOGLE DRIVE (CARPETAS E IMÁGENES)
+       ======================================================================== -->
+  <div id="driveModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="owl-panel w-full max-w-2xl rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b pb-2.5" style="border-color: var(--border-subtle);">
+        <div>
+          <h2 class="text-sm font-bold">Biblioteca Google Drive (Mapas y Retratos)</h2>
+          <p class="text-[11px] opacity-75">Pega el enlace compartido de una imagen o carpeta pública de Google Drive.</p>
+        </div>
+        <button type="button" id="btnCloseDriveModal" class="owl-btn p-1.5">✕</button>
+      </div>
+
+      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <span class="font-mono-tech text-[10px] uppercase opacity-75">Cargar Mapa Directo desde Enlace de Google Drive</span>
+        <div class="flex items-center gap-2">
+          <input type="url" id="inpDriveMapUrl" placeholder="https://drive.google.com/file/d/ID_ARCHIVO/view" class="owl-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
+          <button type="button" id="btnApplyDriveMap" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
+            Aplicar al Tablero
+          </button>
+        </div>
+      </div>
+
+      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <span class="font-mono-tech text-[10px] uppercase opacity-75">Explorador de Carpeta Compartida de Drive</span>
+        <div class="flex items-center gap-2">
+          <input type="url" id="inpDriveFolderUrl" placeholder="https://drive.google.com/drive/folders/ID_CARPETA" class="owl-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
+          <button type="button" id="btnEmbedDriveFolder" class="owl-btn owl-panel px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
+            Abrir Carpeta
+          </button>
+        </div>
+        <iframe id="driveFolderIframe" class="hidden w-full h-64 rounded-xl border mt-1 bg-white" style="border-color: var(--border-subtle);"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       9. MODAL SINCRONIZACIÓN P2P WEBRTC & EVENT-LOG COMPACTION
+       ======================================================================== -->
+  <div id="syncModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="owl-panel w-full max-w-xl rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b pb-2.5" style="border-color: var(--border-subtle);">
+        <div>
+          <h2 class="text-sm font-bold">Sincronización Tiempo Real (P2P) &amp; Bitácora</h2>
+          <p class="text-[11px] opacity-75">Conexión directa entre navegadores sin servidor + compactación de eventos.</p>
+        </div>
+        <button type="button" id="btnCloseSyncModal" class="owl-btn p-1.5">✕</button>
+      </div>
+
+      <div class="owl-subpanel rounded-xl p-3 flex items-center justify-between">
+        <div>
+          <span class="font-bold block">Canal Activo: <span id="lblSyncRoomName" style="color: var(--accent-primary);">MESA-01</span></span>
+          <span id="lblSyncChannelDetail" class="text-[11px] opacity-75">BroadcastChannel + WebRTC P2P listos</span>
+        </div>
+        <button type="button" id="btnBroadcastFullNow" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold">
+          Sincronizar Tablero Ahora
+        </button>
+      </div>
+
+      <!-- Compactación de Event Log -->
+      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <span class="font-mono-tech text-[10px] uppercase opacity-75">Cola de Eventos (<span id="lblEventQueueCount">0</span> filas)</span>
+          <button type="button" id="btnCompactEvents" class="owl-btn owl-panel px-2.5 py-1 text-[11px] font-semibold">
+            ⚡ Compactar Snapshot
+          </button>
+        </div>
+        <div id="eventLogPreviewList" class="max-h-36 overflow-y-auto font-mono-tech text-[10px] flex flex-col gap-1 opacity-85"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Escenario 3D transparente sobre la mesa (sin recorte ni saltos de cámara) -->
+  <canvas id="dice3dCanvas" class="fixed inset-0 w-screen h-screen pointer-events-none z-40 hidden"></canvas>
+
+  <!-- Indicador de dados recogidos en mano (sigue al cursor) -->
+  <div
+    id="diceHandCursor"
+    class="owl-panel fixed top-0 left-0 z-50 pointer-events-none hidden items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono-tech shadow-xl border"
+    style="border-color: var(--accent-primary);"
+  >
+    <span class="text-xs leading-none">🎲</span>
+    <span id="lblDiceHandCount" class="font-bold tabular-nums leading-none">0</span>
+  </div>
+
+  <!-- ========================================================================
+       10. MOTOR DE APLICACIÓN (ES MODULES)
+       ======================================================================== -->
+  <script type="module" src="js/main.js?v=20261115k"></script>
+
+  <!-- Visor flotante de Handout compartido en mesa -->
+  <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="owl-panel max-w-3xl w-full rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs max-h-[90vh]">
+      <div class="flex items-center justify-between gap-2">
+        <strong id="handoutModalTitle" class="text-sm font-semibold truncate">Handout</strong>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" id="btnClearHandoutForAll" class="owl-btn owl-subpanel px-2.5 py-1 text-[11px] font-medium">Quitar para todos</button>
+          <button type="button" id="btnCloseHandout" class="owl-btn owl-btn-accent px-2.5 py-1 text-[11px] font-semibold">Cerrar</button>
+        </div>
+      </div>
+      <div class="rounded-xl overflow-hidden bg-black/40 flex items-center justify-center max-h-[75vh]">
+        <img id="handoutModalImg" src="" alt="Handout" class="max-w-full max-h-[75vh] object-contain" />
+      </div>
+    </div>
+  </div>
+</body>
+</html>
