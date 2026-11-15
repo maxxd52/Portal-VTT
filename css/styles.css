@@ -835,6 +835,27 @@ select.owl-input option {
   color: var(--text-primary);
 }
 
+.owl-item-use-btn {
+  background-color: color-mix(in srgb, var(--item-color, #8b5cf6) 18%, transparent);
+  color: var(--item-color, #8b5cf6);
+  border: 1px solid color-mix(in srgb, var(--item-color, #8b5cf6) 45%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: transform 0.14s ease, background-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.owl-item-use-btn:hover {
+  background-color: var(--item-color, #8b5cf6);
+  color: #ffffff;
+  border-color: var(--item-color, #8b5cf6);
+  transform: scale(1.06);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--item-color, #8b5cf6) 42%, transparent);
+}
+
+.owl-item-use-btn:active {
+  transform: scale(0.95);
+}
+
 .owl-input {
   width: 100%;
   background-color: var(--bg-subpanel);

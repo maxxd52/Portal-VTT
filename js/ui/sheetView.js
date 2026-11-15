@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115t';
+import { Service } from '../core/service.js?v=20261115u';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
@@ -413,14 +413,13 @@ export const SheetViewMethods = {
             class="group owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
           >
             <div class="flex items-center gap-2 min-w-0">
-              ${this.renderItemIconBadge(item)}
+              ${this.renderItemIconBadge(item, { interactive: true })}
               <div class="min-w-0">
                 <div class="font-semibold text-xs truncate">${item.name}</div>
                 <div class="text-[10px] opacity-65 truncate">${item.badge || ''}</div>
               </div>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0">
-              <button type="button" data-use-inv="${item.uid}" class="owl-list-action px-2.5 py-0.5 text-[10px]">Usar</button>
               <button type="button" data-inv-menu="${item.uid}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones">
                 <span class="text-xs leading-none">⋯</span>
               </button>
