@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115s';
+import { Service } from '../core/service.js?v=20261115t';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
@@ -279,7 +279,7 @@ export const SheetViewMethods = {
               const profTitle = prof === 2 ? 'Pericia (2×BC)' : prof === 1 ? 'Competente (+BC)' : 'Sin competencia';
               const attrTag = sk.attr ? `<span class="text-[9px] opacity-45 uppercase">${attrLabels[sk.attr] || ''}</span>` : '';
               return `
-                <div class="owl-list-row px-2 py-1 flex items-center justify-between gap-1.5 text-[11px]">
+                <div data-skill-id="${sk.id}" class="group owl-list-row px-2 py-1 flex items-center justify-between gap-1.5 text-[11px]">
                   <button type="button" data-prof-skill="${sk.id}" class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${profCls}" title="${profTitle}">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 16 16">${profSvg}</svg>
                   </button>
@@ -287,8 +287,8 @@ export const SheetViewMethods = {
                     <span class="font-medium truncate">${esc(sk.name)} ${attrTag}</span>
                     <span class="font-mono-tech font-semibold px-1.5 py-0.5 rounded-md owl-subpanel text-[10px] shrink-0">${modTxt}</span>
                   </button>
-                  <button type="button" data-del-skill="${sk.id}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-50 hover:opacity-100 shrink-0" title="Quitar">
-                    <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                  <button type="button" data-skill-menu="${sk.id}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0" title="Opciones">
+                    <span class="text-xs leading-none">⋯</span>
                   </button>
                 </div>
               `;
@@ -307,8 +307,47 @@ export const SheetViewMethods = {
           Service.rollDice(20, `${tok.name} · ${sk.name}`);
         });
       });
-      this.els.sheetSkillsList.querySelectorAll('[data-del-skill]').forEach((btn) => {
-        btn.addEventListener('click', () => Service.removeTokenSkill(tok.id, btn.dataset.delSkill));
+
+      const openSkillMenu = (skillId, cx, cy) => {
+        const sk = (tok.skills || []).find((x) => x.id === skillId);
+        if (!sk) return;
+        const tot = getSkillTotal(sk);
+        this.openListContextMenu(cx, cy, sk.name, 'Habilidad', [
+          {
+            icon: '🎲',
+            label: `Tirar 1d20 ${tot >= 0 ? `+${tot}` : tot}`,
+            onClick: () => {
+              Service.state.dice.modifier = tot;
+              Service.rollDice(20, `${tok.name} · ${sk.name}`);
+            }
+          },
+          {
+            icon: '🔄',
+            label: 'Cambiar competencia',
+            onClick: () => Service.cycleTokenSkillProf(tok.id, sk.id)
+          },
+          {
+            icon: '🗑️',
+            label: 'Quitar habilidad',
+            danger: true,
+            onClick: () => Service.removeTokenSkill(tok.id, sk.id)
+          }
+        ]);
+      };
+
+      this.els.sheetSkillsList.querySelectorAll('[data-skill-id]').forEach((row) => {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openSkillMenu(row.dataset.skillId, e.clientX, e.clientY);
+        });
+      });
+      this.els.sheetSkillsList.querySelectorAll('[data-skill-menu]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const r = btn.getBoundingClientRect();
+          openSkillMenu(btn.dataset.skillMenu, r.right, r.bottom + 4);
+        });
       });
     }
 
@@ -318,13 +357,13 @@ export const SheetViewMethods = {
         ? traits
             .map(
               (tr) => `
-              <div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-start justify-between gap-2 text-[11px]">
+              <div data-trait-id="${tr.id}" class="group owl-subpanel rounded-xl px-2.5 py-1.5 flex items-start justify-between gap-2 text-[11px]">
                 <div class="min-w-0">
                   <div class="font-semibold text-[11px] leading-tight">${esc(tr.title)}</div>
                   ${tr.desc ? `<div class="text-[10px] opacity-70 mt-0.5 leading-snug break-words">${esc(tr.desc)}</div>` : ''}
                 </div>
-                <button type="button" data-del-trait="${tr.id}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-50 hover:opacity-100 shrink-0" title="Quitar">
-                  <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                <button type="button" data-trait-menu="${tr.id}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0" title="Opciones">
+                  <span class="text-xs leading-none">⋯</span>
                 </button>
               </div>
             `
@@ -332,8 +371,32 @@ export const SheetViewMethods = {
             .join('')
         : `<div class="text-[10px] opacity-55 text-center py-3">Agregá ventajas, talentos o notas del personaje.</div>`;
 
-      this.els.sheetTraitsList.querySelectorAll('[data-del-trait]').forEach((btn) => {
-        btn.addEventListener('click', () => Service.removeTokenTrait(tok.id, btn.dataset.delTrait));
+      const openTraitMenu = (traitId, cx, cy) => {
+        const tr = traits.find((x) => x.id === traitId);
+        if (!tr) return;
+        this.openListContextMenu(cx, cy, tr.title, 'Rasgo', [
+          {
+            icon: '🗑️',
+            label: 'Quitar rasgo',
+            danger: true,
+            onClick: () => Service.removeTokenTrait(tok.id, tr.id)
+          }
+        ]);
+      };
+
+      this.els.sheetTraitsList.querySelectorAll('[data-trait-id]').forEach((row) => {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openTraitMenu(row.dataset.traitId, e.clientX, e.clientY);
+        });
+      });
+      this.els.sheetTraitsList.querySelectorAll('[data-trait-menu]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const r = btn.getBoundingClientRect();
+          openTraitMenu(btn.dataset.traitMenu, r.right, r.bottom + 4);
+        });
       });
     }
 
@@ -347,7 +410,7 @@ export const SheetViewMethods = {
           <div
             draggable="true"
             data-inv-uid="${item.uid}"
-            class="owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
+            class="group owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
           >
             <div class="flex items-center gap-2 min-w-0">
               ${this.renderItemIconBadge(item)}
@@ -358,8 +421,8 @@ export const SheetViewMethods = {
             </div>
             <div class="flex items-center gap-1 flex-shrink-0">
               <button type="button" data-use-inv="${item.uid}" class="owl-list-action px-2.5 py-0.5 text-[10px]">Usar</button>
-              <button type="button" data-del-inv="${item.uid}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-60 hover:opacity-100" title="Quitar">
-                <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+              <button type="button" data-inv-menu="${item.uid}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones">
+                <span class="text-xs leading-none">⋯</span>
               </button>
             </div>
           </div>
@@ -368,8 +431,34 @@ export const SheetViewMethods = {
           .join('')
       : `<div class="text-[11px] opacity-55 text-center py-6 px-2">Arrastra armas, escudos o pociones desde el Compendio.</div>`;
 
+    const openInvMenu = (uid, cx, cy) => {
+      const item = visibleInv.find((x) => x.uid === uid);
+      if (!item) return;
+      this.openListContextMenu(cx, cy, item.name, item.badge || 'Objeto', [
+        {
+          icon: '⚡',
+          label: 'Usar / Tirar',
+          onClick: () => {
+            const msg = Service.useTokenInventoryItem(tok.id, item.uid);
+            if (msg) this.showActionToast(msg);
+          }
+        },
+        {
+          icon: '🗑️',
+          label: 'Quitar del inventario',
+          danger: true,
+          onClick: () => Service.removeTokenInventoryItem(tok.id, item.uid)
+        }
+      ]);
+    };
+
     this.els.sheetInventoryList.querySelectorAll('[data-inv-uid]').forEach((row) => {
       const uid = row.dataset.invUid;
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openInvMenu(uid, e.clientX, e.clientY);
+      });
       row.addEventListener('dragstart', (e) => {
         this.draggingInvUid = uid;
         row.classList.add('opacity-50');
@@ -419,9 +508,11 @@ export const SheetViewMethods = {
         if (msg) this.showActionToast(msg);
       });
     });
-    this.els.sheetInventoryList.querySelectorAll('[data-del-inv]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        Service.removeTokenInventoryItem(tok.id, btn.dataset.delInv);
+    this.els.sheetInventoryList.querySelectorAll('[data-inv-menu]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const r = btn.getBoundingClientRect();
+        openInvMenu(btn.dataset.invMenu, r.right, r.bottom + 4);
       });
     });
   }

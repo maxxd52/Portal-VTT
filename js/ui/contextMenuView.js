@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { COMPENDIUM_ACTORS } from '../data/compendium.js';
-import { Service } from '../core/service.js?v=20261115s';
+import { Service } from '../core/service.js?v=20261115t';
 
 export const ContextMenuViewMethods = {
   openContextMenu(clientX, clientY) {
@@ -253,5 +253,55 @@ export const ContextMenuViewMethods = {
 
   hideContextMenu() {
     this.els.contextIconMenu.classList.remove('is-open');
+  },
+
+  openListContextMenu(clientX, clientY, title, subtitle = '', actions = []) {
+    const menu = this.els.contextIconMenu;
+    if (this.els.contextToolsRow) {
+      this.els.contextToolsRow.classList.add('hidden');
+      this.els.contextToolsRow.classList.remove('grid');
+    }
+    if (this.els.contextTokenHeader) {
+      this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
+      this.els.contextTokenHeader.innerHTML = `
+        <span class="font-semibold truncate max-w-[165px]">${title}</span>
+        ${subtitle ? `<span class="opacity-60 text-[10px] truncate max-w-[85px]">${subtitle}</span>` : ''}
+      `;
+    }
+    this.els.contextSubOptionsRow.className = 'hidden';
+    this.els.contextSubOptionsRow.innerHTML = '';
+
+    this.els.contextDynamicRow.className = 'flex flex-col gap-1 pt-1 border-t';
+    this.els.contextDynamicRow.innerHTML = actions
+      .map(
+        (act, idx) => `
+          <button
+            type="button"
+            data-list-ctx-idx="${idx}"
+            class="owl-subpanel owl-btn w-full h-8 px-2.5 justify-start gap-2 text-xs ${act.danger ? 'text-red-400' : ''}"
+          >
+            <span>${act.icon || '•'}</span>
+            <span class="truncate">${act.label}</span>
+          </button>
+        `
+      )
+      .join('');
+
+    this.els.contextDynamicRow.querySelectorAll('[data-list-ctx-idx]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const item = actions[Number(btn.dataset.listCtxIdx)];
+        this.hideContextMenu();
+        if (item && typeof item.onClick === 'function') {
+          await item.onClick();
+        }
+      });
+    });
+
+    const estHeight = Math.max(110, 56 + actions.length * 36);
+    const x = Math.min(window.innerWidth - 285, Math.max(8, clientX));
+    const y = Math.min(window.innerHeight - estHeight, Math.max(8, clientY));
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.classList.add('is-open');
   }
 };

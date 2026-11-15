@@ -2,7 +2,7 @@ import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/co
 import { CartridgePacker } from '../services/cartridgePacker.js';
 import { WebPConverter } from '../utils/webpConverter.js?v=20261114m';
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115s';
+import { Service } from '../core/service.js?v=20261115t';
 
 /**
  * Board pointer interactions, global drag-and-drop, keyboard shortcuts, context menu & tokens layer.

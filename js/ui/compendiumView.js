@@ -1,5 +1,5 @@
 import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js';
-import { Service } from '../core/service.js?v=20261115s';
+import { Service } from '../core/service.js?v=20261115t';
 
 const CURATED_COLORS = [
   ['#ef4444', 'Rojo'],
@@ -409,15 +409,15 @@ export const CompendiumViewMethods = {
           const isOpen = Boolean(q) || !this.collapsedFolders.has(folderKey);
           return `
             <div class="flex flex-col">
-              <div data-toggle-folder="${folderName}" class="owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-pointer select-none">
+              <div data-toggle-folder="${folderName}" class="group owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-pointer select-none">
                 <div class="flex items-center gap-2 min-w-0">
                   <svg class="w-3 h-3 opacity-60 transition-transform ${isOpen ? 'rotate-90' : ''}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4" /></svg>
                   <svg class="w-3.5 h-3.5 opacity-75 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /></svg>
                   <span class="font-semibold text-xs truncate">${folderName}</span>
                   <span class="text-[10px] opacity-50 tabular-nums">${children.length}</span>
                 </div>
-                <button type="button" data-del-folder="${folderName}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-45 hover:opacity-100" title="Eliminar carpeta">
-                  <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                <button type="button" data-folder-menu="${folderName}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones de carpeta">
+                  <span class="text-xs leading-none">⋯</span>
                 </button>
               </div>
               ${
@@ -440,22 +440,110 @@ export const CompendiumViewMethods = {
       this.els.tokenTemplatesGrid.innerHTML =
         folderHtml + rootHtml || `<div class="text-[11px] opacity-55 text-center py-6">Sin resultados en el compendio.</div>`;
 
+      const openFolderMenu = (folderName, cx, cy) => {
+        this.openListContextMenu(cx, cy, folderName, 'Carpeta', [
+          {
+            icon: '🗑️',
+            label: 'Eliminar carpeta',
+            danger: true,
+            onClick: () => Service.deleteCompendiumFolder(tab, folderName)
+          }
+        ]);
+      };
+
       this.els.tokenTemplatesGrid.querySelectorAll('[data-toggle-folder]').forEach((row) => {
         row.addEventListener('click', (e) => {
-          if (e.target.closest('[data-del-folder]')) return;
+          if (e.target.closest('[data-folder-menu]')) return;
           const fKey = `${tab}:${row.dataset.toggleFolder}`;
           if (this.collapsedFolders.has(fKey)) this.collapsedFolders.delete(fKey);
           else this.collapsedFolders.add(fKey);
           this.renderCompendium(Service.state);
         });
-      });
-
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-del-folder]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          Service.deleteCompendiumFolder(tab, btn.dataset.delFolder);
+          openFolderMenu(row.dataset.toggleFolder, e.clientX, e.clientY);
         });
       });
+
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-folder-menu]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const r = btn.getBoundingClientRect();
+          openFolderMenu(btn.dataset.folderMenu, r.right, r.bottom + 4);
+        });
+      });
+    };
+
+    const moreDotsBtn = (attr, val) => `
+      <button type="button" ${attr}="${val}" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0" title="Opciones">
+        <span class="text-xs leading-none">⋯</span>
+      </button>
+    `;
+
+    const getViewportCenterWorld = () => {
+      const vp = this.els.viewport.getBoundingClientRect();
+      const cam = Service.state.camera;
+      const z = cam.zoom || 1;
+      return { x: (vp.width / 2 - cam.x) / z, y: (vp.height / 2 - cam.y) / z };
+    };
+
+    const editCustomActor = (key) => {
+      const a = (Service.state.customActors || []).find((x) => x.key === key);
+      if (!a) return;
+      this.editingCompendiumKey = a.key;
+      this.els.inpCustomTokenName.value = a.name || '';
+      this.els.inpCustomTokenRole.value = a.role || '';
+      this.els.inpCustomTokenHp.value = String(a.hp || 16);
+      this.els.inpCustomTokenAc.value = String(a.ac || 13);
+      this.els.selCustomTokenAlly.value = a.isAlly === false ? 'enemy' : 'ally';
+      this.els.inpCustomStr.value = String(a.stats?.str || 0);
+      this.els.inpCustomDex.value = String(a.stats?.dex || 0);
+      this.els.inpCustomCon.value = String(a.stats?.con || 0);
+      this.els.inpCustomInt.value = String(a.stats?.int || 0);
+      if (this.els.inpCustomWis) this.els.inpCustomWis.value = String(a.stats?.wis || 0);
+      if (this.els.inpCustomCha) this.els.inpCustomCha.value = String(a.stats?.cha || 0);
+      this.els.inpCustomTokenImg.value = a.imageUrl || '';
+      this.els.inpCustomTokenFolder.value = a.folder || '';
+      this.selectedTokenColor = a.color || '#8b5cf6';
+      this.renderCustomColorGrids();
+      this.openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName, true);
+    };
+
+    const editCustomItem = (key) => {
+      const it = (Service.state.customItems || []).find((x) => x.key === key);
+      if (!it) return;
+      this.editingCompendiumKey = it.key;
+      this.els.inpCustomItemName.value = it.name || '';
+      this.els.selCustomItemKind.value = this.getItemCategory(it.kind);
+      this.els.selCustomItemKind.dispatchEvent(new Event('change'));
+      if (this.els.selCustomItemTarget) {
+        this.els.selCustomItemTarget.value = it.statTarget || 'ac';
+      }
+      this.els.inpCustomItemVal.value = String(
+        it.kind === 'consumable' ? it.heal || 0 : it.statBonus !== undefined ? it.statBonus : it.acBonus || 0
+      );
+      this.loadFormulaToTokens(
+        it.formula || (it.die > 0 ? `1d${it.die}${it.bonusMod ? (it.bonusMod > 0 ? `+${it.bonusMod}` : it.bonusMod) : ''}` : '')
+      );
+      if (this.els.inpCustomItemMsg) this.els.inpCustomItemMsg.value = it.message || '';
+      this.els.inpCustomItemFolder.value = it.folder || '';
+      this.selectedItemColor = it.color || '#8b5cf6';
+      this.selectedItemIcon = it.icon && this.itemIconDefs[it.icon] ? it.icon : this.getDefaultItemIcon(it.kind);
+      this.renderCustomColorGrids();
+      this.renderCustomItemIconGrid();
+      this.openCompendiumForm(this.els.customItemForm, this.els.btnToggleCustomToken, this.els.inpCustomItemName, true);
+    };
+
+    const editCustomMap = (key) => {
+      const m = (Service.state.customMaps || []).find((x) => x.key === key);
+      if (!m) return;
+      this.editingCompendiumKey = m.key;
+      this.els.inpCustomMapName.value = m.name || '';
+      this.els.inpCustomMapImg.value = m.imageUrl || '';
+      this.els.inpCustomMapDesc.value = m.desc || '';
+      this.els.inpCustomMapFolder.value = m.folder || '';
+      this.openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName, true);
     };
 
     if (tab === 'actors') {
@@ -467,7 +555,8 @@ export const CompendiumViewMethods = {
           <div
             draggable="true"
             data-drag-spec="actor:${a.key}"
-            class="owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            data-actor-key="${a.key}"
+            class="group owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
           >
             <div class="flex items-center gap-2.5 min-w-0">
               <span class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] text-white flex-shrink-0 overflow-hidden" style="background:${a.color};">
@@ -478,52 +567,54 @@ export const CompendiumViewMethods = {
                 <div class="text-[11px] opacity-65 truncate">${a.role} · HP ${a.hp} · CA ${a.ac || 12}</div>
               </div>
             </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              ${
-                a.isCustom
-                  ? `<button type="button" data-edit-custom-actor="${a.key}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-55 hover:opacity-100" title="Editar">
-                      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" /></svg>
-                    </button>
-                    <button type="button" data-del-custom-actor="${a.key}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-55 hover:opacity-100" title="Eliminar">
-                      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-                    </button>`
-                  : ''
-              }
-            </div>
+            ${moreDotsBtn('data-actor-menu', a.key)}
           </div>
         `
       );
 
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-edit-custom-actor]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
+      const openActorMenu = (key, cx, cy) => {
+        const a = allActors.find((x) => x.key === key);
+        if (!a) return;
+        const actions = [
+          {
+            icon: '➕',
+            label: 'Desplegar en el mapa',
+            onClick: async () => {
+              const center = getViewportCenterWorld();
+              await Service.spawnActorFromTemplate(a, center.x, center.y);
+              this.showActionToast(`${a.name} desplegado en el tablero.`);
+            }
+          }
+        ];
+        if (a.isCustom) {
+          actions.push(
+            { icon: '✏️', label: 'Editar personaje', onClick: () => editCustomActor(a.key) },
+            {
+              icon: '🗑️',
+              label: 'Eliminar personaje',
+              danger: true,
+              onClick: () => {
+                Service.deleteCustomActor(a.key);
+                this.showActionToast('Personaje eliminado.');
+              }
+            }
+          );
+        }
+        this.openListContextMenu(cx, cy, a.name, a.role || 'Personaje', actions);
+      };
+
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-actor-key]').forEach((row) => {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          const a = (Service.state.customActors || []).find((x) => x.key === btn.dataset.editCustomActor);
-          if (!a) return;
-          this.editingCompendiumKey = a.key;
-          this.els.inpCustomTokenName.value = a.name || '';
-          this.els.inpCustomTokenRole.value = a.role || '';
-          this.els.inpCustomTokenHp.value = String(a.hp || 16);
-          this.els.inpCustomTokenAc.value = String(a.ac || 13);
-          this.els.selCustomTokenAlly.value = a.isAlly === false ? 'enemy' : 'ally';
-          this.els.inpCustomStr.value = String(a.stats?.str || 0);
-          this.els.inpCustomDex.value = String(a.stats?.dex || 0);
-          this.els.inpCustomCon.value = String(a.stats?.con || 0);
-          this.els.inpCustomInt.value = String(a.stats?.int || 0);
-          if (this.els.inpCustomWis) this.els.inpCustomWis.value = String(a.stats?.wis || 0);
-          if (this.els.inpCustomCha) this.els.inpCustomCha.value = String(a.stats?.cha || 0);
-          this.els.inpCustomTokenImg.value = a.imageUrl || '';
-          this.els.inpCustomTokenFolder.value = a.folder || '';
-          this.selectedTokenColor = a.color || '#8b5cf6';
-          this.renderCustomColorGrids();
-          this.openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName, true);
+          openActorMenu(row.dataset.actorKey, e.clientX, e.clientY);
         });
       });
-
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-del-custom-actor]').forEach((btn) => {
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-actor-menu]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          Service.deleteCustomActor(btn.dataset.delCustomActor);
-          this.showActionToast('Personaje eliminado.');
+          const r = btn.getBoundingClientRect();
+          openActorMenu(btn.dataset.actorMenu, r.right, r.bottom + 4);
         });
       });
     } else if (tab === 'items') {
@@ -535,7 +626,8 @@ export const CompendiumViewMethods = {
           <div
             draggable="true"
             data-drag-spec="item:${it.key}"
-            class="owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            data-item-key="${it.key}"
+            class="group owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
           >
             <div class="flex items-center gap-2.5 min-w-0">
               ${this.renderItemIconBadge(it)}
@@ -544,53 +636,62 @@ export const CompendiumViewMethods = {
                 <div class="text-[11px] opacity-65 truncate">${it.badge}</div>
               </div>
             </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              ${
-                it.isCustom
-                  ? `<button type="button" data-edit-custom-item="${it.key}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-55 hover:opacity-100" title="Editar">
-                      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" /></svg>
-                    </button>
-                    <button type="button" data-del-custom-item="${it.key}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-55 hover:opacity-100" title="Eliminar">
-                      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-                    </button>`
-                  : ''
-              }
-            </div>
+            ${moreDotsBtn('data-item-menu', it.key)}
           </div>
         `
       );
 
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-edit-custom-item]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const it = (Service.state.customItems || []).find((x) => x.key === btn.dataset.editCustomItem);
-          if (!it) return;
-          this.editingCompendiumKey = it.key;
-          this.els.inpCustomItemName.value = it.name || '';
-          this.els.selCustomItemKind.value = this.getItemCategory(it.kind);
-          this.els.selCustomItemKind.dispatchEvent(new Event('change'));
-          if (this.els.selCustomItemTarget) {
-            this.els.selCustomItemTarget.value = it.statTarget || 'ac';
-          }
-          this.els.inpCustomItemVal.value = String(
-            it.kind === 'consumable' ? it.heal || 0 : it.statBonus !== undefined ? it.statBonus : it.acBonus || 0
+      const openItemMenu = (key, cx, cy) => {
+        const it = allItems.find((x) => x.key === key);
+        if (!it) return;
+        const actions = [];
+        if (Service.state.selectedTokenId) {
+          actions.push({
+            icon: '🎒',
+            label: 'Equipar en ficha seleccionada',
+            onClick: () => {
+              this.activeSheetTab = this.getItemCategory(it.kind);
+              const res = Service.equipItemToToken(Service.state.selectedTokenId, it);
+              if (res) this.showActionToast(`${it.name} equipado en ${res.token.name}.`);
+            }
+          });
+        }
+        if (it.isCustom) {
+          actions.push(
+            { icon: '✏️', label: 'Editar complemento', onClick: () => editCustomItem(it.key) },
+            {
+              icon: '🗑️',
+              label: 'Eliminar complemento',
+              danger: true,
+              onClick: () => {
+                Service.deleteCustomItem(it.key);
+                this.showActionToast('Complemento eliminado.');
+              }
+            }
           );
-          this.loadFormulaToTokens(it.formula || (it.die > 0 ? `1d${it.die}${it.bonusMod ? (it.bonusMod > 0 ? `+${it.bonusMod}` : it.bonusMod) : ''}` : ''));
-          if (this.els.inpCustomItemMsg) this.els.inpCustomItemMsg.value = it.message || '';
-          this.els.inpCustomItemFolder.value = it.folder || '';
-          this.selectedItemColor = it.color || '#8b5cf6';
-          this.selectedItemIcon = it.icon && this.itemIconDefs[it.icon] ? it.icon : this.getDefaultItemIcon(it.kind);
-          this.renderCustomColorGrids();
-          this.renderCustomItemIconGrid();
-          this.openCompendiumForm(this.els.customItemForm, this.els.btnToggleCustomToken, this.els.inpCustomItemName, true);
+        }
+        if (!actions.length) {
+          actions.push({
+            icon: 'ℹ️',
+            label: 'Seleccioná un token para equipar',
+            onClick: () => {}
+          });
+        }
+        this.openListContextMenu(cx, cy, it.name, it.badge || 'Complemento', actions);
+      };
+
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-item-key]').forEach((row) => {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openItemMenu(row.dataset.itemKey, e.clientX, e.clientY);
         });
       });
-
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-del-custom-item]').forEach((btn) => {
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-item-menu]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          Service.deleteCustomItem(btn.dataset.delCustomItem);
-          this.showActionToast('Complemento eliminado.');
+          const r = btn.getBoundingClientRect();
+          openItemMenu(btn.dataset.itemMenu, r.right, r.bottom + 4);
         });
       });
     } else {
@@ -602,47 +703,60 @@ export const CompendiumViewMethods = {
           <div
             draggable="true"
             data-drag-spec="map:${m.key}"
-            class="owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            data-map-key="${m.key}"
+            class="group owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
           >
             <div class="min-w-0">
               <div class="font-semibold text-xs truncate">${m.name}</div>
               <div class="text-[11px] opacity-65 truncate">${m.desc}</div>
             </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              ${
-                m.isCustom
-                  ? `<button type="button" data-edit-custom-map="${m.key}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-55 hover:opacity-100" title="Editar">
-                      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" /></svg>
-                    </button>
-                    <button type="button" data-del-custom-map="${m.key}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-55 hover:opacity-100" title="Eliminar">
-                      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-                    </button>`
-                  : ''
-              }
-            </div>
+            ${moreDotsBtn('data-map-menu', m.key)}
           </div>
         `
       );
 
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-edit-custom-map]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
+      const openMapMenu = (key, cx, cy) => {
+        const m = allMaps.find((x) => x.key === key);
+        if (!m) return;
+        const actions = [
+          {
+            icon: '🗺️',
+            label: 'Activar escenario',
+            onClick: async () => {
+              await Service.activateMapTemplate(m);
+              this.showActionToast(`Escenario "${m.name}" activado.`);
+            }
+          }
+        ];
+        if (m.isCustom) {
+          actions.push(
+            { icon: '✏️', label: 'Editar escenario', onClick: () => editCustomMap(m.key) },
+            {
+              icon: '🗑️',
+              label: 'Eliminar escenario',
+              danger: true,
+              onClick: () => {
+                Service.deleteCustomMap(m.key);
+                this.showActionToast('Escenario eliminado.');
+              }
+            }
+          );
+        }
+        this.openListContextMenu(cx, cy, m.name, 'Escenario', actions);
+      };
+
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-map-key]').forEach((row) => {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          const m = (Service.state.customMaps || []).find((x) => x.key === btn.dataset.editCustomMap);
-          if (!m) return;
-          this.editingCompendiumKey = m.key;
-          this.els.inpCustomMapName.value = m.name || '';
-          this.els.inpCustomMapImg.value = m.imageUrl || '';
-          this.els.inpCustomMapDesc.value = m.desc || '';
-          this.els.inpCustomMapFolder.value = m.folder || '';
-          this.openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName, true);
+          openMapMenu(row.dataset.mapKey, e.clientX, e.clientY);
         });
       });
-
-      this.els.tokenTemplatesGrid.querySelectorAll('[data-del-custom-map]').forEach((btn) => {
+      this.els.tokenTemplatesGrid.querySelectorAll('[data-map-menu]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          Service.deleteCustomMap(btn.dataset.delCustomMap);
-          this.showActionToast('Escenario eliminado.');
+          const r = btn.getBoundingClientRect();
+          openMapMenu(btn.dataset.mapMenu, r.right, r.bottom + 4);
         });
       });
     }
