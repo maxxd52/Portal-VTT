@@ -628,6 +628,9 @@ export const View = {
     this.els.btnRolePlayer.addEventListener('click', () => Service.setRole('player'));
 
     this.els.btnToggleSheet.addEventListener('click', () => {
+      if (!Service.state.selectedTokenId && Service.state.tokens.length) {
+        Service.state.selectedTokenId = Service.state.tokens[0].id;
+      }
       Service.state.sheetOpen = !Service.state.sheetOpen;
       Service.notify();
     });

@@ -200,9 +200,19 @@ export const BoardViewMethods = {
 
     // Doble clic en un token abre su ficha de personaje
     this.els.stage.addEventListener('dblclick', (e) => {
-      const tokEl = e.target.closest('[data-token-id]');
-      if (!tokEl) return;
-      Service.selectToken(tokEl.dataset.tokenId, true);
+      let tokenId = e.target.closest('[data-token-id]')?.dataset?.tokenId || null;
+      if (!tokenId) {
+        const worldPt = Selector.screenToWorld(Service.state, e.clientX, e.clientY);
+        const cs = Number(Service.state.grid?.cellSize) || 80;
+        const hit = [...(Service.state.tokens || [])].reverse().find((tok) => {
+          if (tok.hidden && Service.state.role !== 'gm') return false;
+          const radius = (cs * (tok.size || 1) * 0.84) / 2;
+          return Math.hypot(worldPt.x - tok.x, worldPt.y - tok.y) <= radius;
+        });
+        if (hit) tokenId = hit.id;
+      }
+      if (!tokenId) return;
+      Service.selectToken(tokenId, true);
     });
 
     // Menú Contextual de Iconos al Clic Derecho (si no hubo arrastre de cámara)
