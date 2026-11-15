@@ -89,5 +89,42 @@ export const BrowserVault = {
     } catch (_) {
       return null;
     }
+  },
+
+  async listRooms() {
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction(this.storeName, 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const keysReq = store.getAllKeys();
+        keysReq.onsuccess = async () => {
+          const keys = (keysReq.result || []).filter((k) => k && k !== '__GLOBAL_SHELF__');
+          const entries = await Promise.all(
+            keys.map(
+              (code) =>
+                new Promise((res) => {
+                  const getReq = store.get(code);
+                  getReq.onsuccess = () => {
+                    const world = getReq.result;
+                    res({
+                      code,
+                      title: world?.moduleTitle || code,
+                      ruleset: world?.ruleset || 'dnd55',
+                      tokenCount: Array.isArray(world?.tokens) ? world.tokens.length : 0,
+                      mapId: world?.mapId || 'bastion'
+                    });
+                  };
+                  getReq.onerror = () => res(null);
+                })
+            )
+          );
+          resolve(entries.filter(Boolean));
+        };
+        keysReq.onerror = () => resolve([]);
+      });
+    } catch (_) {
+      return [];
+    }
   }
 };

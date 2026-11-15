@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OWL-TABLE // VTT — Mesa Virtual Minimalista</title>
+  <title>Portal-VTT — Mesa Virtual Táctica</title>
 
   <!-- Tailwind CSS, Three.js (r128) & fflate (Empaquetador Binario .owltable ZIP) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -55,10 +55,16 @@
   <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     <!-- Bloque Izquierdo: Identidad, Sala Efímera, Selector de Mesas/SRD, Grilla y Rol -->
     <div class="owl-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto">
-      <div class="flex items-center gap-1.5 xl:pr-2 xl:border-r" style="border-color: var(--border-subtle);" title="OWL-TABLE">
+      <button
+        type="button"
+        id="btnBrandLobby"
+        class="flex items-center gap-1.5 xl:pr-2 xl:border-r hover:opacity-85 transition-opacity cursor-pointer"
+        style="border-color: var(--border-subtle);"
+        title="Portal-VTT — Volver al inicio"
+      >
         <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: var(--accent-primary);"></span>
-        <span class="font-bold text-xs tracking-tight hidden xl:inline">OWL-TABLE</span>
-      </div>
+        <span class="font-bold text-xs tracking-tight hidden xl:inline">Portal-VTT</span>
+      </button>
 
       <!-- Botón Sala Efímera & Taller de Cartuchos -->
       <button
@@ -1213,9 +1219,123 @@
   </div>
 
   <!-- ========================================================================
+       9.5. PORTAL-VTT LOBBY (PANTALLA DE ENTRADA SIN LOGIN)
+       ======================================================================== -->
+  <div
+    id="portalLobby"
+    class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="portalLobbyTitle"
+  >
+    <div class="owl-panel w-full max-w-2xl rounded-3xl p-6 md:p-7 flex flex-col gap-5 shadow-2xl border" style="border-color: var(--border-subtle);">
+      <!-- Encabezado de marca -->
+      <div class="flex items-center justify-between gap-3 pb-3 border-b" style="border-color: var(--border-subtle);">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-lg" style="background: var(--accent-primary);">P</div>
+          <div>
+            <h1 id="portalLobbyTitle" class="text-lg font-bold tracking-tight leading-tight">Portal-VTT</h1>
+            <p class="text-xs opacity-70">Mesa virtual táctica instantánea · Sin registro ni cuentas</p>
+          </div>
+        </div>
+        <span class="font-mono-tech text-[10px] px-2.5 py-1 rounded-full owl-subpanel opacity-80">P2P · Local Vault</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
+        <!-- Columna Principal: Crear Portal -->
+        <form id="createPortalForm" class="md:col-span-3 owl-subpanel rounded-2xl p-4 flex flex-col gap-3.5 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm">Crear un Portal</span>
+            <span class="text-[10px] font-mono-tech opacity-60">Director (GM)</span>
+          </div>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] font-medium opacity-80">Nombre del portal</span>
+            <input
+              id="inpPortalName"
+              type="text"
+              placeholder="Ej. Crónicas del Bastión"
+              class="owl-input w-full px-3 py-2 rounded-xl text-xs"
+            />
+          </label>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] font-medium opacity-80">Módulo de reglas</span>
+              <select id="selPortalRuleset" class="owl-input w-full px-2.5 py-2 rounded-xl text-xs">
+                <option value="dnd55" selected>D&amp;D 5.5 (2024)</option>
+                <option value="free">Sistema Libre / Genérico</option>
+              </select>
+            </label>
+
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] font-medium opacity-80">Escenario inicial</span>
+              <select id="selPortalMap" class="owl-input w-full px-2.5 py-2 rounded-xl text-xs">
+                <option value="bastion" selected>Bastión Subterráneo</option>
+                <option value="forest">Claro del Bosque</option>
+                <option value="tavern">Taberna Engranaje</option>
+                <option value="empty">Tablero Vacío</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-4 pt-1">
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input id="chkPortalDynLight" type="checkbox" checked class="accent-violet-500 w-3.5 h-3.5" />
+              <span class="text-[11px] opacity-85">Luz dinámica y niebla</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input id="chkPortalGrid" type="checkbox" checked class="accent-violet-500 w-3.5 h-3.5" />
+              <span class="text-[11px] opacity-85">Grilla táctica</span>
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <button type="submit" id="btnCreatePortal" class="owl-btn owl-btn-accent flex-1 py-2.5 rounded-xl font-bold text-xs">
+              ✨ Abrir Portal
+            </button>
+            <label class="owl-btn owl-panel px-3 py-2.5 rounded-xl font-semibold text-[11px] cursor-pointer text-center" title="Abrir portal desde archivo .owltable">
+              📦 Importar
+              <input id="inpLobbyCartridgeFile" type="file" accept=".owltable,.zip,.json" class="hidden" />
+            </label>
+          </div>
+        </form>
+
+        <!-- Columna Lateral: Unirse & Recientes -->
+        <div class="md:col-span-2 flex flex-col gap-3 text-xs">
+          <form id="joinPortalForm" class="owl-subpanel rounded-2xl p-3.5 flex flex-col gap-2.5">
+            <span class="font-bold text-xs">Unirse a un Portal</span>
+            <input
+              id="inpJoinPortalCode"
+              type="text"
+              required
+              placeholder="Código (PORTAL-XXXX) o enlace"
+              class="owl-input w-full px-2.5 py-1.5 rounded-xl text-xs font-mono-tech"
+            />
+            <div class="flex items-center gap-2">
+              <select id="selJoinPortalRole" class="owl-input flex-1 px-2 py-1.5 rounded-xl text-[11px]">
+                <option value="player" selected>Jugador</option>
+                <option value="gm">Director (GM)</option>
+              </select>
+              <button type="submit" class="owl-btn owl-panel px-3 py-1.5 rounded-xl font-semibold text-[11px]">
+                Entrar →
+              </button>
+            </div>
+          </form>
+
+          <div class="owl-subpanel rounded-2xl p-3.5 flex flex-col gap-2 flex-1 min-h-[140px]">
+            <span class="font-bold text-xs">Portales recientes</span>
+            <div id="recentPortalsList" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261115o"></script>
+  <script type="module" src="js/main.js?v=20261115q"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">

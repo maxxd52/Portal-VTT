@@ -5,13 +5,14 @@
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { Selector } from './selector.js';
-import { Service } from './service.js?v=20261115o';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261115o';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115o';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115o';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261115o';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115o';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261115o';
+import { Service } from './service.js?v=20261115q';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261115q';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115q';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115q';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261115q';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115q';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115q';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261115q';
 
 const ITEM_ICON_DEFS = {
   sword: ['Espada / Ataque', '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/>'],
@@ -94,6 +95,7 @@ export const View = {
   ...CompendiumViewMethods,
   ...DiceViewMethods,
   ...ModalsViewMethods,
+  ...PortalLobbyViewMethods,
   ...SheetViewMethods,
 
   getItemCategory(kind) {
@@ -199,6 +201,11 @@ export const View = {
 
     Service.subscribe((state, opts) => this.render(state, opts));
     this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
+
+    const hasRoomParam = new URLSearchParams(window.location.search).has('room');
+    if (!hasRoomParam) {
+      await this.showPortalLobby();
+    }
   },
 
   startPresenceHeartbeat() {
@@ -486,7 +493,21 @@ export const View = {
       btnBroadcastFullNow: document.getElementById('btnBroadcastFullNow'),
       lblEventQueueCount: document.getElementById('lblEventQueueCount'),
       btnCompactEvents: document.getElementById('btnCompactEvents'),
-      eventLogPreviewList: document.getElementById('eventLogPreviewList')
+      eventLogPreviewList: document.getElementById('eventLogPreviewList'),
+
+      portalLobby: document.getElementById('portalLobby'),
+      btnBrandLobby: document.getElementById('btnBrandLobby'),
+      createPortalForm: document.getElementById('createPortalForm'),
+      inpPortalName: document.getElementById('inpPortalName'),
+      selPortalRuleset: document.getElementById('selPortalRuleset'),
+      selPortalMap: document.getElementById('selPortalMap'),
+      chkPortalDynLight: document.getElementById('chkPortalDynLight'),
+      chkPortalGrid: document.getElementById('chkPortalGrid'),
+      inpLobbyCartridgeFile: document.getElementById('inpLobbyCartridgeFile'),
+      joinPortalForm: document.getElementById('joinPortalForm'),
+      inpJoinPortalCode: document.getElementById('inpJoinPortalCode'),
+      selJoinPortalRole: document.getElementById('selJoinPortalRole'),
+      recentPortalsList: document.getElementById('recentPortalsList')
     };
   },
 
@@ -505,6 +526,7 @@ export const View = {
   },
 
   bindEvents() {
+    this.bindPortalLobbyEvents();
     this.bindBoardEvents();
 
     // Selector de Escena / Mesas Enlazadas (dentro de Sala)

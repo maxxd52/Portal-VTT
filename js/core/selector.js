@@ -148,6 +148,7 @@ export const Selector = {
   extractSerializableWorld(state) {
     return {
       moduleTitle: state.room.moduleTitle,
+      ruleset: state.ruleset || 'dnd55',
       mapId: state.mapId,
       activeMapKey: state.activeMapKey || state.mapId || 'bastion',
       customMapUrl: state.customMapUrl,

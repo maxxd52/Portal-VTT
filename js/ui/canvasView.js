@@ -1,5 +1,5 @@
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115o';
+import { Service } from '../core/service.js?v=20261115q';
 
 /**
  * Canvas, Fog of War, Map Notes & Vector Overlay rendering methods mixed into View.
@@ -79,6 +79,12 @@ export const CanvasViewMethods = {
     if (this.els.customMapImg) {
       this.els.customMapImg.classList.add('hidden');
       this.els.customMapImg.removeAttribute('src');
+    }
+
+    if (state.mapId === 'empty') {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, 2400, 1600);
+      return;
     }
 
     if (state.mapId === 'forest') {

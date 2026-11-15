@@ -16,7 +16,7 @@ export const DEFAULT_DICE_STYLE = {
 
 export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = 'MESA-';
+  let out = 'PORTAL-';
   for (let i = 0; i < 4; i++) {
     out += chars[Math.floor(Math.random() * chars.length)];
   }
@@ -38,6 +38,7 @@ export function createInitialState() {
 
   return {
     theme: 'slate',
+    ruleset: 'dnd55', // 'dnd55' | 'free'
     role: roleParam,
     tool: 'select', // 'select' | 'pan' | 'ruler' | 'draw' | 'fog' | 'wall' | 'ping'
     rulerShape: 'line', // 'line' | 'circle' | 'cone' | 'cube'

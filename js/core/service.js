@@ -3,13 +3,13 @@
    ========================================================================== */
 
 import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js';
-import { BrowserVault } from '../services/browserVault.js';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261115o';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261115o';
+import { BrowserVault } from '../services/browserVault.js?v=20261115q';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261115q';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261115q';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { createInitialState } from './model.js';
-import { Selector } from './selector.js';
+import { createInitialState, generateRoomCode } from './model.js?v=20261115q';
+import { Selector } from './selector.js?v=20261115q';
 
 const getOrCreateClientId = () => {
   try {
@@ -171,9 +171,68 @@ export const Service = {
     }
   },
 
+  async createPortal({ title = '', ruleset = 'dnd55', mapId = 'bastion', dynamicLighting = true, showGrid = true } = {}) {
+    const code = generateRoomCode();
+    const next = createInitialState();
+    next.role = 'gm';
+    next.ruleset = ruleset === 'free' ? 'free' : 'dnd55';
+    next.room.code = code;
+    next.room.moduleTitle = String(title || '').trim() || `Portal ${code}`;
+    next.dynamicLighting = Boolean(dynamicLighting);
+    next.grid.opacity = showGrid ? 0.28 : 0;
+
+    if (mapId === 'empty') {
+      next.mapId = 'empty';
+      next.activeMapKey = 'empty';
+      next.walls = [];
+      next.tokens = [];
+      next.selectedTokenId = null;
+    } else if (mapId === 'forest' || mapId === 'tavern' || mapId === 'bastion') {
+      next.mapId = mapId;
+      next.activeMapKey = mapId;
+      next.walls = buildPresetWallsForMap(mapId);
+    }
+
+    this.state = next;
+    this.loadedMapImage = null;
+    this.undoStack = [];
+    this.redoStack = [];
+    await BrowserVault.saveRoom(code, Selector.extractSerializableWorld(this.state));
+    this.notify({
+      clearExplored: true,
+      redrawMap: true,
+      redrawGrid: true,
+      redrawDraw: true,
+      redrawFog: true
+    });
+    return code;
+  },
+
+  async openPortal(roomCode, role = 'gm') {
+    const code = String(roomCode || '').trim().toUpperCase();
+    if (!code) return;
+    const next = createInitialState();
+    next.role = role === 'player' ? 'player' : 'gm';
+    next.room.code = code;
+    this.state = next;
+    this.loadedMapImage = null;
+    this.undoStack = [];
+    this.redoStack = [];
+    await this.restoreFromVault();
+    this.notify({
+      clearExplored: true,
+      redrawMap: true,
+      redrawGrid: true,
+      redrawDraw: true,
+      redrawFog: true,
+      skipVaultSave: true
+    });
+  },
+
   applyFullWorldState(world, silent = false) {
     if (!world) return;
     if (world.moduleTitle) this.state.room.moduleTitle = world.moduleTitle;
+    if (world.ruleset) this.state.ruleset = world.ruleset;
     if (world.mapId) this.state.mapId = world.mapId;
     if (world.activeMapKey) this.state.activeMapKey = world.activeMapKey;
     if (world.mapGrids && typeof world.mapGrids === 'object') this.state.mapGrids = world.mapGrids;
