@@ -5,15 +5,15 @@
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { Selector } from './selector.js';
-import { Service } from './service.js?v=20261115u';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261115u';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115u';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115u';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261115u';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261115u';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115u';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115u';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261115u';
+import { Service } from './service.js?v=20261115v';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261115v';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115v';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115v';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261115v';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261115v';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115v';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115v';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261115v';
 
 const ITEM_ICON_DEFS = {
   sword: ['Espada / Ataque', '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/>'],
@@ -126,7 +126,7 @@ export const View = {
     const iconKey = item?.icon && ITEM_ICON_DEFS[item.icon] ? item.icon : this.getDefaultItemIcon(item?.kind);
     const color = item?.color || '#8b5cf6';
     if (opts.interactive && item?.uid) {
-      return `<button type="button" draggable="false" data-use-inv="${item.uid}" class="owl-item-use-btn w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="--item-color:${color};" title="Usar / Tirar ${item.name || ''}" aria-label="Usar ${item.name || 'objeto'}">${this.renderItemIconSvg(iconKey)}</button>`;
+      return `<button type="button" draggable="false" data-use-inv="${item.uid}" class="owl-item-use-btn w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="--item-color:${color}; background:${color}22; color:${color}; border-color:${color}55;" title="Usar / Tirar ${item.name || ''}" aria-label="Usar ${item.name || 'objeto'}">${this.renderItemIconSvg(iconKey)}</button>`;
     }
     return `<span class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="background:${color}22; color:${color};">${this.renderItemIconSvg(iconKey)}</span>`;
   },
