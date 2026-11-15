@@ -3,13 +3,13 @@
    ========================================================================== */
 
 import { buildPresetWallsForMap } from '../data/compendium.js';
-import { BrowserVault } from '../services/browserVault.js?v=20261115r';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261115r';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261115r';
+import { BrowserVault } from '../services/browserVault.js?v=20261115s';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261115s';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261115s';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261115r';
-import { createInitialState, generateRoomCode } from './model.js?v=20261115r';
-import { Selector } from './selector.js?v=20261115r';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261115s';
+import { createInitialState, generateRoomCode } from './model.js?v=20261115s';
+import { Selector } from './selector.js?v=20261115s';
 
 const getOrCreateClientId = () => {
   try {

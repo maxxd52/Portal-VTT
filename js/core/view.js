@@ -5,14 +5,15 @@
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { Selector } from './selector.js';
-import { Service } from './service.js?v=20261115r';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261115r';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115r';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115r';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261115r';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115r';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115r';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261115r';
+import { Service } from './service.js?v=20261115s';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261115s';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115s';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115s';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261115s';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261115s';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115s';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115s';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261115s';
 
 const ITEM_ICON_DEFS = {
   sword: ['Espada / Ataque', '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/>'],
@@ -91,6 +92,7 @@ export const View = {
   tokenStatusSymbols: TOKEN_STATUS_SYMBOLS,
 
   ...BoardViewMethods,
+  ...ContextMenuViewMethods,
   ...CanvasViewMethods,
   ...CompendiumViewMethods,
   ...DiceViewMethods,
@@ -451,6 +453,8 @@ export const View = {
 
       // Menú Contextual Clic Derecho
       contextIconMenu: document.getElementById('contextIconMenu'),
+      contextTokenHeader: document.getElementById('contextTokenHeader'),
+      contextToolsRow: document.getElementById('contextToolsRow'),
       contextDynamicRow: document.getElementById('contextDynamicRow'),
       contextSubOptionsRow: document.getElementById('contextSubOptionsRow'),
       vttActionToast: document.getElementById('vttActionToast'),

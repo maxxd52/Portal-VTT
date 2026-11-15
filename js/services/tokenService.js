@@ -4,7 +4,7 @@
 
 import { COMPENDIUM_ITEMS } from '../data/compendium.js';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261115r';
+import { Selector } from '../core/selector.js?v=20261115s';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {
@@ -381,6 +381,27 @@ export const TokenServiceMethods = {
     this.recordEvent('AURA_FICHA', `${tok.name}: ${next ? next + 'px' : 'Apagada'}`);
     this.notify();
     return next;
+  },
+
+  cycleTokenSize(tokenId) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok) return 1;
+    const steps = [1, 2, 3];
+    const cur = Number(tok.size) || 1;
+    const next = steps[(steps.indexOf(cur) + 1) % steps.length];
+    tok.size = next;
+    this.recordEvent('TAMANO_FICHA', `${tok.name}: ${next}x${next}`);
+    this.notify({ redrawFog: true });
+    return next;
+  },
+
+  toggleTokenAlly(tokenId) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok) return true;
+    tok.isAlly = tok.isAlly === false;
+    this.recordEvent('BANDO_FICHA', `${tok.name}: ${tok.isAlly ? 'Aliado' : 'Hostil'}`);
+    this.notify({ redrawFog: true });
+    return tok.isAlly;
   },
 
   toggleTokenOwnership(tokenId) {

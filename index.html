@@ -882,8 +882,11 @@
     role="menu"
     aria-label="Paleta rápida de herramientas"
   >
-    <!-- Fila 1: Herramientas del tablero con iconos SVG -->
-    <div class="grid grid-cols-6 gap-1">
+    <!-- Cabecera contextual de Token (solo visible al clic derecho sobre una ficha) -->
+    <div id="contextTokenHeader" class="hidden items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]" style="background: var(--bg-subpanel);"></div>
+
+    <!-- Fila 1: Herramientas del mapa con iconos SVG (solo visible en clic derecho sobre el mapa) -->
+    <div id="contextToolsRow" class="grid grid-cols-6 gap-1">
       <button type="button" data-ctx-tool="select" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Mover / Seleccionar [V]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 2-3 7z"/></svg>
       </button>
@@ -1335,7 +1338,7 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261115r"></script>
+  <script type="module" src="js/main.js?v=20261115s"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">

@@ -48,7 +48,8 @@ Para mantener la base de código navegable tanto para humanos como para agentes 
 | Archivo | Responsabilidad |
 |---|---|
 | `js/ui/portalLobbyView.js` | Lobby de entrada de Portal-VTT (crear portal, elegir reglas, abrir portales guardados) |
-| `js/ui/boardView.js` | Interacción sobre el tablero (pan, zoom, drag de tokens, doble clic para ficha, menú contextual) |
+| `js/ui/boardView.js` | Interacción sobre el tablero (pan, zoom, drag de tokens, doble clic para ficha) |
+| `js/ui/contextMenuView.js` | Menú contextual separado para tokens (HP, tamaño, bando, estados, luz/aura) vs mapa (herramientas, ping, nota, niebla) |
 | `js/ui/canvasView.js` | Renderizado del mapa, grilla, trazos vectoriales, niebla de guerra, notas y pings |
 | `js/ui/sheetView.js` | Ficha lateral de personaje (HP, CA, atributos, salvaciones, habilidades, rasgos, inventario) |
 | `js/ui/diceView.js` | Dock de dados, historial de tiradas, chips de fórmulas y selector visual de dados |
