@@ -2,7 +2,7 @@ import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/co
 import { CartridgePacker } from '../services/cartridgePacker.js';
 import { WebPConverter } from '../utils/webpConverter.js?v=20261114m';
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115q';
+import { Service } from '../core/service.js?v=20261115r';
 
 /**
  * Board pointer interactions, global drag-and-drop, keyboard shortcuts, context menu & tokens layer.
@@ -64,7 +64,7 @@ export const BoardViewMethods = {
 
       if (tokEl && (tool === 'select' || tool === 'pan')) {
         const tok = Service.state.tokens.find((t) => t.id === tokEl.dataset.tokenId);
-        Service.selectToken(tokEl.dataset.tokenId, true);
+        Service.selectToken(tokEl.dataset.tokenId, false);
         if (!Service.canControlToken(tok)) {
           this.showActionToast('Solo el DJ o su dueño puede mover esta ficha.');
           return;
@@ -196,6 +196,13 @@ export const BoardViewMethods = {
       activePointerMode = null;
       draggingTokenId = null;
       currentStroke = null;
+    });
+
+    // Doble clic en un token abre su ficha de personaje
+    this.els.stage.addEventListener('dblclick', (e) => {
+      const tokEl = e.target.closest('[data-token-id]');
+      if (!tokEl) return;
+      Service.selectToken(tokEl.dataset.tokenId, true);
     });
 
     // Menú Contextual de Iconos al Clic Derecho (si no hubo arrastre de cámara)

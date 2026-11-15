@@ -5,14 +5,14 @@
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { Selector } from './selector.js';
-import { Service } from './service.js?v=20261115q';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261115q';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115q';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115q';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261115q';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115q';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115q';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261115q';
+import { Service } from './service.js?v=20261115r';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261115r';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115r';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115r';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261115r';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115r';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115r';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261115r';
 
 const ITEM_ICON_DEFS = {
   sword: ['Espada / Ataque', '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/>'],

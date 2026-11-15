@@ -1,4 +1,4 @@
-import { BrowserVault } from './browserVault.js?v=20261115q';
+import { BrowserVault } from './browserVault.js?v=20261115r';
 import { CartridgePacker } from './cartridgePacker.js';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
 
