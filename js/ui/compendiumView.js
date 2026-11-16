@@ -1,5 +1,5 @@
 import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js';
-import { Service } from '../core/service.js?v=20261115w';
+import { Service } from '../core/service.js?v=20261115x';
 
 const CURATED_COLORS = [
   ['#ef4444', 'Rojo'],
@@ -481,13 +481,6 @@ export const CompendiumViewMethods = {
       </button>
     `;
 
-    const getViewportCenterWorld = () => {
-      const vp = this.els.viewport.getBoundingClientRect();
-      const cam = Service.state.camera;
-      const z = cam.zoom || 1;
-      return { x: (vp.width / 2 - cam.x) / z, y: (vp.height / 2 - cam.y) / z };
-    };
-
     const editCustomActor = (key) => {
       const a = (Service.state.customActors || []).find((x) => x.key === key);
       if (!a) return;
@@ -577,12 +570,17 @@ export const CompendiumViewMethods = {
         if (!a) return;
         const actions = [
           {
-            icon: '➕',
-            label: 'Desplegar en el mapa',
-            onClick: async () => {
-              const center = getViewportCenterWorld();
-              await Service.spawnActorFromTemplate(a, center.x, center.y);
-              this.showActionToast(`${a.name} desplegado en el tablero.`);
+            icon: '⧉',
+            label: 'Duplicar para editar',
+            onClick: () => {
+              const copy = Service.saveCustomActor({
+                ...a,
+                key: undefined,
+                name: `${a.name} (Copia)`,
+                isCustom: true
+              });
+              editCustomActor(copy.key);
+              this.showActionToast(`Copia "${copy.name}" lista para editar.`);
             }
           }
         ];
