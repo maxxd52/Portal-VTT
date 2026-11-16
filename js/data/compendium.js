@@ -2,6 +2,8 @@
    MODEL: COMPENDIO SRD (PERSONAJES, OBJETOS, MAPAS) Y MUROS PREDEFINIDOS
    ========================================================================== */
 
+import { DND55_CLASS_ITEMS } from './dnd55Classes.js';
+
 export const COMPENDIUM_ACTORS = [
   {
     key: 'warrior',
@@ -73,7 +75,8 @@ export const COMPENDIUM_ITEMS = [
   { key: 'greatclub', name: 'Garrote Rúnico', kind: 'weapon', badge: 'ATQ +6 (1d12)', bonusMod: 6, die: 12, acBonus: 0, heal: 0, lightRadius: 0, color: '#f59e0b' },
   { key: 'shield_wood', name: 'Escudo Reforzado', kind: 'armor', badge: '+2 CA', bonusMod: 0, die: 0, acBonus: 2, heal: 0, lightRadius: 0, color: '#06b6d4' },
   { key: 'torch', name: 'Antorcha Táctica', kind: 'light', badge: 'Luz +5 cas', bonusMod: 0, die: 0, acBonus: 0, heal: 0, lightRadius: 400, color: '#fbbf24' },
-  { key: 'potion_heal', name: 'Poción de Curación', kind: 'consumable', badge: 'Cura +8 HP', bonusMod: 0, die: 0, acBonus: 0, heal: 8, lightRadius: 0, color: '#ec4899' }
+  { key: 'potion_heal', name: 'Poción de Curación', kind: 'consumable', badge: 'Cura +8 HP', bonusMod: 0, die: 0, acBonus: 0, heal: 8, lightRadius: 0, color: '#ec4899' },
+  ...DND55_CLASS_ITEMS
 ];
 
 export const COMPENDIUM_MAPS = [

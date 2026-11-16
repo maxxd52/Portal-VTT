@@ -60,6 +60,7 @@ Para mantener la base de código navegable tanto para humanos como para agentes 
 | Archivo | Responsabilidad |
 |---|---|
 | `js/data/compendium.js` | Plantillas base de actores, objetos, mapas de ejemplo y muros predefinidos |
+| `js/data/dnd55Classes.js` | Complementos de las 12 clases de D&D 5.5e (hasta nivel 3) organizados en carpetas |
 | `js/utils/driveUrlHelper.js` | Normalización de URLs de Google Drive para imágenes de mapas y tokens |
 
 ---
