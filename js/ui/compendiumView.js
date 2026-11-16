@@ -1,5 +1,5 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js';
-import { Service } from '../core/service.js?v=20261115z';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116a';
+import { Service } from '../core/service.js?v=20261116a';
 
 const CURATED_COLORS = [
   ['#ef4444', 'Rojo'],

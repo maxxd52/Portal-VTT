@@ -2,7 +2,7 @@
    MODEL: COMPENDIO SRD (PERSONAJES, OBJETOS, MAPAS) Y MUROS PREDEFINIDOS
    ========================================================================== */
 
-import { DND55_CLASS_ITEMS } from './dnd55Classes.js';
+import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261116a';
 
 export const COMPENDIUM_ACTORS = [
   {
