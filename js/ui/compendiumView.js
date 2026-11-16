@@ -1,5 +1,5 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116a';
-import { Service } from '../core/service.js?v=20261116a';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116b';
+import { Service } from '../core/service.js?v=20261116b';
 
 const CURATED_COLORS = [
   ['#ef4444', 'Rojo'],
@@ -616,7 +616,11 @@ export const CompendiumViewMethods = {
         });
       });
     } else if (tab === 'items') {
-      const allItems = [...(state.customItems || []), ...COMPENDIUM_ITEMS];
+      const baseItems =
+        state.ruleset === 'free'
+          ? COMPENDIUM_ITEMS.filter((i) => !String(i.key || '').startsWith('55_'))
+          : COMPENDIUM_ITEMS;
+      const allItems = [...(state.customItems || []), ...baseItems];
       const list = allItems.filter((i) => i.name.toLowerCase().includes(q) || i.badge.toLowerCase().includes(q));
       renderWithFolders(
         list,

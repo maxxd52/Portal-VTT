@@ -2,15 +2,15 @@
    SERVICE: LÓGICA DE NEGOCIO, MUTACIONES Y SINCRONIZACIÓN
    ========================================================================== */
 
-import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116a';
-import { BrowserVault } from '../services/browserVault.js?v=20261116a';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116a';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261116a';
+import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116b';
+import { BrowserVault } from '../services/browserVault.js?v=20261116b';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116b';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261116b';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261116a';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261116b';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { createInitialState, generateRoomCode } from './model.js?v=20261116a';
-import { Selector } from './selector.js?v=20261116a';
+import { createInitialState, generateRoomCode } from './model.js?v=20261116b';
+import { Selector } from './selector.js?v=20261116b';
 
 const getOrCreateClientId = () => {
   try {
@@ -182,14 +182,15 @@ export const Service = {
     next.room.moduleTitle = String(title || '').trim() || `Portal ${code}`;
     next.dynamicLighting = Boolean(dynamicLighting);
     next.grid.opacity = showGrid ? 0.28 : 0;
+    next.tokens = [];
+    next.selectedTokenId = null;
+    next.sheetOpen = false;
 
     if (mapId === 'empty') {
       next.mapId = 'empty';
       next.activeMapKey = 'empty';
       next.walls = [];
-      next.tokens = [];
-      next.selectedTokenId = null;
-    } else if (mapId === 'forest' || mapId === 'tavern' || mapId === 'bastion') {
+    } else {
       next.mapId = mapId;
       next.activeMapKey = mapId;
       next.walls = buildPresetWallsForMap(mapId);

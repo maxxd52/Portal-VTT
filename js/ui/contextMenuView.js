@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { COMPENDIUM_ACTORS } from '../data/compendium.js';
-import { Service } from '../core/service.js?v=20261116a';
+import { Service } from '../core/service.js?v=20261116b';
 
 export const ContextMenuViewMethods = {
   openContextMenu(clientX, clientY) {

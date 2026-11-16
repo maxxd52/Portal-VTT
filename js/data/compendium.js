@@ -2,7 +2,7 @@
    MODEL: COMPENDIO SRD (PERSONAJES, OBJETOS, MAPAS) Y MUROS PREDEFINIDOS
    ========================================================================== */
 
-import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261116a';
+import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261116b';
 
 export const COMPENDIUM_ACTORS = [
   {
@@ -82,7 +82,10 @@ export const COMPENDIUM_ITEMS = [
 export const COMPENDIUM_MAPS = [
   { key: 'bastion', name: 'SRD: Bastión Subterráneo', desc: 'Salas de piedra, columnas, muros y puerta táctica.' },
   { key: 'forest', name: 'SRD: Claro del Bosque', desc: 'Sendero de tierra, arroyo y arboleda abierta.' },
-  { key: 'tavern', name: 'SRD: Taberna Engranaje', desc: 'Salón de madera con tabiques y barra central.' }
+  { key: 'tavern', name: 'SRD: Taberna Engranaje', desc: 'Salón de madera con tabiques y barra central.' },
+  { key: 'crypt', name: 'D&D: Cripta Antigua', desc: 'Cámaras funerarias, sarcófagos, columnas y altar central.' },
+  { key: 'arena', name: 'D&D: Arena de Combate', desc: 'Coliseo circular de arena con 4 pilares de cobertura.' },
+  { key: 'cavern', name: 'D&D: Caverna Subterránea', desc: 'Galería rocosa con río subterráneo y pasos estrechos.' }
 ];
 
 export function buildPresetWallsForMap(mapId) {
@@ -111,6 +114,20 @@ export function buildPresetWallsForMap(mapId) {
       }
     }
     return walls;
+  }
+  if (mapId === 'crypt') {
+    return [
+      { id: 'c-ext-top', x1: 200, y1: 200, x2: 2200, y2: 200, kind: 'wall', open: false },
+      { id: 'c-ext-bot', x1: 200, y1: 1400, x2: 2200, y2: 1400, kind: 'wall', open: false },
+      { id: 'c-ext-left', x1: 200, y1: 200, x2: 200, y2: 1400, kind: 'wall', open: false },
+      { id: 'c-ext-right', x1: 2200, y1: 200, x2: 2200, y2: 1400, kind: 'wall', open: false },
+      { id: 'c-div-l', x1: 720, y1: 200, x2: 720, y2: 640, kind: 'wall', open: false },
+      { id: 'c-door-l', x1: 720, y1: 640, x2: 720, y2: 800, kind: 'door', open: false },
+      { id: 'c-div-l2', x1: 720, y1: 800, x2: 720, y2: 1400, kind: 'wall', open: false },
+      { id: 'c-div-r', x1: 1680, y1: 200, x2: 1680, y2: 640, kind: 'wall', open: false },
+      { id: 'c-door-r', x1: 1680, y1: 640, x2: 1680, y2: 800, kind: 'door', open: false },
+      { id: 'c-div-r2', x1: 1680, y1: 800, x2: 1680, y2: 1400, kind: 'wall', open: false }
+    ];
   }
   return [];
 }

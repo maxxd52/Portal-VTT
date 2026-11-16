@@ -2,9 +2,9 @@
    TOKEN SERVICE: FICHAS, INVENTARIO, STATS, HABILIDADES Y VISIBILIDAD
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261116a';
+import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261116b';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261116a';
+import { Selector } from '../core/selector.js?v=20261116b';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {

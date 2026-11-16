@@ -1,5 +1,5 @@
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261116a';
+import { Service } from '../core/service.js?v=20261116b';
 
 /**
  * Canvas, Fog of War, Map Notes & Vector Overlay rendering methods mixed into View.
@@ -131,6 +131,67 @@ export const CanvasViewMethods = {
           ctx.arc(mx, my, 75, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
+      return;
+    }
+
+    if (state.mapId === 'crypt') {
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, 2400, 1600);
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(200, 200, 2000, 1200);
+      ctx.strokeStyle = '#374151';
+      ctx.lineWidth = 10;
+      ctx.strokeRect(200, 200, 2000, 1200);
+      // Sarcófagos y altar central
+      ctx.fillStyle = '#4b5563';
+      ctx.fillRect(1080, 720, 240, 160);
+      for (const sx of [440, 1800]) {
+        for (const sy of [360, 1080]) {
+          ctx.fillRect(sx, sy, 140, 80);
+        }
+      }
+      return;
+    }
+
+    if (state.mapId === 'arena') {
+      ctx.fillStyle = '#1c1917';
+      ctx.fillRect(0, 0, 2400, 1600);
+      ctx.fillStyle = '#785a3a';
+      ctx.beginPath();
+      ctx.arc(1200, 800, 680, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#a8a29e';
+      ctx.lineWidth = 16;
+      ctx.stroke();
+      // 4 pilares de piedra
+      ctx.fillStyle = '#57534e';
+      for (const [px, py] of [[920, 560], [1480, 560], [920, 1040], [1480, 1040]]) {
+        ctx.beginPath();
+        ctx.arc(px, py, 44, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+
+    if (state.mapId === 'cavern') {
+      ctx.fillStyle = '#161b22';
+      ctx.fillRect(0, 0, 2400, 1600);
+      // Río subterráneo
+      ctx.fillStyle = '#164e63';
+      ctx.beginPath();
+      ctx.moveTo(0, 960);
+      ctx.bezierCurveTo(600, 740, 1400, 1180, 2400, 840);
+      ctx.lineTo(2400, 1060);
+      ctx.bezierCurveTo(1400, 1380, 600, 940, 0, 1140);
+      ctx.closePath();
+      ctx.fill();
+      // Formaciones rocosas
+      ctx.fillStyle = '#2d333b';
+      for (const [rx, ry, rr] of [[420, 380, 95], [1640, 420, 110], [880, 1260, 90], [1920, 1240, 105]]) {
+        ctx.beginPath();
+        ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+        ctx.fill();
       }
       return;
     }
