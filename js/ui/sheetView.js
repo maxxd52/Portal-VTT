@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261115x';
+import { Service } from '../core/service.js?v=20261115y';
 
 export const SheetViewMethods = {
   bindSheetEvents() {

@@ -1,7 +1,7 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261115x';
+import { BrowserVault } from '../services/browserVault.js?v=20261115y';
 import { CartridgePacker } from '../services/cartridgePacker.js';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Service } from '../core/service.js?v=20261115x';
+import { Service } from '../core/service.js?v=20261115y';
 
 /**
  * Portal-VTT entry lobby: create a portal with ruleset/options, join by code/URL, or resume recent portals.
@@ -31,6 +31,12 @@ export const PortalLobbyViewMethods = {
 
   async showPortalLobby() {
     if (!this.els.portalLobby) return;
+    Service.state.sheetOpen = false;
+    Service.state.drawerOpen = false;
+    Service.notify({ skipVaultSave: true });
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (_) {}
     this.els.portalLobby.classList.remove('hidden');
     this.els.portalLobby.classList.add('flex');
     await this.renderRecentPortals();

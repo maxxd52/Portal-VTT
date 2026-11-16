@@ -5,15 +5,15 @@
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { Selector } from './selector.js';
-import { Service } from './service.js?v=20261115x';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261115x';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115x';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115x';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261115x';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261115x';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115x';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115x';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261115x';
+import { Service } from './service.js?v=20261115y';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261115y';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261115y';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261115y';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261115y';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261115y';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261115y';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261115y';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261115y';
 
 const ITEM_ICON_DEFS = {
   sword: ['Espada / Ataque', '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/>'],
@@ -310,6 +310,11 @@ export const View = {
       lblSyncBadge: document.getElementById('lblSyncBadge'),
       btnToggleTheme: document.getElementById('btnToggleTheme'),
       themePopover: document.getElementById('themePopover'),
+      btnOpenOptions: document.getElementById('btnOpenOptions'),
+      optionsPopover: document.getElementById('optionsPopover'),
+      btnOptReturnLobby: document.getElementById('btnOptReturnLobby'),
+      btnOptOpenRoom: document.getElementById('btnOptOpenRoom'),
+      btnOptOpenSync: document.getElementById('btnOptOpenSync'),
 
       // Ficha Izquierda
       characterSheetDrawer: document.getElementById('characterSheetDrawer'),
@@ -701,7 +706,27 @@ export const View = {
 
     this.els.btnToggleTheme.addEventListener('click', (e) => {
       e.stopPropagation();
+      this.els.optionsPopover?.classList.remove('is-open');
       this.els.themePopover?.classList.toggle('is-open');
+    });
+    this.els.btnOpenOptions?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.els.themePopover?.classList.remove('is-open');
+      this.els.optionsPopover?.classList.toggle('is-open');
+    });
+    this.els.btnOptReturnLobby?.addEventListener('click', () => {
+      this.els.optionsPopover?.classList.remove('is-open');
+      this.showPortalLobby();
+    });
+    this.els.btnOptOpenRoom?.addEventListener('click', () => {
+      this.els.optionsPopover?.classList.remove('is-open');
+      this.renderRoomModal(Service.state);
+      this.els.roomModal?.classList.add('is-open');
+    });
+    this.els.btnOptOpenSync?.addEventListener('click', () => {
+      this.els.optionsPopover?.classList.remove('is-open');
+      this.renderSyncModal(Service.state);
+      this.els.syncModal?.classList.add('is-open');
     });
     this.els.themePopover?.querySelectorAll('[data-theme-pick]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -716,6 +741,13 @@ export const View = {
         !e.target.closest('#btnToggleTheme')
       ) {
         this.els.themePopover.classList.remove('is-open');
+      }
+      if (
+        this.els.optionsPopover?.classList.contains('is-open') &&
+        !e.target.closest('#optionsPopover') &&
+        !e.target.closest('#btnOpenOptions')
+      ) {
+        this.els.optionsPopover.classList.remove('is-open');
       }
     });
 

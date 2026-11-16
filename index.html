@@ -18,7 +18,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="css/styles.css?v=20261115x" />
+  <link rel="stylesheet" href="css/styles.css?v=20261115y" />
 </head>
 <body>
   <!-- ========================================================================
@@ -281,6 +281,39 @@
           <button type="button" data-theme-pick="horror" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#e11d48"></span>
             <span>Terror</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="relative">
+        <button
+          type="button"
+          id="btnOpenOptions"
+          class="owl-subpanel owl-btn px-2 py-1 text-xs"
+          title="Opciones y Portales"
+          aria-label="Opciones"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <div
+          id="optionsPopover"
+          class="owl-panel owl-pop absolute right-0 mt-2 w-52 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
+        >
+          <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Opciones</span>
+          <button type="button" id="btnOptReturnLobby" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span>🚪</span>
+            <span>Volver a Portales</span>
+          </button>
+          <button type="button" id="btnOptOpenRoom" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span>🔗</span>
+            <span>Salas e Invitaciones</span>
+          </button>
+          <button type="button" id="btnOptOpenSync" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span>☁️</span>
+            <span>Sincronización P2P</span>
           </button>
         </div>
       </div>
@@ -1338,7 +1371,7 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261115x"></script>
+  <script type="module" src="js/main.js?v=20261115y"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
