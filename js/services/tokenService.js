@@ -4,7 +4,7 @@
 
 import { COMPENDIUM_ITEMS } from '../data/compendium.js';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261115y';
+import { Selector } from '../core/selector.js?v=20261115z';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {
