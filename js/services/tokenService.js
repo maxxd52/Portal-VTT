@@ -2,9 +2,9 @@
    TOKEN SERVICE: FICHAS, INVENTARIO, STATS, HABILIDADES Y VISIBILIDAD
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261116b';
+import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261116z39';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261116b';
+import { Selector } from '../core/selector.js?v=20261116z39';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {
@@ -39,6 +39,48 @@ export const TokenServiceMethods = {
           .filter(Boolean)
       : [];
 
+    const preset = this.state.systemConfig?.preset || this.state.ruleset || 'dnd55';
+    const initialStats = {};
+    if (preset === 'dnd55') {
+      Object.assign(initialStats, {
+        str: Number(tpl.stats?.str) || 0,
+        dex: Number(tpl.stats?.dex) || 0,
+        con: Number(tpl.stats?.con) || 0,
+        int: Number(tpl.stats?.int) || 0,
+        wis: Number(tpl.stats?.wis) || 0,
+        cha: Number(tpl.stats?.cha) || 0
+      });
+    } else {
+      Selector.getSheetStatsDef(this.state).forEach((def) => {
+        initialStats[def.key] = Number(tpl.stats?.[def.key]) || 0;
+      });
+    }
+
+    const sysBlocks = Array.isArray(this.state.systemConfig?.sheetBlocks) ? this.state.systemConfig.sheetBlocks : null;
+    const hpBlock = sysBlocks ? sysBlocks.find((b) => b.kind === 'resource' && b.key === 'hp') : null;
+    const defHp = Number(tpl.hp) || Number(hpBlock?.max) || 16;
+    const seedResList = Array.isArray(tpl.resources)
+      ? tpl.resources.map((r) => ({ ...r }))
+      : sysBlocks
+        ? sysBlocks
+            .filter((b) => b.kind === 'resource' && b.key !== 'hp')
+            .map((b) => ({
+              id: b.id,
+              name: b.label,
+              cur: Number(b.max) > 0 ? Number(b.max) : 0,
+              max: Number(b.max) || 0,
+              color: b.color || '#8b5cf6',
+              kind: b.resStyle === 'pips' || b.resStyle === 'bar' ? b.resStyle : Number(b.max) > 0 && Number(b.max) <= 6 ? 'pips' : 'bar'
+            }))
+        : (this.state.systemConfig?.resourceSchema || []).map((r) => ({
+            id: r.id || `res-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 4)}`,
+            name: r.name,
+            cur: Number(r.max) > 0 ? Number(r.max) : 0,
+            max: Number(r.max) || 0,
+            color: r.color || '#8b5cf6',
+            kind: r.kind || 'bar'
+          }));
+
     const token = {
       id: `tok-${Date.now().toString().slice(-6)}`,
       name: tpl.name,
@@ -50,23 +92,18 @@ export const TokenServiceMethods = {
       size: tpl.size || 1,
       x: snapped.x,
       y: snapped.y,
-      hp: Number(tpl.hp) || 16,
-      maxHp: Number(tpl.hp) || 16,
+      hp: defHp,
+      maxHp: defHp,
       ac: Number(tpl.ac) || 12,
       level: Math.max(1, Math.min(20, Number(tpl.level) || 1)),
       speed: String(tpl.speed || '30 ft'),
-      stats: {
-        str: Number(tpl.stats?.str) || 0,
-        dex: Number(tpl.stats?.dex) || 0,
-        con: Number(tpl.stats?.con) || 0,
-        int: Number(tpl.stats?.int) || 0,
-        wis: Number(tpl.stats?.wis) || 0,
-        cha: Number(tpl.stats?.cha) || 0
-      },
+      stats: initialStats,
+      texts: tpl.texts ? { ...tpl.texts } : {},
       scores: tpl.scores ? { ...tpl.scores } : null,
       saveProfs: tpl.saveProfs ? { ...tpl.saveProfs } : {},
       skills: Array.isArray(tpl.skills) ? tpl.skills.map((s) => ({ ...s })) : [],
       traits: Array.isArray(tpl.traits) ? tpl.traits.map((t) => ({ ...t })) : [],
+      resources: seedResList,
       inventory: starterInv,
       hidden: false
     };
@@ -93,23 +130,23 @@ export const TokenServiceMethods = {
 
   applyTokenPassiveBonus(tok, item, sign = 1) {
     if (!tok || !item) return;
-    const target = item.statTarget || (item.acBonus ? 'ac' : '');
-    const rawBonus = item.statBonus !== undefined ? Number(item.statBonus) || 0 : Number(item.acBonus) || 0;
-    const delta = rawBonus * sign;
-    if (delta !== 0 && target) {
+    const { passives } = Selector.normalizeItemSchema(item);
+    passives.forEach(({ target, value }) => {
+      const delta = (Number(value) || 0) * sign;
+      if (delta === 0 || !target) return;
       if (target === 'ac') {
         tok.ac = Math.max(8, (Number(tok.ac) || 12) + delta);
       } else if (target === 'maxHp') {
         tok.maxHp = Math.max(1, (Number(tok.maxHp) || 10) + delta);
         if (sign > 0 && delta > 0) tok.hp = Math.min(tok.maxHp, (Number(tok.hp) || 0) + delta);
         else tok.hp = Math.min(tok.maxHp, Number(tok.hp) || 0);
-      } else if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(target)) {
+      } else {
         if (!tok.stats || typeof tok.stats !== 'object') {
-          tok.stats = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+          tok.stats = {};
         }
         tok.stats[target] = (Number(tok.stats[target]) || 0) + delta;
       }
-    }
+    });
     if (item.lightRadius > 0) {
       const base = Number(tok.visionRadius) || 520;
       tok.visionRadius = sign > 0 ? base + item.lightRadius : Math.max(240, base - item.lightRadius);
@@ -135,6 +172,8 @@ export const TokenServiceMethods = {
       acBonus: Number(itemTpl.acBonus) || 0,
       heal: Number(itemTpl.heal) || 0,
       lightRadius: Number(itemTpl.lightRadius) || 0,
+      passives: Array.isArray(itemTpl.passives) ? JSON.parse(JSON.stringify(itemTpl.passives)) : undefined,
+      steps: Array.isArray(itemTpl.steps) ? JSON.parse(JSON.stringify(itemTpl.steps)) : undefined,
       icon: String(itemTpl.icon || '').trim(),
       color: itemTpl.color || '#8b5cf6'
     };
@@ -155,6 +194,15 @@ export const TokenServiceMethods = {
 
     const noteSuffix = inv.message ? ` — ${inv.message}` : '';
 
+    if ((Array.isArray(inv.steps) && inv.steps.length > 0) || (inv.message && inv.kind !== 'consumable' && !inv.formula && !(inv.die > 0))) {
+      this.startItemSequence(tokenId, inv);
+      if (inv.kind === 'consumable') {
+        tok.inventory = tok.inventory.filter((i) => i.uid !== invUid);
+        this.notify();
+      }
+      return '';
+    }
+
     if (inv.formula) {
       const roll = this.rollFormula(inv.formula, tok, `${tok.name} · ${inv.name}`, inv.message);
       if (inv.kind === 'consumable') {
@@ -167,7 +215,7 @@ export const TokenServiceMethods = {
           return `${tok.name} usa ${inv.name} (+${tok.hp - prevHp} HP).`;
         }
       }
-      return `${tok.name} usa ${inv.name}${roll ? ` → ${roll.total}` : ''}`;
+      return '';
     }
 
     if (inv.kind === 'consumable' && inv.heal > 0) {
@@ -176,8 +224,7 @@ export const TokenServiceMethods = {
       tok.inventory = tok.inventory.filter((i) => i.uid !== invUid);
       const healed = tok.hp - prevHp;
       if (inv.die > 0) {
-        this.state.dice.modifier = inv.bonusMod || 0;
-        this.rollDice(inv.die, `${tok.name} · ${inv.name}`, inv.message);
+        this.rollDice(inv.die, `${tok.name} · ${inv.name}`, inv.message, inv.bonusMod || 0);
       }
       this.recordEvent('USAR_OBJETO', `${tok.name} usa ${inv.name}${noteSuffix} (+${healed} HP)`);
       this.notify();
@@ -185,10 +232,8 @@ export const TokenServiceMethods = {
     }
 
     if (inv.die > 0) {
-      this.state.dice.modifier = inv.bonusMod || 0;
-      this.rollDice(inv.die, `${tok.name} · ${inv.name}`, inv.message);
-      const mod = inv.bonusMod || 0;
-      return `${tok.name} activa ${inv.name} (1d${inv.die}${mod >= 0 ? '+' + mod : mod})`;
+      this.rollDice(inv.die, `${tok.name} · ${inv.name}`, inv.message, inv.bonusMod || 0);
+      return '';
     }
 
     if (inv.message) {
@@ -290,6 +335,26 @@ export const TokenServiceMethods = {
     if (!tok.stats || typeof tok.stats !== 'object') tok.stats = {};
     tok.scores[statKey] = score;
     tok.stats[statKey] = Math.floor((score - 10) / 2);
+    this.notify();
+  },
+
+  updateTokenStat(tokenId, statKey, val) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const key = Selector.normalizeStatKey(statKey);
+    if (!tok || !key) return;
+    const num = Math.max(-99, Math.min(999, Math.trunc(Number(val) || 0)));
+    if (!tok.stats || typeof tok.stats !== 'object') tok.stats = {};
+    tok.stats[key] = num;
+    if (key === 'ac') tok.ac = Math.max(0, num);
+    this.notify();
+  },
+
+  updateTokenText(tokenId, textKey, val) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const key = Selector.normalizeStatKey(textKey);
+    if (!tok || !key) return;
+    if (!tok.texts || typeof tok.texts !== 'object') tok.texts = {};
+    tok.texts[key] = String(val || '');
     this.notify();
   },
 
@@ -451,6 +516,97 @@ export const TokenServiceMethods = {
       this.state.selectedTokenId = this.state.tokens[0] ? this.state.tokens[0].id : null;
     }
     this.recordEvent('ELIMINAR_FICHA', tok.name);
+    this.notify();
+  },
+
+  addTokenResource(tokenId, { name = '', cur = null, max = 4, color = '#8b5cf6', kind = 'auto' } = {}) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const cleanName = String(name || '').trim();
+    if (!tok || !cleanName) return null;
+    if (!Array.isArray(tok.resources)) tok.resources = [];
+    const maxVal = Math.max(0, Math.min(999, Math.trunc(Number(max) || 0)));
+    const initCur = cur !== null && cur !== undefined
+      ? Math.max(0, Math.min(maxVal > 0 ? maxVal : 999, Math.trunc(Number(cur) || 0)))
+      : maxVal;
+    const res = {
+      id: `res-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      name: cleanName,
+      cur: initCur,
+      max: maxVal,
+      color: String(color || '#8b5cf6'),
+      kind: kind === 'bar' || kind === 'pips' ? kind : maxVal > 0 && maxVal <= 6 ? 'pips' : 'bar'
+    };
+    tok.resources.push(res);
+    this.notify();
+    return res;
+  },
+
+  adjustTokenResource(tokenId, resId, delta) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const res = tok?.resources?.find((r) => r.id === resId);
+    if (!res) return 0;
+    const d = Math.trunc(Number(delta) || 0);
+    const maxLim = Number(res.max) > 0 ? Number(res.max) : 999;
+    res.cur = Math.max(0, Math.min(maxLim, (Number(res.cur) || 0) + d));
+    this.notify();
+    return res.cur;
+  },
+
+  setTokenResourceValue(tokenId, resId, val) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const res = tok?.resources?.find((r) => r.id === resId);
+    if (!res) return;
+    const maxLim = Number(res.max) > 0 ? Number(res.max) : 999;
+    res.cur = Math.max(0, Math.min(maxLim, Math.trunc(Number(val) || 0)));
+    this.notify();
+  },
+
+  cycleTokenResourcePip(tokenId, resId, pipIdx, maxStates = 1, maxPips = 0) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const res = tok?.resources?.find((r) => r.id === resId);
+    if (!res) return;
+    const states = [1, 2, 3].includes(Number(maxStates)) ? Number(maxStates) : 1;
+    const idx = Math.max(0, Math.trunc(Number(pipIdx) || 0));
+    if (states <= 1) {
+      const targetVal = idx + 1;
+      const curVal = Number(res.cur) || 0;
+      return this.setTokenResourceValue(tokenId, resId, targetVal === curVal ? targetVal - 1 : targetVal);
+    }
+    const len = Math.max(idx + 1, Number(res.max) || Number(maxPips) || 1);
+    if (!Array.isArray(res.pips) || res.pips.length !== len) {
+      const prevCur = Math.max(0, Number(res.cur) || 0);
+      res.pips = Array.from({ length: len }, (_, i) => {
+        if (Array.isArray(res.pips) && i < res.pips.length) {
+          return Math.max(0, Math.min(states, Number(res.pips[i]) || 0));
+        }
+        return !Array.isArray(res.pips) && i < prevCur ? states : 0;
+      });
+    }
+    const curCell = Math.max(0, Math.min(states, Number(res.pips[idx]) || 0));
+    res.pips[idx] = (curCell + 1) % (states + 1);
+    res.cur = res.pips.filter((v) => v > 0).length;
+    this.notify();
+  },
+
+  setTokenResourceMax(tokenId, resId, maxVal) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const res = tok?.resources?.find((r) => r.id === resId);
+    if (!res) return;
+    const nextMax = Math.max(0, Math.min(999, Math.trunc(Number(maxVal) || 0)));
+    res.max = nextMax;
+    if (Array.isArray(res.pips) && nextMax > 0) {
+      res.pips = res.pips.slice(0, nextMax);
+      res.cur = res.pips.filter((v) => v > 0).length;
+    } else if (nextMax > 0) {
+      res.cur = Math.min(res.cur, nextMax);
+    }
+    this.notify();
+  },
+
+  removeTokenResource(tokenId, resId) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok || !Array.isArray(tok.resources)) return;
+    tok.resources = tok.resources.filter((r) => r.id !== resId);
     this.notify();
   }
 };

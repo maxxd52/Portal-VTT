@@ -1,8 +1,8 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116b';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116z39';
 import { CartridgePacker } from '../services/cartridgePacker.js';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261114m';
-import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261116b';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261116z39';
+import { Selector } from '../core/selector.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z39';
 
 /**
  * Board pointer interactions, global drag-and-drop, keyboard shortcuts, context menu & tokens layer.
@@ -10,12 +10,36 @@ import { Service } from '../core/service.js?v=20261116b';
 export const BoardViewMethods = {
   bindBoardEvents() {
     // 1. Interacciones de puntero en el escenario (Arrastre fichas, cámara, regla, dibujo, niebla, clic derecho)
-    let activePointerMode = null; // 'token' | 'pan' | 'rightPan' | 'ruler' | 'draw' | 'fog'
+    let activePointerMode = null; // 'token' | 'pan' | 'rightPan' | 'ruler' | 'areaSelect' | 'draw' | 'fog'
     let draggingTokenId = null;
     let startClient = { x: 0, y: 0 };
     let startCam = { x: 0, y: 0 };
+    let areaOrigin = { x: 0, y: 0 };
     let movedDistance = 0;
     let currentStroke = null;
+
+    const refreshAreaPreview = (x1, y1, ang, cfg) => {
+      const rPx = cfg.radiusPx || 160;
+      Service.state.rulerShape = cfg.shape || 'circle';
+      Service.state.ruler = {
+        x1,
+        y1,
+        x2: x1 + Math.cos(ang) * rPx,
+        y2: y1 + Math.sin(ang) * rPx
+      };
+      this.renderVectorOverlay(Service.state);
+      const hitIds = new Set(
+        Selector.getTokensInArea(Service.state, {
+          shape: cfg.shape || 'circle',
+          ...Service.state.ruler,
+          radiusPx: rPx
+        }).map((t) => t.id)
+      );
+      this.els.tokensLayer?.querySelectorAll('[data-token-id]').forEach((el) => {
+        const hit = hitIds.has(el.dataset.tokenId);
+        el.style.boxShadow = hit ? '0 0 0 4px rgba(245, 158, 11, 0.55)' : '';
+      });
+    };
 
     this.els.stage.addEventListener('pointerdown', (e) => {
       this.hideContextMenu();
@@ -100,6 +124,29 @@ export const BoardViewMethods = {
         return;
       }
 
+      if (tool === 'areaSelect' && Service.state.areaSelectConfig) {
+        const cfg = Service.state.areaSelectConfig;
+        if (cfg.shape === 'targets') {
+          let hitId = e.target.closest('[data-token-id]')?.dataset?.tokenId || null;
+          if (!hitId) {
+            const cs = Number(Service.state.grid?.cellSize) || 80;
+            const hit = [...(Service.state.tokens || [])].reverse().find((tok) => {
+              if (tok.hidden && Service.state.role !== 'gm') return false;
+              const radius = (cs * (tok.size || 1) * 0.84) / 2;
+              return Math.hypot(worldPt.x - tok.x, worldPt.y - tok.y) <= radius;
+            });
+            if (hit) hitId = hit.id;
+          }
+          if (hitId) Service.toggleTargetPick(hitId);
+          return;
+        }
+        activePointerMode = 'areaSelect';
+        movedDistance = 0;
+        areaOrigin = { x: worldPt.x, y: worldPt.y };
+        refreshAreaPreview(worldPt.x, worldPt.y, cfg.angle || 0, cfg);
+        return;
+      }
+
       if (tool === 'ruler') {
         activePointerMode = 'ruler';
         Service.state.ruler = { x1: worldPt.x, y1: worldPt.y, x2: worldPt.x, y2: worldPt.y };
@@ -141,6 +188,14 @@ export const BoardViewMethods = {
         this.renderVectorOverlay(Service.state);
       }
 
+      if (!activePointerMode && Service.state.tool === 'areaSelect' && Service.state.areaSelectConfig) {
+        const cfg = Service.state.areaSelectConfig;
+        if (cfg.shape !== 'targets') {
+          refreshAreaPreview(worldPt.x, worldPt.y, cfg.angle || 0, cfg);
+        }
+        return;
+      }
+
       if (!activePointerMode) return;
       const dx = e.clientX - startClient.x;
       const dy = e.clientY - startClient.y;
@@ -156,6 +211,16 @@ export const BoardViewMethods = {
       if (activePointerMode === 'token' && draggingTokenId) {
         Service.moveToken(draggingTokenId, worldPt.x, worldPt.y, false);
         this.drawFogCanvas(Service.state);
+      } else if (activePointerMode === 'areaSelect' && Service.state.areaSelectConfig) {
+        const cfg = Service.state.areaSelectConfig;
+        const canAim = cfg.shape === 'cone' || cfg.shape === 'line';
+        if (canAim && movedDistance > 10) {
+          const ang = Math.atan2(worldPt.y - areaOrigin.y, worldPt.x - areaOrigin.x);
+          cfg.angle = ang;
+          refreshAreaPreview(areaOrigin.x, areaOrigin.y, ang, cfg);
+        } else {
+          refreshAreaPreview(worldPt.x, worldPt.y, cfg.angle || 0, cfg);
+        }
       } else if (activePointerMode === 'ruler' && Service.state.ruler) {
         Service.state.ruler.x2 = worldPt.x;
         Service.state.ruler.y2 = worldPt.y;
@@ -182,6 +247,13 @@ export const BoardViewMethods = {
         this.draggingTokenId = null;
         Service.moveToken(draggingTokenId, worldPt.x, worldPt.y, true);
         this.drawFogCanvas(Service.state);
+      } else if (activePointerMode === 'areaSelect' && Service.state.ruler && Service.state.areaSelectConfig) {
+        const cfg = Service.state.areaSelectConfig;
+        Service.confirmAreaSelection({
+          shape: cfg.shape || 'circle',
+          ...Service.state.ruler,
+          radiusPx: cfg.radiusPx || 160
+        });
       } else if (activePointerMode === 'ruler') {
         Service.state.ruler = null;
         Service.notify({ skipVaultSave: true });
@@ -223,11 +295,17 @@ export const BoardViewMethods = {
       this.openContextMenu(e.clientX, e.clientY);
     });
 
-    // Zoom con rueda del ratón
+    // Zoom con rueda del ratón (Shift + Rueda rota Cono/Línea en selección de área)
     this.els.stage.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
+        if (Service.state.tool === 'areaSelect' && e.shiftKey && Service.state.areaSelectConfig) {
+          const cfg = Service.state.areaSelectConfig;
+          const step = (e.deltaY < 0 ? -1 : 1) * (Math.PI / 12);
+          Service.updateAreaSelectConfig({ angle: (cfg.angle || 0) + step });
+          return;
+        }
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
         Service.setZoom(Service.state.camera.zoom * factor, e.clientX, e.clientY);
       },
@@ -376,6 +454,21 @@ export const BoardViewMethods = {
         if (Service.redo()) this.showActionToast('↪️ Rehacer');
         return;
       }
+      if (Service.state.tool === 'areaSelect' && Service.state.areaSelectConfig) {
+        const cfg = Service.state.areaSelectConfig;
+        if (k === 'q') {
+          Service.updateAreaSelectConfig({ angle: (cfg.angle || 0) - Math.PI / 12 });
+          return;
+        }
+        if (k === 'e') {
+          Service.updateAreaSelectConfig({ angle: (cfg.angle || 0) + Math.PI / 12 });
+          return;
+        }
+        if (k === 'r') {
+          Service.updateAreaSelectConfig({ angle: (cfg.angle || 0) + Math.PI / 4 });
+          return;
+        }
+      }
       if (k === 'v' || k === 'h') Service.setTool('select');
       else if (k === 'r') Service.setTool('ruler');
       else if (k === 'p') Service.setTool('draw');
@@ -448,6 +541,11 @@ export const BoardViewMethods = {
 
       const activeCombatTokId = state.combat?.active ? state.combat.order?.[state.combat.turnIndex]?.tokenId : null;
       const isTurn = activeCombatTokId === tok.id;
+      const isAreaTarget = Boolean(
+        state.activeSequence &&
+        Array.isArray(state.activeSequence.targetTokenIds) &&
+        state.activeSequence.targetTokenIds.includes(tok.id)
+      );
       el.classList.add('vtt-token');
       el.classList.toggle('is-selected', isSel);
       el.classList.toggle('is-dragging', isDrag);
@@ -458,8 +556,8 @@ export const BoardViewMethods = {
       el.style.width = `${diameter}px`;
       el.style.height = `${diameter}px`;
       el.style.backgroundColor = tok.color;
-      el.style.border = isTurn ? '3px solid #f59e0b' : '2px solid #ffffff';
-      el.style.boxShadow = isTurn ? '0 0 0 4px rgba(245, 158, 11, 0.32)' : '';
+      el.style.border = isTurn || isAreaTarget ? '3px solid #f59e0b' : '2px solid #ffffff';
+      el.style.boxShadow = isTurn || isAreaTarget ? '0 0 0 4px rgba(245, 158, 11, 0.36)' : '';
       el.style.isolation = 'isolate';
       el.title = `${tok.name} (${tok.hp}/${tok.maxHp} HP)`;
 
@@ -505,10 +603,9 @@ export const BoardViewMethods = {
         lightEl.remove();
       }
       condRow.innerHTML = conds
-        .filter((c) => this.tokenStatusSymbols[c])
         .map((c) => {
-          const def = this.tokenStatusSymbols[c];
-          return `<span class="w-4 h-4 rounded-full border border-white/85 text-white flex items-center justify-center shadow-sm" style="background:${def.color};">${this.renderStatusSymbolSvg(c, 'w-2.5 h-2.5')}</span>`;
+          const def = Selector.getStatusDef(state, c);
+          return `<span class="w-4 h-4 rounded-full border border-white/85 text-white flex items-center justify-center shadow-sm" style="background:${def.color};" title="${this.escapeHtml(def.label)}">${this.renderStatusSymbolSvg(def.icon, 'w-2.5 h-2.5', state)}</span>`;
         })
         .join('');
 

@@ -18,7 +18,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="css/styles.css?v=20261116b" />
+  <link rel="stylesheet" href="css/styles.css?v=20261116z39" />
 </head>
 <body>
   <!-- ========================================================================
@@ -303,6 +303,10 @@
           class="owl-panel owl-pop absolute right-0 mt-2 w-52 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
         >
           <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Opciones</span>
+          <button type="button" id="btnOptOpenSystem" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+            <span>⚙️</span>
+            <span>Sistema y Reglas</span>
+          </button>
           <button type="button" id="btnOptReturnLobby" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span>🚪</span>
             <span>Volver a Portales</span>
@@ -351,11 +355,11 @@
       </button>
     </div>
 
-    <!-- Salud (HP) y Clase de Armadura (CA) -->
-    <div class="grid grid-cols-2 gap-1.5">
-      <div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col gap-1">
+    <!-- 2. Vista Fija (siempre visible arriba de las pestañas) -->
+    <div id="sheetHpDefRow" class="grid grid-cols-2 gap-1.5">
+      <div id="sheetHpCard" class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col gap-1">
         <div class="flex items-center justify-between text-[11px] gap-1">
-          <span class="font-medium opacity-70">Salud</span>
+          <span id="lblSheetHpName" class="font-medium opacity-70 truncate">Salud</span>
           <div class="flex items-center gap-0.5 font-semibold tabular-nums">
             <span id="lblSheetHpCur">18</span>
             <span class="opacity-50">/</span>
@@ -375,10 +379,12 @@
         </div>
       </div>
 
-      <div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col justify-between gap-1">
-        <span class="text-[11px] font-medium opacity-70">Defensa · CA</span>
+      <div id="sheetDefenseCard" class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col justify-between gap-1">
+        <span id="lblSheetDefenseName" class="text-[11px] font-medium opacity-70 truncate">Defensa · CA</span>
         <div class="flex items-center justify-between gap-1">
-          <input type="number" id="inpSheetAc" min="1" max="40" value="14" class="owl-num-input w-10 text-base font-semibold tabular-nums leading-none bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="Clase de Armadura" />
+          <div id="sheetAcWrap" class="flex items-center">
+            <input type="number" id="inpSheetAc" min="1" max="40" value="14" class="owl-num-input w-10 text-base font-semibold tabular-nums leading-none bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="Clase de Armadura" />
+          </div>
           <button type="button" id="btnSheetRollInit" class="owl-btn owl-btn-accent rounded-full px-2.5 py-0.5 text-[11px] font-semibold">
             Iniciativa
           </button>
@@ -387,7 +393,7 @@
     </div>
 
     <!-- Nivel, Bono de Competencia y Velocidad (D&D 5.5e) -->
-    <div class="grid grid-cols-3 gap-1.5 text-[10px]">
+    <div id="sheetLevelRow" class="grid grid-cols-3 gap-1.5 text-[10px]">
       <label class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
         <span class="opacity-65 font-medium">Nivel</span>
         <input type="number" id="inpSheetLevel" min="1" max="20" value="1" class="owl-num-input w-8 text-right text-[11px] font-semibold bg-transparent outline-none" />
@@ -402,6 +408,33 @@
       </label>
     </div>
 
+    <!-- Factores fijos de cabecera siempre visibles en Sistema Genérico -->
+    <div id="sheetHeaderFixedRow" class="flex flex-col gap-1.5 empty:hidden shrink-0"></div>
+
+    <!-- Recursos y Contadores Flexibles (Ki, Conjuros, Maná, Destino, Cordura...) -->
+    <div id="sheetResourcesSection" class="flex flex-col gap-1 shrink-0">
+      <div id="sheetActiveStatusesRow" class="flex flex-wrap gap-1 empty:hidden"></div>
+      <div id="sheetResourcesList" class="grid grid-cols-2 gap-1.5 empty:hidden"></div>
+      <div class="flex items-center justify-between gap-1.5">
+        <button type="button" id="btnToggleResourceForm" class="owl-btn owl-subpanel px-2 py-0.5 rounded-lg text-[10px] font-medium opacity-75 hover:opacity-100">+ Recurso / Contador</button>
+      </div>
+      <form id="sheetResourceForm" class="hidden owl-subpanel rounded-xl p-2 flex-col gap-1.5 text-[10px]">
+        <div class="flex items-center gap-1">
+          <input type="text" id="inpSheetResName" placeholder="Ej: Ki, Espacios Nv.1, Cordura..." required class="owl-input px-2 py-1 text-[11px] flex-1 min-w-0" />
+          <input type="number" id="inpSheetResMax" min="0" max="999" value="4" class="owl-input w-14 px-1.5 py-1 text-[11px] text-center tabular-nums" title="Máximo (0 = contador libre sin tope)" />
+        </div>
+        <div class="flex items-center justify-between gap-1.5">
+          <select id="selSheetResKind" class="owl-input px-1.5 py-0.5 text-[10px]">
+            <option value="auto" selected>Auto (● o Barra)</option>
+            <option value="pips">Casillas (●)</option>
+            <option value="bar">Barra</option>
+          </select>
+          <input type="color" id="inpSheetResColor" value="#8b5cf6" class="w-6 h-5 rounded cursor-pointer bg-transparent border-0 p-0" title="Color del recurso" />
+          <button type="submit" class="owl-btn owl-btn-accent px-2.5 py-0.5 rounded-lg text-[10px] font-semibold">Añadir</button>
+        </div>
+      </form>
+    </div>
+
     <!-- Selector Único de 6 Secciones (3x2 estilo Apple) -->
     <div id="sheetTopTabs" class="owl-seg grid-cols-3 gap-0.5 text-[10px]">
       <button type="button" data-sheet-tab="attrs" class="owl-seg-btn is-active">Atributos</button>
@@ -412,17 +445,19 @@
       <button type="button" data-sheet-tab="ability" class="owl-seg-btn">Capac.</button>
     </div>
 
-    <!-- Panel Único de Contenido (Dropzone para arrastrar complementos desde el Compendio) -->
+    <!-- 4. Vista de la Pestaña elegida -->
     <div
-      id="sheetInventoryDropzone"
-      class="owl-subpanel rounded-xl p-2 flex-1 flex flex-col gap-1.5 border border-dashed transition-colors min-h-0"
+      id="sheetContentBox"
+      class="owl-subpanel rounded-xl p-2 flex-1 flex flex-col gap-1.5 border transition-colors min-h-0"
       style="border-color: var(--border-subtle);"
-      title="Arrastra complementos desde el Compendio"
     >
       <!-- Vista: Atributos -->
       <div id="sheetPaneAttrs" class="flex-1 flex flex-col gap-2 overflow-y-auto min-h-0">
         <div id="sheetStatsGrid" class="grid grid-cols-3 gap-1.5 text-center"></div>
       </div>
+
+      <!-- Vista: Pestañas personalizadas de Sistema Genérico -->
+      <div id="sheetPaneCustom" class="hidden flex-1 flex-col gap-2 overflow-y-auto min-h-0"></div>
 
       <!-- Vista: Habilidades / Pericias -->
       <div id="sheetPaneSkills" class="hidden flex-1 flex-col gap-1.5 min-h-0">
@@ -453,8 +488,13 @@
         <div id="sheetTraitsList" class="flex-1 flex flex-col gap-1 overflow-y-auto min-h-0"></div>
       </div>
 
-      <!-- Vista: Equipo / Consumibles / Capacidades -->
-      <div id="sheetPaneInv" class="hidden flex-1 flex-col gap-1 min-h-0">
+      <!-- Vista: Pestaña de Complementos (único destino arrastrable desde el Compendio) -->
+      <div
+        id="sheetPaneInv"
+        class="hidden flex-1 flex-col gap-1 min-h-0 rounded-lg border border-dashed p-1 transition-colors"
+        style="border-color: var(--border-subtle);"
+        title="Arrastrá complementos desde el Compendio a esta pestaña"
+      >
         <div id="sheetInventoryList" class="flex-1 flex flex-col gap-0.5 overflow-y-auto min-h-0"></div>
       </div>
     </div>
@@ -465,7 +505,7 @@
        ======================================================================== -->
   <aside
     id="tokenDrawer"
-    class="owl-panel owl-drawer-right is-open fixed top-16 right-3 bottom-20 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5"
+    class="owl-panel owl-drawer-right is-open fixed top-16 right-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
     aria-label="Compendio Arrastrable"
   >
     <div class="flex items-center justify-between">
@@ -516,7 +556,7 @@
     </form>
 
     <!-- Creador de Personaje -->
-    <form id="customTokenForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2">
+    <form id="customTokenForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
       <div class="flex items-center justify-between">
         <span id="lblCustomFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo personaje</span>
         <button type="button" id="btnCancelCustomToken" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
@@ -581,10 +621,10 @@
       </div>
     </form>
 
-    <!-- Creador de Complemento (Arma, Hechizo, Armadura, Poción, Luz) -->
-    <form id="customItemForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2">
+    <!-- Creador de Complemento por Bloques -->
+    <form id="customItemForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] font-semibold opacity-80">Nuevo complemento</span>
+        <span id="lblCustomItemFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo complemento</span>
         <button type="button" id="btnCancelCustomItem" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
       </div>
       <div class="grid grid-cols-2 gap-1.5">
@@ -595,58 +635,34 @@
           <option value="ability">Capacidad</option>
         </select>
       </div>
-      <div id="customItemValWrap" class="owl-input px-2.5 py-1 flex items-center justify-between gap-2 text-[10px]">
-        <span id="lblCustomItemVal" class="opacity-65">Bono pasivo</span>
-        <div class="flex items-center gap-1.5">
-          <input type="number" id="inpCustomItemVal" value="0" min="-20" max="99" class="owl-num-input w-11 text-xs font-semibold" />
-          <select id="selCustomItemTarget" class="owl-subpanel rounded-md px-1.5 py-0.5 text-[11px] font-semibold cursor-pointer outline-none">
-            <option value="ac">CA</option>
-            <option value="str">FUE</option>
-            <option value="dex">DES</option>
-            <option value="con">CON</option>
-            <option value="int">INT</option>
-            <option value="wis">SAB</option>
-            <option value="cha">CAR</option>
-            <option value="maxHp">HP Máx</option>
-          </select>
+      <div class="owl-subpanel rounded-xl px-2.5 py-2 flex items-center justify-between gap-2.5">
+        <button type="button" id="btnToggleItemIconPicker" class="owl-subpanel owl-btn p-0.5 rounded-xl flex items-center gap-1 shrink-0" title="Elegir ícono"></button>
+        <div id="customItemColorGrid" class="grid grid-cols-8 gap-1.5"></div>
+      </div>
+      <div id="customItemIconGrid" class="hidden grid grid-cols-6 gap-1 owl-subpanel rounded-lg p-1.5"></div>
+      <textarea id="inpCustomItemMsg" rows="2" placeholder="Descripción o regla en mesa (opcional)..." class="owl-input px-2.5 py-1.5 text-[11px] resize-y min-h-[40px] max-h-24"></textarea>
+      <div id="customItemBlocksSection" class="hidden flex-col gap-1 flex-1 min-h-[110px]">
+        <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60 shrink-0">Secuencia</span>
+        <div id="customItemBlocksList" class="flex-1 flex flex-col gap-1.5 overflow-y-auto min-h-0"></div>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">Agregar bloque</span>
+        <div id="itemBlockPalette" class="grid grid-cols-5 gap-1">
+          <button type="button" data-add-block="roll" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Tirada de dados">🎲 Tirada</button>
+          <button type="button" data-add-block="passive" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Modificador pasivo">🛡️ Pasivo</button>
+          <button type="button" data-add-block="area" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Seleccionar área u objetivos">🎯 Área</button>
+          <button type="button" data-add-block="save_request" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Pedir tirada a jugadores">⚡ Pedir</button>
+          <button type="button" data-add-block="apply_hp" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Aplicar daño, curación o estado">🩸 Aplicar</button>
         </div>
       </div>
-      <div id="customItemIconGrid" class="grid grid-cols-6 gap-1"></div>
-      <div id="customItemFormulaBuilder" class="owl-subpanel rounded-xl p-2 flex flex-col gap-1.5">
-        <div class="flex items-center justify-between gap-1">
-          <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">Fórmula visual</span>
-          <button type="button" id="btnClearFormulaChips" class="text-[10px] opacity-60 hover:opacity-100">Limpiar</button>
-        </div>
-        <div id="formulaChipsPreview" class="owl-input min-h-[28px] px-2 py-1 flex flex-wrap items-center gap-1 text-[11px]"></div>
-        <div class="grid grid-cols-6 gap-1">
-          <button type="button" data-fb-die="4" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d4</button>
-          <button type="button" data-fb-die="6" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d6</button>
-          <button type="button" data-fb-die="8" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d8</button>
-          <button type="button" data-fb-die="10" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d10</button>
-          <button type="button" data-fb-die="12" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d12</button>
-          <button type="button" data-fb-die="20" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">d20</button>
-        </div>
-        <div class="grid grid-cols-4 gap-1">
-          <button type="button" data-fb-stat="fue" data-fb-label="FUE" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">FUE</button>
-          <button type="button" data-fb-stat="des" data-fb-label="DES" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">DES</button>
-          <button type="button" data-fb-stat="con" data-fb-label="CON" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">CON</button>
-          <button type="button" data-fb-stat="int" data-fb-label="INT" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">INT</button>
-          <button type="button" data-fb-stat="sab" data-fb-label="SAB" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">SAB</button>
-          <button type="button" data-fb-stat="car" data-fb-label="CAR" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-semibold">CAR</button>
-          <button type="button" data-fb-flat="-1" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">−1</button>
-          <button type="button" data-fb-flat="1" class="owl-seg-btn owl-subpanel py-0.5 text-[10px] font-mono-tech">+1</button>
-        </div>
-      </div>
-      <textarea id="inpCustomItemMsg" rows="2" placeholder="Descripción o efecto en mesa (opcional)..." class="owl-input px-2.5 py-1.5 text-[11px] resize-y min-h-[46px] max-h-28"></textarea>
-      <input type="text" id="inpCustomItemFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="owl-input px-2.5 py-1 text-[11px]" />
-      <div class="flex items-center justify-between gap-2">
-        <div id="customItemColorGrid" class="grid grid-cols-6 gap-1.5"></div>
+      <div class="flex items-center gap-2">
+        <input type="text" id="inpCustomItemFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="owl-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
         <button type="submit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
       </div>
     </form>
 
     <!-- Creador de Escenario -->
-    <form id="customMapForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2">
+    <form id="customMapForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
       <div class="flex items-center justify-between">
         <span id="lblCustomMapFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo escenario</span>
         <button type="button" id="btnCancelCustomMap" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
@@ -667,7 +683,7 @@
     </form>
 
     <!-- Lista de tarjetas arrastrables (100% del alto disponible) -->
-    <div id="tokenTemplatesGrid" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
+    <div id="tokenTemplatesGrid" class="flex-1 min-h-[160px] overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
   </aside>
 
   <!-- ========================================================================
@@ -680,6 +696,7 @@
       class="owl-panel owl-pop owl-roll-card rounded-2xl px-5 pt-3 pb-3 flex flex-col items-center text-center gap-1.5 pointer-events-auto max-w-[min(92vw,340px)]"
     >
       <button type="button" id="btnCloseDice3d" class="owl-roll-close" title="Cerrar">✕</button>
+      <div id="sequenceHeaderBar" class="hidden items-center justify-center gap-1.5 px-6 max-w-full"></div>
       <div class="flex items-center justify-center gap-1.5 px-6 max-w-full">
         <span id="lblDiceFormula" class="owl-roll-pill font-mono-tech truncate max-w-[230px]">1d20 + 0</span>
         <span id="lblDiceBadge" class="owl-roll-pill hidden shrink-0"></span>
@@ -688,12 +705,20 @@
       <div id="diceRollChips" class="hidden flex-wrap items-center justify-center gap-1.5 py-0.5"></div>
       <p id="lblDiceMessage" class="hidden text-[11px] leading-snug opacity-85 max-w-full max-h-24 overflow-y-auto px-1 text-center" style="overflow-wrap: anywhere;"></p>
       <div id="lblDiceDetail" class="text-[11px] font-medium opacity-70 tabular-nums">Natural: 20</div>
+      <div id="diceDeckActions" class="hidden items-center justify-center gap-1.5 pt-1">
+        <button type="button" id="btnDiceShuffleDeck" class="owl-btn owl-subpanel px-3 py-1 rounded-full text-[10.5px] font-semibold hover:opacity-100" title="Mezclar todas las cartas de la baraja">🔀 Barajar (54/54)</button>
+      </div>
+      <div id="sequenceBodySlot" class="hidden flex-col gap-1.5 w-full pt-1"></div>
       <div id="diceRollActions" class="hidden items-center justify-center gap-1.5 pt-1.5 mt-0.5 border-t w-full" style="border-color: var(--hairline);">
         <button type="button" id="btnDiceApplyDmg" class="owl-btn owl-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-rose-400 hover:opacity-100" title="Restar al token seleccionado">− Daño</button>
         <button type="button" id="btnDiceApplyHalfDmg" class="owl-btn owl-subpanel px-2 py-1 rounded-full text-[10px] font-semibold opacity-80 hover:opacity-100" title="Restar mitad al token seleccionado">½</button>
         <button type="button" id="btnDiceApplyHeal" class="owl-btn owl-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-emerald-400 hover:opacity-100" title="Curar al token seleccionado">+ Curar</button>
       </div>
+      <div id="sequenceStepActions" class="hidden flex-wrap items-center justify-center gap-1.5 pt-1.5 mt-0.5 border-t w-full" style="border-color: var(--hairline);"></div>
     </div>
+
+    <!-- Panel Contextual de Secuencias y Solicitudes de Tirada -->
+    <div id="sequenceFloatingPanel" class="hidden owl-panel owl-pop rounded-2xl px-3.5 py-2.5 flex-col gap-2 max-w-[min(92vw,360px)] pointer-events-auto"></div>
 
     <!-- Barra Compacta de Dados (Dock estilo Apple) -->
     <div id="diceTrayBar" class="owl-panel owl-dock rounded-2xl px-2 py-1.5 flex flex-nowrap items-center justify-start md:justify-center gap-1.5 pointer-events-auto max-w-[calc(100vw-16px)] overflow-x-auto">
@@ -730,6 +755,18 @@
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><polygon points="9.5 3.5 15.5 10 9.5 19.5 3.5 10" /><polygon points="15 4.5 20.5 11 15 20.5 11.5 15" opacity="0.6" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d100</span>
         </button>
+        <button type="button" data-die="fudge" data-tray-extra="fudge" class="owl-die-btn hidden" title="Agregar dF (Fudge / Fate) a la mano">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="3.2" /><path d="M9 12h6M12 9v6" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">dF</span>
+        </button>
+        <button type="button" data-die="2" data-tray-extra="coin" class="owl-die-btn hidden" title="Agregar Moneda (0 Cruz / 1 Cara) a la mano">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="5" opacity="0.45" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">Moneda</span>
+        </button>
+        <button type="button" data-die="card" data-tray-extra="deck" class="owl-die-btn hidden" title="Sacar carta de la Baraja (clic acumula, tablero revela)">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><rect x="6" y="3.5" width="12" height="17" rx="2" /><path d="M12 9l2.5 3-2.5 3-2.5-3z" opacity="0.7" /></svg>
+          <span class="font-mono-tech text-[9.5px] font-semibold leading-none">Baraja</span>
+        </button>
       </div>
 
       <span class="owl-dock-sep hidden md:block"></span>
@@ -744,11 +781,16 @@
       <span class="owl-dock-sep hidden md:block"></span>
 
       <!-- Selector segmentado de lectura de resultado -->
-      <div id="diceResultSeg" class="owl-seg grid-cols-4 shrink-0" title="Cómo mostrar y calcular el resultado">
+      <div id="diceResultSeg" class="owl-seg grid-cols-5 shrink-0" title="Cómo mostrar y calcular el resultado">
         <button type="button" data-result-mode="sum" class="owl-seg-btn is-active !px-1.5" title="Sumar todos los dados + modificador">Total</button>
         <button type="button" data-result-mode="each" class="owl-seg-btn !px-1.5" title="Cada dado por separado + modificador">c/u</button>
         <button type="button" data-result-mode="max" class="owl-seg-btn !px-1.5" title="Dado más alto + modificador">Máx</button>
         <button type="button" data-result-mode="min" class="owl-seg-btn !px-1.5" title="Dado más bajo + modificador">Mín</button>
+        <button type="button" data-result-mode="success" class="owl-seg-btn !px-1.5" title="Contar éxitos (≥ umbral)">Éxit.</button>
+      </div>
+      <div id="diceThresholdWrap" class="hidden items-center gap-0.5 owl-subpanel rounded-lg px-1.5 py-0.5 text-[10px] font-mono-tech shrink-0" title="Dificultad mínima por dado para éxito">
+        <span class="opacity-65">≥</span>
+        <input type="number" id="inpDiceThreshold" value="6" min="1" max="100" class="owl-num-input w-7 text-center text-[10px] font-semibold bg-transparent outline-none" />
       </div>
 
       <span class="owl-dock-sep hidden md:block"></span>
@@ -787,7 +829,7 @@
       <span class="font-semibold text-xs tracking-tight">Historial</span>
       <button type="button" id="btnCloseDiceHistory" class="owl-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
     </div>
-    <div id="diceHistoryList" class="flex flex-col gap-1.5 max-h-[260px] overflow-y-auto pr-0.5">
+    <div id="diceHistoryList" class="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto overflow-x-hidden pr-0.5">
       <div class="text-[11px] opacity-55 text-center py-6">Sin tiradas recientes.</div>
     </div>
   </div>
@@ -1003,7 +1045,7 @@
   <!-- Toast flotante de feedback -->
   <div
     id="vttActionToast"
-    class="owl-panel owl-toast fixed bottom-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
+    class="owl-panel owl-toast fixed top-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
     style="overflow-wrap: anywhere;"
   ></div>
 
@@ -1241,6 +1283,22 @@
     </div>
   </div>
 
+  <!-- ========================================================================
+       9.2. MODAL CONFIGURACIÓN DE SISTEMA Y REGLAS DEL PORTAL
+       ======================================================================== -->
+  <div id="systemModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div id="systemModalPanel" class="owl-panel w-full max-w-xl max-h-[86vh] rounded-2xl p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-2 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="min-w-0">
+          <h2 class="text-sm font-bold tracking-wide">Sistema y Reglas del Portal</h2>
+          <p id="lblSystemModalTitle" class="text-[11px] opacity-65 truncate">Portal activo</p>
+        </div>
+        <button type="button" id="btnCloseSystemModal" class="owl-btn p-1.5">✕</button>
+      </div>
+      <div id="systemModalBody" class="flex-1 overflow-y-auto flex flex-col gap-3 pr-1"></div>
+    </div>
+  </div>
+
   <!-- Escenario 3D transparente sobre la mesa (sin recorte ni saltos de cámara) -->
   <canvas id="dice3dCanvas" class="fixed inset-0 w-screen h-screen pointer-events-none z-40 hidden"></canvas>
 
@@ -1299,8 +1357,11 @@
             <label class="flex flex-col gap-1">
               <span class="text-[11px] font-medium opacity-80">Módulo de reglas</span>
               <select id="selPortalRuleset" class="owl-input w-full px-2.5 py-2 rounded-xl text-xs">
-                <option value="dnd55" selected>D&amp;D 5.5 (2024)</option>
-                <option value="free">Sistema Libre / Genérico</option>
+                <option value="dnd55" selected>D&amp;D 5.5 (1d20 + mod)</option>
+                <option value="pbta">PbtA / Dungeon World (2d6 + stat)</option>
+                <option value="pool">Reserva de Dados (Éxitos d10)</option>
+                <option value="d100">Percentil / BRP (1d100)</option>
+                <option value="free">Sistema Genérico (Personalizable)</option>
               </select>
             </label>
 
@@ -1374,7 +1435,7 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261116b"></script>
+  <script type="module" src="js/main.js?v=20261116z39"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">

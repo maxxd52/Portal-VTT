@@ -32,29 +32,40 @@ Para mantener la base de código navegable tanto para humanos como para agentes 
 | `js/core/model.js` | Estado inicial (`createInitialState`), `DEFAULT_DICE_STYLE`, `generateRoomCode` (`PORTAL-XXXX`) |
 | `js/core/selector.js` | Cálculos puros (visibilidad, snap a grilla, `extractSerializableWorld`) |
 | `js/core/service.js` | Fachada de estado, undo/redo, notas, combate, mapas, sync y creación/apertura de portales |
-| `js/core/view.js` | Fachada de UI, referencias DOM (`els`), `init()`, `render(state, opts)`, combate y menú contextual |
+| `js/core/view.js` | Fachada de UI, `init()`, `render(state, opts)`, combate y enlazado global de paneles |
 
 ### Servicios de dominio (`js/services/`)
 | Archivo | Responsabilidad |
 |---|---|
-| `js/services/tokenService.js` | Selección, movimiento, invocación, inventario, stats, habilidades, rasgos, luz/aura y propiedad de tokens |
-| `js/services/diceService.js` | Mano de dados, tiradas 2D/3D, fórmulas, historial y broadcast de tiradas |
+| `js/services/systemService.js` | Presets de sistema (`dnd55`, `pbta`, `pool`, `d100`, `free`), pestañas/atributos/recursos/estados por portal y `rollSheetCheck` |
+| `js/services/tokenService.js` | Selección, movimiento, invocación, inventario, stats, recursos flexibles, habilidades, rasgos, luz/aura y propiedad |
+| `js/services/diceService.js` | Mano de dados, tiradas 2D/3D, fórmulas (`@stat`, `@recurso`), modos de lectura, historial y broadcast |
+| `js/services/sequenceService.js` | Secuencias multi-paso (ataques, áreas, salvaciones de objetivos y aplicación masiva) |
 | `js/services/compendiumService.js` | Actores/objetos/mapas personalizados, exportación/importación JSON y biblioteca de cartuchos |
 | `js/services/browserVault.js` | Persistencia local en IndexedDB/localStorage y listado de portales (`listRooms`) |
 | `js/services/realtimeBridge.js` | Sincronización local multi-pestaña (`BroadcastChannel`) y presencia |
+| `js/services/cartridgePacker.js` | Empaquetado y lectura de cartuchos portables `.owltable` |
 | `js/services/dice3dEngine.js` | Motor 3D de dados con Three.js + física |
 
 ### Módulos de UI (`js/ui/`)
 | Archivo | Responsabilidad |
 |---|---|
-| `js/ui/portalLobbyView.js` | Lobby de entrada de Portal-VTT (crear portal, elegir reglas, abrir portales guardados) |
+| `js/ui/domCache.js` | Catálogo centralizado de referencias DOM (`collectViewElements`) e íconos SVG base |
+| `js/ui/portalLobbyView.js` | Lobby de entrada mínimo (nombre + sistema, unirse o abrir portales recientes diferenciados) |
+| `js/ui/systemOptionsView.js` | Modal global `Opciones → Sistema y Reglas` (reglas por preset o constructor completo en Sistema Genérico) |
 | `js/ui/boardView.js` | Interacción sobre el tablero (pan, zoom, drag de tokens, doble clic para ficha) |
-| `js/ui/contextMenuView.js` | Menú contextual separado para tokens (HP, tamaño, bando, estados, luz/aura) vs mapa (herramientas, ping, nota, niebla) |
+| `js/ui/contextMenuView.js` | Menú contextual separado para tokens (HP, tamaño, bando, estados del sistema, luz/aura) vs mapa |
 | `js/ui/canvasView.js` | Renderizado del mapa, grilla, trazos vectoriales, niebla de guerra, notas y pings |
-| `js/ui/sheetView.js` | Ficha lateral de personaje (HP, CA, atributos, salvaciones, habilidades, rasgos, inventario) |
-| `js/ui/diceView.js` | Dock de dados, historial de tiradas, chips de fórmulas y selector visual de dados |
+| `js/ui/sheetView.js` | Ficha lateral adaptativa de personaje (cabecera, pestañas dinámicas, atributos, habilidades y rasgos) |
+| `js/ui/sheetBlocksView.js` | Renderizado unificado de los 4 bloques de ficha genérica (`Número`, `Recurso`, `Tirada`, `Texto`) |
+| `js/ui/sheetResourcesView.js` | Estados activos y recursos/contadores flexibles en la ficha (pips, barras y contadores libres) |
+| `js/ui/sheetInventoryView.js` | Inventario en la ficha (equipo, consumibles, capacidades, drag-and-drop) |
+| `js/ui/diceView.js` | Dock de dados, modos de resultado aditivos, historial y selector visual de dados |
+| `js/ui/sequenceView.js` | Tarjeta flotante progresiva de secuencias y tiradas asistidas por objetivos |
 | `js/ui/compendiumView.js` | Cajón del compendio arrastrable y biblioteca de módulos |
-| `js/ui/modalsView.js` | Modales de sala, compartir/invitar, handouts, notas, creador y sincronización |
+| `js/ui/compendiumFormsView.js` | Picker de íconos, paletas de color y constructores auxiliares de fórmulas |
+| `js/ui/itemCreatorView.js` | Creador modular de complementos por bloques (pasivos, tiradas, área, salvación, efectos/estados) |
+| `js/ui/modalsView.js` | Modales de sala, compartir/invitar, handouts, notas y sincronización |
 
 ### Datos y utilidades (`js/data/`, `js/utils/`)
 | Archivo | Responsabilidad |
@@ -62,6 +73,7 @@ Para mantener la base de código navegable tanto para humanos como para agentes 
 | `js/data/compendium.js` | Plantillas base de actores, objetos, mapas de ejemplo y muros predefinidos |
 | `js/data/dnd55Classes.js` | Complementos de las 12 clases de D&D 5.5e (hasta nivel 3) organizados en carpetas |
 | `js/utils/driveUrlHelper.js` | Normalización de URLs de Google Drive para imágenes de mapas y tokens |
+| `js/utils/webpConverter.js` | Conversión y compresión WebP client-side para mapas e imágenes |
 
 ---
 

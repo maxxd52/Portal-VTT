@@ -1,143 +1,16 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116b';
-import { Service } from '../core/service.js?v=20261116b';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116z39';
+import { Selector } from '../core/selector.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z39';
 
-const CURATED_COLORS = [
-  ['#ef4444', 'Rojo'],
-  ['#f97316', 'Naranja'],
-  ['#d97706', 'Ámbar'],
-  ['#65a30d', 'Lima'],
-  ['#10b981', 'Esmeralda'],
-  ['#0891b2', 'Cian'],
-  ['#3b82f6', 'Azul'],
-  ['#6366f1', 'Índigo'],
-  ['#8b5cf6', 'Violeta'],
-  ['#c026d3', 'Fucsia'],
-  ['#db2777', 'Rosa'],
-  ['#64748b', 'Acero']
-];
-
-/**
- * Compendium drawer tabs, folders, custom forms, formula builder & tree rendering methods mixed into View.
- */
 export const CompendiumViewMethods = {
-  renderCustomItemIconGrid() {
-    const grid = this.els.customItemIconGrid;
-    if (!grid) return;
-    const activeColor = this.selectedItemColor || '#8b5cf6';
-    grid.innerHTML = Object.entries(this.itemIconDefs)
-      .map(([key, [title]]) => {
-        const active = this.selectedItemIcon === key;
-        return `<button type="button" data-item-icon="${key}" title="${title}" class="owl-seg-btn owl-subpanel h-7 p-0 flex items-center justify-center rounded-lg ${active ? 'is-active' : ''}" style="${active ? `color:${activeColor};` : ''}">${this.renderItemIconSvg(key)}</button>`;
-      })
-      .join('');
-    grid.querySelectorAll('[data-item-icon]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.selectedItemIcon = btn.dataset.itemIcon;
-        this.renderCustomItemIconGrid();
-      });
-    });
-  },
-
-  renderColorSwatchGrid(grid, selectedColor, onSelect) {
-    if (!grid) return;
-    const activeHex = (selectedColor || '#8b5cf6').toLowerCase();
-    grid.innerHTML = CURATED_COLORS.map(([hex, label]) => {
-      const active = activeHex === hex.toLowerCase();
-      return `<button type="button" data-swatch-color="${hex}" title="${label}" aria-label="${label}" class="w-5 h-5 rounded-full transition-transform ${active ? 'scale-110 ring-2 ring-white/90' : 'opacity-80 hover:opacity-100 hover:scale-105'}" style="background:${hex};"></button>`;
-    }).join('');
-    grid.querySelectorAll('[data-swatch-color]').forEach((btn) => {
-      btn.addEventListener('click', () => onSelect(btn.dataset.swatchColor));
-    });
-  },
-
-  renderCustomColorGrids() {
-    this.renderColorSwatchGrid(this.els.customTokenColorGrid, this.selectedTokenColor, (hex) => {
-      this.selectedTokenColor = hex;
-      this.renderCustomColorGrids();
-    });
-    this.renderColorSwatchGrid(this.els.customItemColorGrid, this.selectedItemColor, (hex) => {
-      this.selectedItemColor = hex;
-      this.renderCustomColorGrids();
-      this.renderCustomItemIconGrid();
-    });
-  },
-
-  serializeFormulaTokens() {
-    if (!Array.isArray(this.formulaTokens) || this.formulaTokens.length === 0) return '';
-    return this.formulaTokens
-      .map((t, idx) => {
-        if (t.type === 'die') return `${idx > 0 ? '+ ' : ''}${t.count}d${t.sides}`;
-        if (t.type === 'stat') return `${idx > 0 ? '+ ' : ''}@${t.key}`;
-        const v = Number(t.value) || 0;
-        if (v < 0) return `- ${Math.abs(v)}`;
-        return `${idx > 0 ? '+ ' : ''}${v}`;
-      })
-      .join(' ')
-      .trim();
-  },
-
-  loadFormulaToTokens(str) {
-    this.formulaTokens = [];
-    const raw = String(str || '').trim();
-    if (!raw) {
-      this.renderFormulaChips();
-      return;
-    }
-    const parts = raw.replace(/\s+/g, '').match(/[+-]?(?:\d*d\d+|@[a-z]+|\d+)/gi) || [];
-    for (const part of parts) {
-      const dieMatch = part.match(/^\+?(\d*)d(\d+)$/i);
-      if (dieMatch) {
-        this.formulaTokens.push({ type: 'die', count: Number(dieMatch[1]) || 1, sides: Number(dieMatch[2]) });
-        continue;
-      }
-      const statMatch = part.match(/^\+?@([a-z]+)$/i);
-      if (statMatch) {
-        const key = statMatch[1].toLowerCase();
-        this.formulaTokens.push({ type: 'stat', key, label: key.toUpperCase() });
-        continue;
-      }
-      const num = Number(part);
-      if (Number.isFinite(num) && num !== 0) {
-        this.formulaTokens.push({ type: 'flat', value: num });
-      }
-    }
-    this.renderFormulaChips();
-  },
-
-  renderFormulaChips() {
-    const box = this.els.formulaChipsPreview;
-    if (!box) return;
-    if (!this.formulaTokens.length) {
-      box.innerHTML = `<span class="text-[10px] opacity-50">Toca dados o atributos abajo...</span>`;
-      return;
-    }
-    box.innerHTML = this.formulaTokens
-      .map((t, idx) => {
-        const text =
-          t.type === 'die'
-            ? `${t.count}d${t.sides}`
-            : t.type === 'stat'
-              ? t.label
-              : t.value >= 0
-                ? `+${t.value}`
-                : `${t.value}`;
-        const plusPrefix = idx > 0 && !(t.type === 'flat') ? '<span class="opacity-45 text-[10px]">+</span>' : '';
-        return `${plusPrefix}<button type="button" data-fb-rm="${idx}" class="owl-seg-btn is-active px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech flex items-center gap-1" title="Quitar">${text}<span class="opacity-60">×</span></button>`;
-      })
-      .join('');
-    box.querySelectorAll('[data-fb-rm]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const idx = Number(btn.dataset.fbRm);
-        const target = this.formulaTokens[idx];
-        if (!target) return;
-        if (target.type === 'die' && target.count > 1) target.count -= 1;
-        else this.formulaTokens.splice(idx, 1);
-        this.renderFormulaChips();
-      });
-    });
-  },
-
   bindCompendiumEvents() {
+    const setCompendiumBrowseVisible = (visible) => {
+      [this.els.compendiumTabs, this.els.inpCompendiumSearch, this.els.tokenTemplatesGrid, this.els.btnNewCompendiumFolder].forEach((el) => {
+        if (!el) return;
+        el.classList.toggle('hidden', !visible);
+      });
+    };
+
     // 5. Compendio Derecho Tabs, Carpetas & Formularios
     this.closeAllCompendiumForms = () => {
       this.editingCompendiumKey = null;
@@ -146,8 +19,16 @@ export const CompendiumViewMethods = {
         f.classList.add('hidden');
         f.classList.remove('flex');
       });
+      if (this.els.customItemIconGrid) {
+        this.els.customItemIconGrid.classList.add('hidden');
+        this.renderCustomItemIconGrid();
+      }
+      if (this.els.lblCustomItemFormTitle) this.els.lblCustomItemFormTitle.textContent = 'Nuevo complemento';
+      if (this.els.lblCustomFormTitle) this.els.lblCustomFormTitle.textContent = 'Nuevo personaje';
+      if (this.els.lblCustomMapFormTitle) this.els.lblCustomMapFormTitle.textContent = 'Nuevo escenario';
       if (this.els.btnToggleCustomToken) this.els.btnToggleCustomToken.classList.remove('owl-btn-accent');
       if (this.els.btnNewCompendiumFolder) this.els.btnNewCompendiumFolder.classList.remove('owl-btn-accent');
+      setCompendiumBrowseVisible(true);
     };
     const closeAllCompendiumForms = this.closeAllCompendiumForms;
 
@@ -159,6 +40,9 @@ export const CompendiumViewMethods = {
       if (!wasOpen && formEl) {
         formEl.classList.remove('hidden');
         formEl.classList.add('flex');
+        if (formEl !== this.els.compendiumFolderForm) {
+          setCompendiumBrowseVisible(false);
+        }
         if (triggerBtn) triggerBtn.classList.add('owl-btn-accent');
         if (focusEl) focusEl.focus();
       }
@@ -224,7 +108,10 @@ export const CompendiumViewMethods = {
     if (this.els.btnToggleCustomToken) {
       this.els.btnToggleCustomToken.addEventListener('click', () => {
         const tab = Service.state.compendiumTab || 'actors';
-        if (tab === 'items') openCompendiumForm(this.els.customItemForm, this.els.btnToggleCustomToken, this.els.inpCustomItemName);
+        if (tab === 'items') {
+          this.resetItemCreatorBlocks();
+          openCompendiumForm(this.els.customItemForm, this.els.btnToggleCustomToken, this.els.inpCustomItemName);
+        }
         else if (tab === 'maps') openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName);
         else openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName);
       });
@@ -233,67 +120,17 @@ export const CompendiumViewMethods = {
     if (this.els.btnCancelCustomItem) this.els.btnCancelCustomItem.addEventListener('click', closeAllCompendiumForms);
     if (this.els.btnCancelCustomMap) this.els.btnCancelCustomMap.addEventListener('click', closeAllCompendiumForms);
 
-    if (this.els.customItemFormulaBuilder) {
-      this.els.customItemFormulaBuilder.querySelectorAll('[data-fb-die]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const sides = Number(btn.dataset.fbDie);
-          const existing = this.formulaTokens.find((t) => t.type === 'die' && t.sides === sides);
-          if (existing) existing.count = Math.min(20, existing.count + 1);
-          else this.formulaTokens.push({ type: 'die', sides, count: 1 });
-          this.renderFormulaChips();
-        });
-      });
-      this.els.customItemFormulaBuilder.querySelectorAll('[data-fb-stat]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const key = btn.dataset.fbStat;
-          const label = btn.dataset.fbLabel || key.toUpperCase();
-          if (!this.formulaTokens.some((t) => t.type === 'stat' && t.key === key)) {
-            this.formulaTokens.push({ type: 'stat', key, label });
-            this.renderFormulaChips();
-          }
-        });
-      });
-      this.els.customItemFormulaBuilder.querySelectorAll('[data-fb-flat]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const delta = Number(btn.dataset.fbFlat) || 0;
-          let flat = this.formulaTokens.find((t) => t.type === 'flat');
-          if (!flat) {
-            flat = { type: 'flat', value: 0 };
-            this.formulaTokens.push(flat);
-          }
-          flat.value += delta;
-          if (flat.value === 0) {
-            this.formulaTokens = this.formulaTokens.filter((t) => t.type !== 'flat');
-          }
-          this.renderFormulaChips();
-        });
-      });
-      if (this.els.btnClearFormulaChips) {
-        this.els.btnClearFormulaChips.addEventListener('click', () => {
-          this.formulaTokens = [];
-          this.renderFormulaChips();
-        });
-      }
-      this.renderFormulaChips();
-    }
-
+    this.bindItemCreatorEvents();
+    this.renderCreatorBlocks();
     this.renderCustomItemIconGrid();
     this.renderCustomColorGrids();
 
-    this.els.selCustomItemKind.addEventListener('change', (e) => {
-      const kind = e.target.value;
-      if (this.els.customItemValWrap) {
-        this.els.customItemValWrap.classList.toggle('hidden', kind === 'ability');
-      }
-      if (this.els.selCustomItemTarget) {
-        this.els.selCustomItemTarget.classList.toggle('hidden', kind !== 'equipment');
-      }
-      this.els.lblCustomItemVal.textContent =
-        kind === 'consumable' ? 'Cura HP (opcional)' : 'Bono pasivo';
-      if (kind === 'consumable' && Number(this.els.inpCustomItemVal.value) === 0) {
-        this.els.inpCustomItemVal.value = '8';
-      }
-    });
+    if (this.els.btnToggleItemIconPicker && this.els.customItemIconGrid) {
+      this.els.btnToggleItemIconPicker.addEventListener('click', () => {
+        this.els.customItemIconGrid.classList.toggle('hidden');
+        this.renderCustomItemIconGrid();
+      });
+    }
 
     this.els.customTokenForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -332,29 +169,23 @@ export const CompendiumViewMethods = {
       const name = this.els.inpCustomItemName.value.trim();
       if (!name) return;
       const kind = this.els.selCustomItemKind.value;
-      const val = Number(this.els.inpCustomItemVal.value) || 0;
+      const { passives, steps } = this.getCreatorPayload();
+      const firstRoll = steps.find((s) => s.type === 'roll');
       const saved = Service.saveCustomItem({
         key: this.editingCompendiumKey || undefined,
         name,
         kind,
         folder: this.els.inpCustomItemFolder.value.trim(),
-        formula: this.serializeFormulaTokens(),
+        formula: firstRoll ? firstRoll.formula : '',
         message: this.els.inpCustomItemMsg ? this.els.inpCustomItemMsg.value.trim() : '',
-        bonusMod: 0,
-        die: 0,
-        statTarget: this.els.selCustomItemTarget ? this.els.selCustomItemTarget.value : 'ac',
-        statBonus: kind === 'equipment' ? val : 0,
-        acBonus: (kind === 'equipment' || kind === 'armor') && (!this.els.selCustomItemTarget || this.els.selCustomItemTarget.value === 'ac') ? val : 0,
-        heal: kind === 'consumable' ? val : 0,
-        lightRadius: 0,
+        passives,
+        steps,
         icon: this.selectedItemIcon,
         color: this.selectedItemColor || '#8b5cf6'
       });
       this.els.inpCustomItemName.value = '';
       this.els.inpCustomItemFolder.value = '';
-      this.formulaTokens = [];
-      this.renderFormulaChips();
-      if (this.els.inpCustomItemMsg) this.els.inpCustomItemMsg.value = '';
+      this.resetItemCreatorBlocks();
       closeAllCompendiumForms();
       this.showActionToast(`${saved.name} guardado en Complementos.`);
     });
@@ -384,6 +215,19 @@ export const CompendiumViewMethods = {
     const tab = state.compendiumTab || 'actors';
     const q = (state.compendiumSearch || '').toLowerCase().trim();
     if (!this.collapsedFolders) this.collapsedFolders = new Set();
+
+    if (this.els.selCustomItemKind) {
+      const itemTabs = Selector.getSystemItemTabs(state);
+      const prevVal = this.els.selCustomItemKind.value;
+      this.els.selCustomItemKind.innerHTML = itemTabs
+        .map((it) => `<option value="${this.escapeHtml(it.id)}">${this.escapeHtml(it.label)}</option>`)
+        .join('');
+      if (itemTabs.some((it) => it.id === prevVal)) {
+        this.els.selCustomItemKind.value = prevVal;
+      } else if (itemTabs[0]) {
+        this.els.selCustomItemKind.value = itemTabs[0].id;
+      }
+    }
 
     this.els.compendiumTabs.querySelectorAll('[data-comp-tab]').forEach((btn) => {
       btn.classList.toggle('is-active', btn.dataset.compTab === tab);
@@ -507,19 +351,10 @@ export const CompendiumViewMethods = {
       const it = (Service.state.customItems || []).find((x) => x.key === key);
       if (!it) return;
       this.editingCompendiumKey = it.key;
+      if (this.els.lblCustomItemFormTitle) this.els.lblCustomItemFormTitle.textContent = 'Editar complemento';
       this.els.inpCustomItemName.value = it.name || '';
       this.els.selCustomItemKind.value = this.getItemCategory(it.kind);
-      this.els.selCustomItemKind.dispatchEvent(new Event('change'));
-      if (this.els.selCustomItemTarget) {
-        this.els.selCustomItemTarget.value = it.statTarget || 'ac';
-      }
-      this.els.inpCustomItemVal.value = String(
-        it.kind === 'consumable' ? it.heal || 0 : it.statBonus !== undefined ? it.statBonus : it.acBonus || 0
-      );
-      this.loadFormulaToTokens(
-        it.formula || (it.die > 0 ? `1d${it.die}${it.bonusMod ? (it.bonusMod > 0 ? `+${it.bonusMod}` : it.bonusMod) : ''}` : '')
-      );
-      if (this.els.inpCustomItemMsg) this.els.inpCustomItemMsg.value = it.message || '';
+      this.loadItemIntoCreatorBlocks(it);
       this.els.inpCustomItemFolder.value = it.folder || '';
       this.selectedItemColor = it.color || '#8b5cf6';
       this.selectedItemIcon = it.icon && this.itemIconDefs[it.icon] ? it.icon : this.getDefaultItemIcon(it.kind);

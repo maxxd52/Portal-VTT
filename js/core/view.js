@@ -2,76 +2,26 @@
    VIEW: RENDERIZADO DE LIENZOS, COMPENDIO, FICHA IZQUIERDA Y MENÚ CONTEXTUAL
    ========================================================================== */
 
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261116z39';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Selector } from './selector.js';
-import { Service } from './service.js?v=20261116b';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261116b';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261116b';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261116b';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261116b';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261116b';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261116b';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261116b';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261116b';
-
-const ITEM_ICON_DEFS = {
-  sword: ['Espada / Ataque', '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/>'],
-  target: ['Distancia / Mira', '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'],
-  shield: ['Escudo / Defensa', '<path d="M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6l7-3z"/>'],
-  wrench: ['Equipo / Herramienta', '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>'],
-  potion: ['Poción / Químico', '<path d="M9 3h6M10 3v5l-4.5 7.5A3 3 0 0 0 8.1 20h7.8a3 3 0 0 0 2.6-4.5L14 8V3"/><path d="M7.5 14h9" opacity="0.6"/>'],
-  heart: ['Curación / Vida', '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>'],
-  flame: ['Luz / Fuego', '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'],
-  sparkle: ['Magia / Poder', '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16z" opacity="0.7"/>'],
-  bolt: ['Rayo / Energía', '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'],
-  eye: ['Ojo / Percepción', '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'],
-  book: ['Grimorio / Dato', '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>'],
-  skull: ['Veneno / Letal', '<circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2M12.5 17l-.5-1-.5 1h1z"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/>']
-};
-
-const TOKEN_STATUS_SYMBOLS = {
-  confused: {
-    color: '#a855f7',
-    path: '<path d="M12 12a2 2 0 1 0-2-2 4 4 0 1 0 4 4 6 6 0 1 0-6-6"/>'
-  },
-  flame: {
-    color: '#f97316',
-    path: '<path d="M12 3c.5 2.5 2 4.3 3.5 5.8A5.5 5.5 0 1 1 6.5 13c0-1.6.7-3 1.8-4.2.2 1.2.9 2 1.7 2.2-.3-2.4.5-5 2-8z"/>'
-  },
-  poison: {
-    color: '#10b981',
-    path: '<path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/>'
-  },
-  bolt: {
-    color: '#eab308',
-    path: '<polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/>'
-  },
-  shield: {
-    color: '#3b82f6',
-    path: '<path d="M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6l7-3z"/>'
-  },
-  bleed: {
-    color: '#ef4444',
-    path: '<path d="M12 4v16M4 12h16"/>'
-  },
-  hidden: {
-    color: '#6366f1',
-    path: '<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><path d="M4 4l16 16"/>'
-  },
-  down: {
-    color: '#64748b',
-    path: '<path d="M12 4v14M6 12l6 6 6-6"/>'
-  },
-  frost: {
-    color: '#06b6d4',
-    path: '<path d="M12 2v20M4.9 7l14.2 10M19.1 7L4.9 17"/>'
-  },
-  mark: {
-    color: '#ec4899',
-    path: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/>'
-  }
-};
+import { Selector } from './selector.js?v=20261116z39';
+import { Service } from './service.js?v=20261116z39';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261116z39';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261116z39';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261116z39';
+import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261116z39';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261116z39';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261116z39';
+import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261116z39';
+import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261116z39';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261116z39';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261116z39';
+import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261116z39';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261116z39';
+import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261116z39';
+import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261116z39';
+import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261116z39';
+import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261116z39';
 
 export const View = {
   els: {},
@@ -91,19 +41,33 @@ export const View = {
   itemIconDefs: ITEM_ICON_DEFS,
   tokenStatusSymbols: TOKEN_STATUS_SYMBOLS,
 
+  escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
   ...BoardViewMethods,
   ...ContextMenuViewMethods,
   ...CanvasViewMethods,
   ...CompendiumViewMethods,
+  ...CompendiumFormsViewMethods,
   ...DiceViewMethods,
+  ...ItemCreatorViewMethods,
   ...ModalsViewMethods,
   ...PortalLobbyViewMethods,
+  ...SequenceViewMethods,
   ...SheetViewMethods,
+  ...SheetBlocksViewMethods,
+  ...SheetInventoryViewMethods,
+  ...SheetResourcesViewMethods,
+  ...SystemOptionsViewMethods,
 
   getItemCategory(kind) {
-    if (kind === 'consumable') return 'consumable';
-    if (kind === 'ability' || kind === 'spell') return 'ability';
-    return 'equipment';
+    return Selector.resolveItemTabId(Service.state, kind);
   },
 
   getDefaultItemIcon(kind) {
@@ -111,15 +75,17 @@ export const View = {
     return cat === 'consumable' ? 'potion' : cat === 'ability' ? 'sparkle' : 'shield';
   },
 
-  renderStatusSymbolSvg(key, sizeClass = 'w-3.5 h-3.5') {
-    const def = TOKEN_STATUS_SYMBOLS[key];
-    if (!def) return '';
+  renderStatusSymbolSvg(keyOrIcon, sizeClass = 'w-3.5 h-3.5', state = Service.state) {
+    const iconKey = TOKEN_STATUS_SYMBOLS[keyOrIcon]
+      ? keyOrIcon
+      : Selector.getStatusDef(state, keyOrIcon).icon;
+    const def = TOKEN_STATUS_SYMBOLS[iconKey] || TOKEN_STATUS_SYMBOLS.mark;
     return `<svg class="${sizeClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${def.path}</svg>`;
   },
 
-  renderItemIconSvg(iconKey, sizeClass = 'w-3.5 h-3.5') {
+  renderItemIconSvg(iconKey, sizeClass = 'w-[18px] h-[18px]', strokeWidth = 2.15) {
     const def = ITEM_ICON_DEFS[iconKey] || ITEM_ICON_DEFS.shield;
-    return `<svg class="${sizeClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${def[1]}</svg>`;
+    return `<svg class="${sizeClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${def[1]}</svg>`;
   },
 
   renderItemIconBadge(item, opts = {}) {
@@ -141,6 +107,22 @@ export const View = {
     if (Number.isFinite(saved) && saved >= minW) {
       drawerEl.style.width = `${clampW(saved)}px`;
     }
+
+    const updateBottomClearance = () => {
+      const tray = this.els.diceTrayBar;
+      if (!tray) return;
+      const dRect = drawerEl.getBoundingClientRect();
+      const tRect = tray.getBoundingClientRect();
+      if (dRect.width === 0 || tRect.width === 0) return;
+      const overlaps = side === 'left'
+        ? dRect.right + 12 > tRect.left
+        : dRect.left - 12 < tRect.right;
+      drawerEl.style.bottom = overlaps
+        ? `${Math.max(16, Math.round(window.innerHeight - tRect.top + 12))}px`
+        : '';
+    };
+    requestAnimationFrame(updateBottomClearance);
+    window.addEventListener('resize', updateBottomClearance);
 
     const isOnInnerEdge = (clientX) => {
       const rect = drawerEl.getBoundingClientRect();
@@ -164,6 +146,7 @@ export const View = {
       if (!isOnInnerEdge(e.clientX)) return;
       drawerEl.style.width = '';
       localStorage.removeItem(storageKey);
+      updateBottomClearance();
     });
     drawerEl.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !isOnInnerEdge(e.clientX)) return;
@@ -180,6 +163,7 @@ export const View = {
       if (!resizing) return;
       const delta = side === 'left' ? e.clientX - startX : startX - e.clientX;
       drawerEl.style.width = `${clampW(startW + delta)}px`;
+      updateBottomClearance();
     });
     window.addEventListener('pointerup', () => {
       if (!resizing) return;
@@ -248,279 +232,15 @@ export const View = {
       Service.updatePeerPresence(msg);
     } else if (msg.kind === 'PRESENCE_BYE') {
       Service.updatePeerPresence({ ...msg, leaving: true });
+    } else if (msg.kind === 'ROLL_REQUEST' && msg.request) {
+      Service.receiveRollRequest(msg.request);
+    } else if (msg.kind === 'ROLL_RESPONSE' && msg.response) {
+      Service.receiveRollResponse(msg.response);
     }
   },
 
   cacheElements() {
-    this.els = {
-      stage: document.getElementById('vttStage'),
-      worldLayer: document.getElementById('worldTransformLayer'),
-      mapCanvas: document.getElementById('mapCanvas'),
-      customMapImg: document.getElementById('customMapImg'),
-      gridCanvas: document.getElementById('gridCanvas'),
-      drawCanvas: document.getElementById('drawCanvas'),
-      tokensLayer: document.getElementById('tokensLayer'),
-      fogCanvas: document.getElementById('fogCanvas'),
-      overlayVectorSvg: document.getElementById('overlayVectorSvg'),
-      dropModuleOverlay: document.getElementById('dropModuleOverlay'),
-
-      // Barra superior
-      btnOpenRoomModal: document.getElementById('btnOpenRoomModal'),
-      roomPresenceList: document.getElementById('roomPresenceList'),
-      handoutShareBox: document.getElementById('handoutShareBox'),
-      inpHandoutFile: document.getElementById('inpHandoutFile'),
-      inpHandoutTitle: document.getElementById('inpHandoutTitle'),
-      inpHandoutUrl: document.getElementById('inpHandoutUrl'),
-      btnShowHandout: document.getElementById('btnShowHandout'),
-      handoutModal: document.getElementById('handoutModal'),
-      handoutModalTitle: document.getElementById('handoutModalTitle'),
-      handoutModalImg: document.getElementById('handoutModalImg'),
-      btnCloseHandout: document.getElementById('btnCloseHandout'),
-      btnClearHandoutForAll: document.getElementById('btnClearHandoutForAll'),
-      lblActiveRoomCode: document.getElementById('lblActiveRoomCode'),
-      mapSelector: document.getElementById('mapSelector'),
-      shelfDropdownGroup: document.getElementById('shelfDropdownGroup'),
-      btnToggleGridPopover: document.getElementById('btnToggleGridPopover'),
-      gridPopover: document.getElementById('gridPopover'),
-      lblGridSizeDetail: document.getElementById('lblGridSizeDetail'),
-      btnGridSizeMinus: document.getElementById('btnGridSizeMinus'),
-      inpGridSize: document.getElementById('inpGridSize'),
-      btnGridSizePlus: document.getElementById('btnGridSizePlus'),
-      btnGridResetOffset: document.getElementById('btnGridResetOffset'),
-      btnGridOffXMinus: document.getElementById('btnGridOffXMinus'),
-      inpGridOffX: document.getElementById('inpGridOffX'),
-      btnGridOffXPlus: document.getElementById('btnGridOffXPlus'),
-      btnGridOffYMinus: document.getElementById('btnGridOffYMinus'),
-      inpGridOffY: document.getElementById('inpGridOffY'),
-      btnGridOffYPlus: document.getElementById('btnGridOffYPlus'),
-      inpGridCols: document.getElementById('inpGridCols'),
-      inpGridRows: document.getElementById('inpGridRows'),
-      btnFitGridToMap: document.getElementById('btnFitGridToMap'),
-      lblGridOpacity: document.getElementById('lblGridOpacity'),
-      rngGridOpacity: document.getElementById('rngGridOpacity'),
-      chkGridSnap: document.getElementById('chkGridSnap'),
-      btnRoleGM: document.getElementById('btnRoleGM'),
-      btnRolePlayer: document.getElementById('btnRolePlayer'),
-      btnToggleSheet: document.getElementById('btnToggleSheet'),
-      btnToggleCombat: document.getElementById('btnToggleCombat'),
-      btnOpenDriveModal: document.getElementById('btnOpenDriveModal'),
-      btnToggleTokenDrawer: document.getElementById('btnToggleTokenDrawer'),
-      lblActiveTokensCount: document.getElementById('lblActiveTokensCount'),
-      btnOpenSyncModal: document.getElementById('btnOpenSyncModal'),
-      lblSyncBadge: document.getElementById('lblSyncBadge'),
-      btnToggleTheme: document.getElementById('btnToggleTheme'),
-      themePopover: document.getElementById('themePopover'),
-      btnOpenOptions: document.getElementById('btnOpenOptions'),
-      optionsPopover: document.getElementById('optionsPopover'),
-      btnOptReturnLobby: document.getElementById('btnOptReturnLobby'),
-      btnOptOpenRoom: document.getElementById('btnOptOpenRoom'),
-      btnOptOpenSync: document.getElementById('btnOptOpenSync'),
-
-      // Ficha Izquierda
-      characterSheetDrawer: document.getElementById('characterSheetDrawer'),
-      sheetPortraitBox: document.getElementById('sheetPortraitBox'),
-      inpSheetName: document.getElementById('inpSheetName'),
-      inpSheetRole: document.getElementById('inpSheetRole'),
-      btnCloseSheet: document.getElementById('btnCloseSheet'),
-      lblSheetHpCur: document.getElementById('lblSheetHpCur'),
-      inpSheetMaxHp: document.getElementById('inpSheetMaxHp'),
-      btnSheetHpMinus: document.getElementById('btnSheetHpMinus'),
-      barSheetHpFill: document.getElementById('barSheetHpFill'),
-      btnSheetHpPlus: document.getElementById('btnSheetHpPlus'),
-      inpSheetAc: document.getElementById('inpSheetAc'),
-      inpSheetLevel: document.getElementById('inpSheetLevel'),
-      lblSheetPb: document.getElementById('lblSheetPb'),
-      inpSheetSpeed: document.getElementById('inpSheetSpeed'),
-      btnSheetRollInit: document.getElementById('btnSheetRollInit'),
-      sheetTopTabs: document.getElementById('sheetTopTabs'),
-      sheetPaneAttrs: document.getElementById('sheetPaneAttrs'),
-      sheetPaneSkills: document.getElementById('sheetPaneSkills'),
-      sheetPaneTraits: document.getElementById('sheetPaneTraits'),
-      sheetPaneInv: document.getElementById('sheetPaneInv'),
-      sheetStatsGrid: document.getElementById('sheetStatsGrid'),
-      btnToggleSkillForm: document.getElementById('btnToggleSkillForm'),
-      sheetSkillForm: document.getElementById('sheetSkillForm'),
-      inpSheetSkillName: document.getElementById('inpSheetSkillName'),
-      inpSheetSkillMod: document.getElementById('inpSheetSkillMod'),
-      btnLoadDnd55Skills: document.getElementById('btnLoadDnd55Skills'),
-      sheetSkillsList: document.getElementById('sheetSkillsList'),
-      btnToggleTraitForm: document.getElementById('btnToggleTraitForm'),
-      sheetTraitForm: document.getElementById('sheetTraitForm'),
-      inpSheetTraitTitle: document.getElementById('inpSheetTraitTitle'),
-      inpSheetTraitDesc: document.getElementById('inpSheetTraitDesc'),
-      sheetTraitsList: document.getElementById('sheetTraitsList'),
-      sheetInventoryDropzone: document.getElementById('sheetInventoryDropzone'),
-      sheetInventoryList: document.getElementById('sheetInventoryList'),
-
-      // Compendio Derecho
-      tokenDrawer: document.getElementById('tokenDrawer'),
-      btnNewCompendiumFolder: document.getElementById('btnNewCompendiumFolder'),
-      btnToggleCustomToken: document.getElementById('btnToggleCustomToken'),
-      btnCancelCustomToken: document.getElementById('btnCancelCustomToken'),
-      btnCloseTokenDrawer: document.getElementById('btnCloseTokenDrawer'),
-      compendiumTabs: document.getElementById('compendiumTabs'),
-      inpCompendiumSearch: document.getElementById('inpCompendiumSearch'),
-      compendiumFolderList: document.getElementById('compendiumFolderList'),
-      compendiumFolderForm: document.getElementById('compendiumFolderForm'),
-      inpNewFolderName: document.getElementById('inpNewFolderName'),
-      tokenTemplatesGrid: document.getElementById('tokenTemplatesGrid'),
-      customTokenForm: document.getElementById('customTokenForm'),
-      inpCustomTokenName: document.getElementById('inpCustomTokenName'),
-      inpCustomTokenRole: document.getElementById('inpCustomTokenRole'),
-      inpCustomTokenHp: document.getElementById('inpCustomTokenHp'),
-      inpCustomTokenAc: document.getElementById('inpCustomTokenAc'),
-      selCustomTokenAlly: document.getElementById('selCustomTokenAlly'),
-      inpCustomStr: document.getElementById('inpCustomStr'),
-      inpCustomDex: document.getElementById('inpCustomDex'),
-      inpCustomCon: document.getElementById('inpCustomCon'),
-      inpCustomInt: document.getElementById('inpCustomInt'),
-      inpCustomWis: document.getElementById('inpCustomWis'),
-      inpCustomCha: document.getElementById('inpCustomCha'),
-      inpCustomTokenImg: document.getElementById('inpCustomTokenImg'),
-      fileCustomTokenImg: document.getElementById('fileCustomTokenImg'),
-      inpCustomTokenFolder: document.getElementById('inpCustomTokenFolder'),
-      customTokenColorGrid: document.getElementById('customTokenColorGrid'),
-      customItemForm: document.getElementById('customItemForm'),
-      btnCancelCustomItem: document.getElementById('btnCancelCustomItem'),
-      inpCustomItemName: document.getElementById('inpCustomItemName'),
-      selCustomItemKind: document.getElementById('selCustomItemKind'),
-      customItemValWrap: document.getElementById('customItemValWrap'),
-      lblCustomItemVal: document.getElementById('lblCustomItemVal'),
-      inpCustomItemVal: document.getElementById('inpCustomItemVal'),
-      selCustomItemTarget: document.getElementById('selCustomItemTarget'),
-      customItemIconGrid: document.getElementById('customItemIconGrid'),
-      customItemFormulaBuilder: document.getElementById('customItemFormulaBuilder'),
-      formulaChipsPreview: document.getElementById('formulaChipsPreview'),
-      btnClearFormulaChips: document.getElementById('btnClearFormulaChips'),
-      inpCustomItemMsg: document.getElementById('inpCustomItemMsg'),
-      inpCustomItemFolder: document.getElementById('inpCustomItemFolder'),
-      customItemColorGrid: document.getElementById('customItemColorGrid'),
-      customMapForm: document.getElementById('customMapForm'),
-      lblCustomMapFormTitle: document.getElementById('lblCustomMapFormTitle'),
-      btnCancelCustomMap: document.getElementById('btnCancelCustomMap'),
-      inpCustomMapName: document.getElementById('inpCustomMapName'),
-      inpCustomMapImg: document.getElementById('inpCustomMapImg'),
-      fileCustomMapImg: document.getElementById('fileCustomMapImg'),
-      inpCustomMapDesc: document.getElementById('inpCustomMapDesc'),
-      inpCustomMapFolder: document.getElementById('inpCustomMapFolder'),
-
-      // Combate, Regla, Notas
-      mapNotesLayer: document.getElementById('mapNotesLayer'),
-      combatTrackerPill: document.getElementById('combatTrackerPill'),
-      lblCombatRound: document.getElementById('lblCombatRound'),
-      combatOrderList: document.getElementById('combatOrderList'),
-      btnNextTurn: document.getElementById('btnNextTurn'),
-      btnEndCombat: document.getElementById('btnEndCombat'),
-      rulerShapePill: document.getElementById('rulerShapePill'),
-      rulerShapeSeg: document.getElementById('rulerShapeSeg'),
-      noteEditorModal: document.getElementById('noteEditorModal'),
-      noteEditorForm: document.getElementById('noteEditorForm'),
-      btnCloseNoteModal: document.getElementById('btnCloseNoteModal'),
-      inpNoteTitle: document.getElementById('inpNoteTitle'),
-      inpNoteBody: document.getElementById('inpNoteBody'),
-      chkNoteGmOnly: document.getElementById('chkNoteGmOnly'),
-      btnDeleteNote: document.getElementById('btnDeleteNote'),
-
-      // Dados 3D
-      dice3dOverlay: document.getElementById('dice3dOverlay'),
-      dice3dCanvas: document.getElementById('dice3dCanvas'),
-      lblDiceFormula: document.getElementById('lblDiceFormula'),
-      lblDiceBadge: document.getElementById('lblDiceBadge'),
-      lblDiceTotal: document.getElementById('lblDiceTotal'),
-      diceRollChips: document.getElementById('diceRollChips'),
-      lblDiceMessage: document.getElementById('lblDiceMessage'),
-      lblDiceDetail: document.getElementById('lblDiceDetail'),
-      diceRollActions: document.getElementById('diceRollActions'),
-      btnDiceApplyDmg: document.getElementById('btnDiceApplyDmg'),
-      btnDiceApplyHalfDmg: document.getElementById('btnDiceApplyHalfDmg'),
-      btnDiceApplyHeal: document.getElementById('btnDiceApplyHeal'),
-      btnCloseDice3d: document.getElementById('btnCloseDice3d'),
-      diceTrayBar: document.getElementById('diceTrayBar'),
-      btnDiceModMinus: document.getElementById('btnDiceModMinus'),
-      lblDiceMod: document.getElementById('lblDiceMod'),
-      btnDiceModPlus: document.getElementById('btnDiceModPlus'),
-      diceResultSeg: document.getElementById('diceResultSeg'),
-      diceVisibilitySeg: document.getElementById('diceVisibilitySeg'),
-      diceHandCursor: document.getElementById('diceHandCursor'),
-      lblDiceHandCount: document.getElementById('lblDiceHandCount'),
-      btnDiceCustomize: document.getElementById('btnDiceCustomize'),
-      diceStyleDot: document.getElementById('diceStyleDot'),
-      diceStylePopover: document.getElementById('diceStylePopover'),
-      btnDiceHistory: document.getElementById('btnDiceHistory'),
-      diceHistoryPopover: document.getElementById('diceHistoryPopover'),
-      btnClearDiceHistory: document.getElementById('btnClearDiceHistory'),
-      btnCloseDiceHistory: document.getElementById('btnCloseDiceHistory'),
-      diceHistoryList: document.getElementById('diceHistoryList'),
-      dicePreviewCanvas: document.getElementById('dicePreviewCanvas'),
-      btnCloseDiceStyle: document.getElementById('btnCloseDiceStyle'),
-      btnResetDiceStyle: document.getElementById('btnResetDiceStyle'),
-      inpDiceBodyColor: document.getElementById('inpDiceBodyColor'),
-      inpDiceBevelColor: document.getElementById('inpDiceBevelColor'),
-      inpDiceNumberColor: document.getElementById('inpDiceNumberColor'),
-      inpDiceCustomSymbol: document.getElementById('inpDiceCustomSymbol'),
-
-      // Menú Contextual Clic Derecho
-      contextIconMenu: document.getElementById('contextIconMenu'),
-      contextTokenHeader: document.getElementById('contextTokenHeader'),
-      contextToolsRow: document.getElementById('contextToolsRow'),
-      contextDynamicRow: document.getElementById('contextDynamicRow'),
-      contextSubOptionsRow: document.getElementById('contextSubOptionsRow'),
-      vttActionToast: document.getElementById('vttActionToast'),
-
-      // Modales
-      roomModal: document.getElementById('roomModal'),
-      btnCloseRoomModal: document.getElementById('btnCloseRoomModal'),
-      roomToastBox: document.getElementById('roomToastBox'),
-      btnCreateNewRoom: document.getElementById('btnCreateNewRoom'),
-      lblModalRoomCode: document.getElementById('lblModalRoomCode'),
-      lblModalRoomRole: document.getElementById('lblModalRoomRole'),
-      inpPlayerInviteUrl: document.getElementById('inpPlayerInviteUrl'),
-      btnCopyPlayerUrl: document.getElementById('btnCopyPlayerUrl'),
-      inpGmInviteUrl: document.getElementById('inpGmInviteUrl'),
-      btnCopyGmUrl: document.getElementById('btnCopyGmUrl'),
-      joinRoomForm: document.getElementById('joinRoomForm'),
-      inpJoinRoomCode: document.getElementById('inpJoinRoomCode'),
-      inpLocalMapWebp: document.getElementById('inpLocalMapWebp'),
-      inpModuleTitle: document.getElementById('inpModuleTitle'),
-      btnExportModule: document.getElementById('btnExportModule'),
-      inpModuleFile: document.getElementById('inpModuleFile'),
-      addShelfModuleForm: document.getElementById('addShelfModuleForm'),
-      inpShelfTitle: document.getElementById('inpShelfTitle'),
-      inpShelfUrl: document.getElementById('inpShelfUrl'),
-      shelfModulesList: document.getElementById('shelfModulesList'),
-      btnResetVaultStep1: document.getElementById('btnResetVaultStep1'),
-      btnResetVaultConfirm: document.getElementById('btnResetVaultConfirm'),
-
-      driveModal: document.getElementById('driveModal'),
-      btnCloseDriveModal: document.getElementById('btnCloseDriveModal'),
-      inpDriveMapUrl: document.getElementById('inpDriveMapUrl'),
-      btnApplyDriveMap: document.getElementById('btnApplyDriveMap'),
-      inpDriveFolderUrl: document.getElementById('inpDriveFolderUrl'),
-      btnEmbedDriveFolder: document.getElementById('btnEmbedDriveFolder'),
-      driveFolderIframe: document.getElementById('driveFolderIframe'),
-
-      syncModal: document.getElementById('syncModal'),
-      btnCloseSyncModal: document.getElementById('btnCloseSyncModal'),
-      lblSyncRoomName: document.getElementById('lblSyncRoomName'),
-      btnBroadcastFullNow: document.getElementById('btnBroadcastFullNow'),
-      lblEventQueueCount: document.getElementById('lblEventQueueCount'),
-      btnCompactEvents: document.getElementById('btnCompactEvents'),
-      eventLogPreviewList: document.getElementById('eventLogPreviewList'),
-
-      portalLobby: document.getElementById('portalLobby'),
-      btnBrandLobby: document.getElementById('btnBrandLobby'),
-      createPortalForm: document.getElementById('createPortalForm'),
-      inpPortalName: document.getElementById('inpPortalName'),
-      selPortalRuleset: document.getElementById('selPortalRuleset'),
-      selPortalMap: document.getElementById('selPortalMap'),
-      chkPortalDynLight: document.getElementById('chkPortalDynLight'),
-      chkPortalGrid: document.getElementById('chkPortalGrid'),
-      inpLobbyCartridgeFile: document.getElementById('inpLobbyCartridgeFile'),
-      joinPortalForm: document.getElementById('joinPortalForm'),
-      inpJoinPortalCode: document.getElementById('inpJoinPortalCode'),
-      selJoinPortalRole: document.getElementById('selJoinPortalRole'),
-      recentPortalsList: document.getElementById('recentPortalsList')
-    };
+    this.els = collectViewElements();
   },
 
   showActionToast(msg) {
@@ -718,6 +438,16 @@ export const View = {
       this.els.optionsPopover?.classList.remove('is-open');
       this.showPortalLobby();
     });
+    this.els.btnOptOpenSystem?.addEventListener('click', () => {
+      this.els.optionsPopover?.classList.remove('is-open');
+      this.openSystemModal();
+    });
+    this.els.btnCloseSystemModal?.addEventListener('click', () => {
+      this.els.systemModal?.classList.remove('is-open');
+    });
+    this.els.systemModal?.addEventListener('click', (e) => {
+      if (e.target === this.els.systemModal) this.els.systemModal.classList.remove('is-open');
+    });
     this.els.btnOptOpenRoom?.addEventListener('click', () => {
       this.els.optionsPopover?.classList.remove('is-open');
       this.renderRoomModal(Service.state);
@@ -787,7 +517,11 @@ export const View = {
     this.renderCharacterSheet(state);
     this.renderCompendium(state);
     this.renderDiceReadout(state);
+    this.renderSequenceUI(state);
     this.renderHandoutModal(state);
+    if (this.els.systemModal?.classList.contains('is-open')) {
+      this.renderSystemModal(state);
+    }
   },
 
   renderHudControls(state) {

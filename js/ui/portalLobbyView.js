@@ -1,7 +1,7 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261116b';
+import { BrowserVault } from '../services/browserVault.js?v=20261116z39';
 import { CartridgePacker } from '../services/cartridgePacker.js';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Service } from '../core/service.js?v=20261116b';
+import { Service } from '../core/service.js?v=20261116z39';
 
 /**
  * Portal-VTT entry lobby: create a portal with ruleset/options, join by code/URL, or resume recent portals.
@@ -57,7 +57,7 @@ export const PortalLobbyViewMethods = {
       return;
     }
 
-    const rulesetLabel = { dnd55: 'D&D 5.5', free: 'Libre' };
+    const rulesetLabel = { dnd55: 'D&D 5.5', pbta: 'PbtA 2d6', pool: 'Pool d10', d100: '1d100', free: 'Genérico' };
     box.innerHTML = rooms
       .slice(0, 6)
       .map(

@@ -3,7 +3,8 @@
    ========================================================================== */
 
 import { COMPENDIUM_ACTORS } from '../data/compendium.js';
-import { Service } from '../core/service.js?v=20261116b';
+import { Selector } from '../core/selector.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z39';
 
 export const ContextMenuViewMethods = {
   openContextMenu(clientX, clientY) {
@@ -83,23 +84,23 @@ export const ContextMenuViewMethods = {
     });
 
     const activeConds = Array.isArray(tok.conditions) ? tok.conditions : [];
-    const customLabels = state.systemStatuses || {};
+    const statusDefs = Selector.getSystemStatuses(state);
     const sizeVal = Number(tok.size) || 1;
     const isAlly = tok.isAlly !== false;
 
     this.els.contextSubOptionsRow.className = 'grid grid-cols-5 gap-1 pt-1 border-t';
     this.els.contextSubOptionsRow.innerHTML =
-      Object.entries(this.tokenStatusSymbols)
-        .map(([key, def]) => {
-          const active = activeConds.includes(key);
-          const titleAttr = customLabels[key] ? ` title="${customLabels[key]}"` : '';
+      statusDefs
+        .map((def) => {
+          const active = activeConds.includes(def.key);
           return `
             <button
               type="button"
-              data-ctx-cond="${key}"${titleAttr}
+              data-ctx-cond="${this.escapeHtml(def.key)}"
+              title="${this.escapeHtml(def.label)}"
               class="owl-seg-btn h-7 p-0 rounded-lg flex items-center justify-center transition-transform ${active ? 'is-active scale-105' : 'owl-subpanel opacity-80 hover:opacity-100'}"
               style="${active ? `background:${def.color}; color:#ffffff; border-color:${def.color};` : `color:${def.color};`}"
-            >${this.renderStatusSymbolSvg(key)}</button>
+            >${this.renderStatusSymbolSvg(def.icon, 'w-3.5 h-3.5', state)}</button>
           `;
         })
         .join('') +
@@ -114,7 +115,7 @@ export const ContextMenuViewMethods = {
         <button type="button" data-ctx-extra="hp-p5" class="owl-subpanel owl-btn h-7 text-[10px] font-mono-tech text-emerald-400" title="+5 HP">+5</button>
         <button type="button" data-ctx-extra="size" class="owl-subpanel owl-btn h-7 text-[10px] font-mono-tech" title="Cambiar tamaño (1x1 / 2x2 / 3x3)">${sizeVal}x${sizeVal}</button>
         <button type="button" data-ctx-extra="ally" class="owl-subpanel owl-btn h-7 text-[10px] ${isAlly ? 'text-emerald-400' : 'text-red-400'}" title="Cambiar bando (Aliado / Hostil)">${isAlly ? '🛡️' : '⚔️'}</button>
-        <button type="button" data-ctx-extra="init" class="owl-subpanel owl-btn h-7 text-[10px] font-mono-tech" title="Tirar Iniciativa (1d20 + DES)">Init</button>
+        <button type="button" data-ctx-extra="init" class="owl-subpanel owl-btn h-7 text-[10px] font-mono-tech" title="Tirar Iniciativa (${this.escapeHtml(Service.getSystemInitiativeFormula())})">Init</button>
       </div>`;
 
     this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-extra]').forEach((b) => {
@@ -128,9 +129,7 @@ export const ContextMenuViewMethods = {
         else if (ex === 'size') Service.cycleTokenSize(tok.id);
         else if (ex === 'ally') Service.toggleTokenAlly(tok.id);
         else if (ex === 'init') {
-          const dex = Number(tok.stats?.dex) || 0;
-          const roll = Service.rollFormula(`1d20${dex >= 0 ? '+' + dex : dex}`, tok, `${tok.name} · Iniciativa`);
-          if (roll && Service.state.combat?.active) Service.setTokenInitiative(tok.id, roll.total);
+          Service.rollTokenInitiative(tok);
         }
         this.hideContextMenu();
       });
@@ -142,7 +141,7 @@ export const ContextMenuViewMethods = {
         Service.toggleTokenCondition(tok.id, key);
         const updatedTok = Service.state.tokens.find((t) => t.id === tok.id);
         const isNowActive = Boolean(updatedTok && Array.isArray(updatedTok.conditions) && updatedTok.conditions.includes(key));
-        const def = this.tokenStatusSymbols[key];
+        const def = Selector.getStatusDef(Service.state, key);
         b.classList.toggle('is-active', isNowActive);
         b.classList.toggle('scale-105', isNowActive);
         b.classList.toggle('owl-subpanel', !isNowActive);

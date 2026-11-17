@@ -1,5 +1,5 @@
-import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261116b';
+import { Selector } from '../core/selector.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z39';
 
 /**
  * Canvas, Fog of War, Map Notes & Vector Overlay rendering methods mixed into View.
@@ -427,18 +427,34 @@ export const CanvasViewMethods = {
           <polygon points="${x1},${y1} ${ax},${ay} ${bx},${by}" fill="rgba(245, 158, 11, 0.18)" stroke="#f59e0b" stroke-width="3" stroke-linejoin="round" />
         `);
       } else if (shape === 'cube') {
-        const rx = Math.min(x1, x2);
-        const ry = Math.min(y1, y2);
-        const rw = Math.abs(x2 - x1);
-        const rh = Math.abs(y2 - y1);
-        const side = Math.max(rw, rh);
+        const isAreaCentered = state.tool === 'areaSelect' && state.areaSelectConfig;
+        const side = isAreaCentered
+          ? Math.max(state.grid.cellSize * 0.5, state.areaSelectConfig.radiusPx || dist)
+          : Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+        const rx = isAreaCentered ? x1 - side / 2 : x2 >= x1 ? x1 : x1 - side;
+        const ry = isAreaCentered ? y1 - side / 2 : y2 >= y1 ? y1 : y1 - side;
+        const labelX = isAreaCentered ? x1 : mx;
+        const labelY = isAreaCentered ? ry - 6 : my;
         const sideCells = Math.round((side / state.grid.cellSize) * 10) / 10;
         parts.push(`
-          <rect x="${x2 >= x1 ? x1 : x1 - side}" y="${y2 >= y1 ? y1 : y1 - side}" width="${side}" height="${side}" fill="rgba(245, 158, 11, 0.16)" stroke="#f59e0b" stroke-width="3" stroke-dasharray="6 4" />
-          <rect x="${mx - 62}" y="${my - 26}" width="124" height="22" rx="11" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
-          <text x="${mx}" y="${my - 11}" fill="#ffffff" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" text-anchor="middle">${sideCells}×${sideCells} cas</text>
+          <rect x="${rx}" y="${ry}" width="${side}" height="${side}" fill="rgba(245, 158, 11, 0.16)" stroke="#f59e0b" stroke-width="3" stroke-dasharray="6 4" />
+          ${isAreaCentered ? `<circle cx="${x1}" cy="${y1}" r="5" fill="#f59e0b" />` : ''}
+          <rect x="${labelX - 62}" y="${labelY - 26}" width="124" height="22" rx="11" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+          <text x="${labelX}" y="${labelY - 11}" fill="#ffffff" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" text-anchor="middle">${sideCells}×${sideCells} cas</text>
         `);
       } else {
+        if (state.tool === 'areaSelect' && state.areaSelectConfig && dist > 1) {
+          const halfW = (state.grid.cellSize || 80) * 0.5;
+          const nx = -(y2 - y1) / dist;
+          const ny = (x2 - x1) / dist;
+          const p1x = x1 + nx * halfW, p1y = y1 + ny * halfW;
+          const p2x = x2 + nx * halfW, p2y = y2 + ny * halfW;
+          const p3x = x2 - nx * halfW, p3y = y2 - ny * halfW;
+          const p4x = x1 - nx * halfW, p4y = y1 - ny * halfW;
+          parts.push(`
+            <polygon points="${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y} ${p4x},${p4y}" fill="rgba(245, 158, 11, 0.16)" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6 4" stroke-linejoin="round" />
+          `);
+        }
         parts.push(`
           <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#f59e0b" stroke-width="4" stroke-dasharray="8 6" />
         `);

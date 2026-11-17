@@ -2,6 +2,6 @@
    ENTRYPOINT: INICIALIZACIÓN DE LA APLICACIÓN
    ========================================================================== */
 
-import { View } from './core/view.js?v=20261116b';
+import { View } from './core/view.js?v=20261116z39';
 
 window.addEventListener('DOMContentLoaded', () => View.init());

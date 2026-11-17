@@ -2,8 +2,8 @@
    SHEET VIEW: FICHA DE PERSONAJE, ATRIBUTOS, HABILIDADES, RASGOS E INVENTARIO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js';
-import { Service } from '../core/service.js?v=20261116b';
+import { Selector } from '../core/selector.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z39';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
@@ -74,19 +74,18 @@ export const SheetViewMethods = {
     this.els.btnSheetRollInit.addEventListener('click', () => {
       const tok = Selector.getSelectedToken(Service.state);
       const dex = tok && tok.stats ? Number(tok.stats.dex) || 0 : 0;
-      Service.state.dice.modifier = dex;
-      Service.rollDice(20, `${tok ? tok.name : 'Ficha'} · Iniciativa`);
-      if (tok && Service.state.combat?.active && Service.state.dice.lastRoll) {
+      Service.rollSheetCheck(tok, `${tok ? tok.name : 'Ficha'} · Iniciativa`, dex);
+      if (tok && Service.state.combat?.active && Service.state.systemConfig?.autoInitiative !== false && Service.state.dice.lastRoll) {
         Service.setTokenInitiative(tok.id, Service.state.dice.lastRoll.total);
       }
     });
 
     if (this.els.sheetTopTabs) {
-      this.els.sheetTopTabs.querySelectorAll('[data-sheet-tab]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          this.activeSheetTab = btn.dataset.sheetTab;
-          this.renderCharacterSheet(Service.state);
-        });
+      this.els.sheetTopTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-sheet-tab]');
+        if (!btn) return;
+        this.activeSheetTab = btn.dataset.sheetTab;
+        this.renderCharacterSheet(Service.state);
       });
     }
     const bindInlineFormToggle = (btn, form, focusEl) => {
@@ -101,6 +100,7 @@ export const SheetViewMethods = {
     };
     bindInlineFormToggle(this.els.btnToggleSkillForm, this.els.sheetSkillForm, this.els.inpSheetSkillName);
     bindInlineFormToggle(this.els.btnToggleTraitForm, this.els.sheetTraitForm, this.els.inpSheetTraitTitle);
+    this.bindSheetResourceEvents();
 
     if (this.els.sheetSkillForm) {
       this.els.sheetSkillForm.addEventListener('submit', (e) => {
@@ -128,6 +128,103 @@ export const SheetViewMethods = {
         this.els.btnToggleTraitForm?.classList.remove('owl-btn-accent');
       });
     }
+  },
+
+  renderStatCardsInto(containerEl, list, tok, sysCfg, showScores, pb) {
+    if (!containerEl) return;
+    const stats = tok.stats || {};
+    const scores = tok.scores || {};
+    const saveProfs = tok.saveProfs || {};
+    containerEl.innerHTML = list
+      .map(({ key, label: lbl }) => {
+        const mod = Number(stats[key]) || 0;
+        if (!showScores) {
+          return `
+            <div class="owl-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
+              <button type="button" data-roll-stat="${lbl}:${mod}" class="w-full flex flex-col items-center hover:opacity-85 pt-0.5" title="Tirar ${lbl} (${sysCfg.rollFormula || '1d20+@stat'})">
+                <span class="text-[9.5px] font-semibold opacity-70 tracking-wide truncate max-w-full">${lbl}</span>
+              </button>
+              <input type="number" data-stat-key="${key}" value="${mod}" min="-99" max="999" class="owl-num-input w-12 text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" title="Valor de ${lbl}" />
+            </div>
+          `;
+        }
+        const isCoreDnd = ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(key);
+        const score = Number.isFinite(Number(scores[key])) ? Number(scores[key]) : 10 + mod * 2;
+        const saveProf = Boolean(saveProfs[key]);
+        const saveTotal = mod + (saveProf ? pb : 0);
+        const modTxt = mod >= 0 ? `+${mod}` : String(mod);
+        const saveTxt = saveTotal >= 0 ? `+${saveTotal}` : String(saveTotal);
+        return `
+          <div class="owl-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
+            <button type="button" data-roll-stat="${lbl}:${mod}" class="w-full flex flex-col items-center hover:opacity-85" title="Tirar prueba de ${lbl}">
+              <span class="text-[9.5px] font-semibold opacity-60 tracking-wide">${lbl}</span>
+              <strong class="text-sm font-bold tabular-nums leading-tight">${modTxt}</strong>
+            </button>
+            ${
+              isCoreDnd
+                ? `<input type="number" data-score-key="${key}" value="${score}" min="1" max="30" class="owl-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Puntuación de ${lbl}" />`
+                : `<input type="number" data-stat-key="${key}" value="${mod}" min="-99" max="999" class="owl-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Valor de ${lbl}" />`
+            }
+            <div class="flex items-center justify-center gap-0.5 text-[9.5px] w-full pt-0.5 border-t" style="border-color: var(--hairline);">
+              <button type="button" data-toggle-save="${key}" class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${saveProf ? 'bg-violet-500/25 text-violet-300' : 'opacity-65 hover:opacity-100 hover:bg-white/10'}" title="Competencia en salvación">
+                <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="8" cy="8" r="5" />
+                  ${saveProf ? '<circle cx="8" cy="8" r="2.6" fill="currentColor" stroke="none" />' : ''}
+                </svg>
+              </button>
+              <button type="button" data-roll-save="${lbl}:${saveTotal}" class="opacity-85 hover:opacity-100 tabular-nums font-medium" title="Tirar salvación de ${lbl}">Salv ${saveTxt}</button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    containerEl.querySelectorAll('[data-roll-stat]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [lbl, val] = btn.dataset.rollStat.split(':');
+        Service.rollSheetCheck(tok, `${tok.name} · ${lbl}`, Number(val) || 0);
+      });
+    });
+    containerEl.querySelectorAll('[data-score-key]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        Service.updateTokenScore(tok.id, inp.dataset.scoreKey, inp.value);
+      });
+    });
+    containerEl.querySelectorAll('[data-stat-key]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        Service.updateTokenStat(tok.id, inp.dataset.statKey, inp.value);
+      });
+    });
+    containerEl.querySelectorAll('[data-toggle-save]').forEach((btn) => {
+      btn.addEventListener('click', () => Service.toggleTokenSaveProf(tok.id, btn.dataset.toggleSave));
+    });
+    containerEl.querySelectorAll('[data-roll-save]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [lbl, val] = btn.dataset.rollSave.split(':');
+        Service.rollSheetCheck(tok, `${tok.name} · Salv. ${lbl}`, Number(val) || 0);
+      });
+    });
+  },
+
+  renderFixedRollButtons(containerEl, rolls, tok) {
+    if (!containerEl) return;
+    const esc = (s) => this.escapeHtml(s);
+    containerEl.innerHTML = rolls
+      .map(
+        (r) =>
+          `<button type="button" data-fixed-roll="${esc(r.id)}" class="owl-btn owl-subpanel px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 text-[11px]" title="Tirar ${esc(r.formula)}">
+            <span class="font-semibold truncate">${esc(r.label)}</span>
+            <span class="text-[10px] font-mono-tech opacity-70 shrink-0">${esc(r.formula)}</span>
+          </button>`
+      )
+      .join('');
+    containerEl.querySelectorAll('[data-fixed-roll]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const rollDef = rolls.find((r) => r.id === btn.dataset.fixedRoll);
+        if (!rollDef) return;
+        Service.rollSheetCheck(tok, `${tok.name} · ${rollDef.label}`, 0, rollDef.formula);
+      });
+    });
   },
 
   renderCharacterSheet(state) {
@@ -166,90 +263,168 @@ export const SheetViewMethods = {
       this.els.inpSheetSpeed.value = tok.speed || '30 ft';
     }
 
-    const stats = tok.stats || { str: 1, dex: 1, con: 1, int: 0, wis: 0, cha: 0 };
-    const scores = tok.scores || {};
-    const saveProfs = tok.saveProfs || {};
-    const attrDefs = [
-      ['str', 'FUE'],
-      ['dex', 'DES'],
-      ['con', 'CON'],
-      ['int', 'INT'],
-      ['wis', 'SAB'],
-      ['cha', 'CAR']
-    ];
-    this.els.sheetStatsGrid.innerHTML = attrDefs
-      .map(([key, lbl]) => {
-        const mod = Number(stats[key]) || 0;
-        const score = Number.isFinite(Number(scores[key])) ? Number(scores[key]) : 10 + mod * 2;
-        const saveProf = Boolean(saveProfs[key]);
-        const saveTotal = mod + (saveProf ? pb : 0);
-        const modTxt = mod >= 0 ? `+${mod}` : String(mod);
-        const saveTxt = saveTotal >= 0 ? `+${saveTotal}` : String(saveTotal);
-        return `
-          <div class="owl-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
-            <button type="button" data-roll-stat="${lbl}:${mod}" class="w-full flex flex-col items-center hover:opacity-85" title="Tirar prueba de ${lbl}">
-              <span class="text-[9.5px] font-semibold opacity-60 tracking-wide">${lbl}</span>
-              <strong class="text-sm font-bold tabular-nums leading-tight">${modTxt}</strong>
-            </button>
-            <input type="number" data-score-key="${key}" value="${score}" min="1" max="30" class="owl-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Puntuación de ${lbl}" />
-            <div class="flex items-center justify-center gap-0.5 text-[9.5px] w-full pt-0.5 border-t" style="border-color: var(--hairline);">
-              <button type="button" data-toggle-save="${key}" class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${saveProf ? 'bg-violet-500/25 text-violet-300' : 'opacity-65 hover:opacity-100 hover:bg-white/10'}" title="Competencia en salvación">
-                <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="8" cy="8" r="5" />
-                  ${saveProf ? '<circle cx="8" cy="8" r="2.6" fill="currentColor" stroke="none" />' : ''}
-                </svg>
-              </button>
-              <button type="button" data-roll-save="${lbl}:${saveTotal}" class="opacity-85 hover:opacity-100 tabular-nums font-medium" title="Tirar salvación de ${lbl}">Salv ${saveTxt}</button>
-            </div>
-          </div>
-        `;
-      })
-      .join('');
+    const sysCfg = state.systemConfig || {};
+    const sysBlocks = Array.isArray(sysCfg.sheetBlocks) ? sysCfg.sheetBlocks : null;
+    const hasBlocks = Boolean(sysBlocks);
+    const showHp = !hasBlocks && sysCfg.showHp !== false;
+    const showDef = !hasBlocks && sysCfg.showDefense !== false;
+    const showInit = !hasBlocks && sysCfg.showInit !== false;
+    const showRightCard = showDef || showInit;
+    if (this.els.lblSheetHpName) this.els.lblSheetHpName.textContent = sysCfg.hpLabel || 'Salud';
+    if (this.els.lblSheetDefenseName) {
+      this.els.lblSheetDefenseName.textContent = showDef ? (sysCfg.defenseLabel || 'Defensa · CA') : 'Turno';
+    }
+    this.els.sheetHpDefRow?.classList.toggle('hidden', hasBlocks || (!showHp && !showRightCard));
+    this.els.sheetHpCard?.classList.toggle('hidden', !showHp);
+    this.els.sheetHpCard?.classList.toggle('col-span-2', showHp && !showRightCard);
+    this.els.sheetDefenseCard?.classList.toggle('hidden', !showRightCard);
+    this.els.sheetDefenseCard?.classList.toggle('col-span-2', showRightCard && !showHp);
+    this.els.sheetAcWrap?.classList.toggle('hidden', !showDef);
+    this.els.btnSheetRollInit?.classList.toggle('hidden', !showInit);
+    this.els.sheetLevelRow?.classList.toggle('hidden', hasBlocks || sysCfg.showLevelPb === false);
+    this.renderSheetResources(tok);
 
-    this.els.sheetStatsGrid.querySelectorAll('[data-roll-stat]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const [lbl, val] = btn.dataset.rollStat.split(':');
-        Service.state.dice.modifier = Number(val) || 0;
-        Service.rollDice(20, `${tok.name} · ${lbl}`);
-      });
-    });
-    this.els.sheetStatsGrid.querySelectorAll('[data-score-key]').forEach((inp) => {
-      inp.addEventListener('change', () => {
-        Service.updateTokenScore(tok.id, inp.dataset.scoreKey, inp.value);
-      });
-    });
-    this.els.sheetStatsGrid.querySelectorAll('[data-toggle-save]').forEach((btn) => {
-      btn.addEventListener('click', () => Service.toggleTokenSaveProf(tok.id, btn.dataset.toggleSave));
-    });
-    this.els.sheetStatsGrid.querySelectorAll('[data-roll-save]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const [lbl, val] = btn.dataset.rollSave.split(':');
-        Service.state.dice.modifier = Number(val) || 0;
-        Service.rollDice(20, `${tok.name} · Salv. ${lbl}`);
-      });
-    });
+    const showScores = sysCfg.showScores !== false;
+    const stats = tok.stats || {};
+    const attrDefs = Selector.getSheetStatsDef(Service.state, tok);
+    const fixedRolls = Array.isArray(sysCfg.fixedRolls) ? sysCfg.fixedRolls : [];
+    const sysResSchema = Array.isArray(sysCfg.resourceSchema) ? sysCfg.resourceSchema : [];
+    const sysResByKey = new Map(sysResSchema.map((r) => [Selector.normalizeStatKey(r.name), r]));
 
-    const sheetTab = this.activeSheetTab || 'attrs';
-    const isInvTab = ['equipment', 'consumable', 'ability'].includes(sheetTab);
+    if (this.els.sheetHeaderFixedRow) {
+      if (hasBlocks) {
+        const hdrBlocks = sysBlocks.filter((b) => (b.tabId || 'attrs') === 'header');
+        if (hdrBlocks.length) {
+          this.renderSheetBlocksInto(this.els.sheetHeaderFixedRow, hdrBlocks, tok, sysCfg);
+        } else {
+          this.els.sheetHeaderFixedRow.innerHTML = '';
+        }
+      } else {
+        const hdrStats = attrDefs.filter((s) => s.tabId === 'header');
+        const hdrRolls = fixedRolls.filter((r) => r.tabId === 'header');
+        if (hdrStats.length || hdrRolls.length) {
+          this.els.sheetHeaderFixedRow.innerHTML = `
+            ${hdrStats.length ? '<div class="hdr-fixed-stats grid grid-cols-3 gap-1.5 text-center"></div>' : ''}
+            ${hdrRolls.length ? '<div class="hdr-fixed-rolls flex flex-wrap gap-1.5"></div>' : ''}
+          `;
+          if (hdrStats.length) {
+            this.renderStatCardsInto(this.els.sheetHeaderFixedRow.querySelector('.hdr-fixed-stats'), hdrStats, tok, sysCfg, showScores, pb);
+          }
+          if (hdrRolls.length) {
+            this.renderFixedRollButtons(this.els.sheetHeaderFixedRow.querySelector('.hdr-fixed-rolls'), hdrRolls, tok);
+          }
+        } else {
+          this.els.sheetHeaderFixedRow.innerHTML = '';
+        }
+      }
+    }
+
+    const tabList = Selector.getSystemSheetTabs(state);
+    const validTabIds = new Set(tabList.map((t) => t.id));
+    const sheetTab = validTabIds.has(this.activeSheetTab) ? this.activeSheetTab : (tabList[0]?.id || 'attrs');
+    this.activeSheetTab = sheetTab;
+    const activeTabObj = tabList.find((t) => t.id === sheetTab) || tabList[0];
+    const isInvTab = activeTabObj?.mode === 'items';
+    const isFixedCustom = activeTabObj?.mode === 'fixed' && activeTabObj.id !== 'attrs';
+
     if (this.els.sheetTopTabs) {
-      this.els.sheetTopTabs.querySelectorAll('[data-sheet-tab]').forEach((btn) => {
-        btn.classList.toggle('is-active', btn.dataset.sheetTab === sheetTab);
-      });
+      this.els.sheetTopTabs.innerHTML = tabList
+        .map(
+          (t) =>
+            `<button type="button" data-sheet-tab="${t.id}" class="owl-seg-btn ${t.id === sheetTab ? 'is-active' : ''} truncate">${this.escapeHtml(t.label)}</button>`
+        )
+        .join('');
     }
     const panes = {
       attrs: this.els.sheetPaneAttrs,
+      custom: this.els.sheetPaneCustom,
       skills: this.els.sheetPaneSkills,
       traits: this.els.sheetPaneTraits,
       inv: this.els.sheetPaneInv
     };
-    const activePaneKey = isInvTab ? 'inv' : sheetTab;
+    const activePaneKey = isInvTab ? 'inv' : isFixedCustom ? 'custom' : activeTabObj?.mode === 'preset_skills' ? 'skills' : activeTabObj?.mode === 'preset_traits' ? 'traits' : 'attrs';
     Object.entries(panes).forEach(([key, el]) => {
       if (!el) return;
       el.classList.toggle('hidden', key !== activePaneKey);
       el.classList.toggle('flex', key === activePaneKey);
     });
 
-    const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const populateFixedPane = (paneEl, targetTabObj) => {
+      if (!paneEl || !targetTabObj) return;
+      if (hasBlocks) {
+        const tabBlocks = sysBlocks.filter((b) => (b.tabId || 'attrs') === targetTabObj.id);
+        if (targetTabObj.id === 'attrs') {
+          this.els.sheetStatsGrid.classList.add('hidden');
+          this.els.sheetStatsGrid.innerHTML = '';
+          let blkWrap = paneEl.querySelector('.sheet-attrs-extras');
+          if (!blkWrap) {
+            blkWrap = document.createElement('div');
+            blkWrap.className = 'sheet-attrs-extras flex flex-col gap-1.5';
+            paneEl.appendChild(blkWrap);
+          }
+          this.renderSheetBlocksInto(blkWrap, tabBlocks, tok, sysCfg, { sumTotal: targetTabObj.sumTotal });
+        } else {
+          this.renderSheetBlocksInto(paneEl, tabBlocks, tok, sysCfg, { sumTotal: targetTabObj.sumTotal });
+        }
+        return;
+      }
+      if (targetTabObj.id === 'attrs') this.els.sheetStatsGrid.classList.remove('hidden');
+      const tabAttrs = attrDefs.filter((s) => (s.tabId || 'attrs') === targetTabObj.id);
+      const tabRolls = fixedRolls.filter((r) => r.tabId === targetTabObj.id);
+      const tabResources = (Array.isArray(tok.resources) ? tok.resources : []).filter((res) => {
+        const def = sysResByKey.get(Selector.normalizeStatKey(res.name));
+        return def && def.tabId === targetTabObj.id;
+      });
+      const tabSum = tabAttrs.reduce((acc, s) => acc + (Number(stats[s.key]) || 0), 0);
+
+      let statsContainer = targetTabObj.id === 'attrs' ? this.els.sheetStatsGrid : paneEl.querySelector('.sheet-fixed-stats');
+      if (targetTabObj.id === 'attrs') {
+        this.renderStatCardsInto(statsContainer, tabAttrs, tok, sysCfg, showScores, pb);
+        let extraWrap = paneEl.querySelector('.sheet-attrs-extras');
+        if (!extraWrap) {
+          extraWrap = document.createElement('div');
+          extraWrap.className = 'sheet-attrs-extras flex flex-col gap-1.5';
+          paneEl.appendChild(extraWrap);
+        }
+        extraWrap.innerHTML = `
+          ${tabResources.length ? '<div class="sheet-fixed-res grid grid-cols-2 gap-1.5"></div>' : ''}
+          ${tabRolls.length ? '<div class="sheet-fixed-rolls grid grid-cols-2 gap-1.5"></div>' : ''}
+          ${targetTabObj.sumTotal ? `<div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px]"><span class="opacity-70 font-medium">Σ Suma total</span><strong class="font-bold tabular-nums text-xs">${tabSum}</strong></div>` : ''}
+        `;
+        if (tabResources.length) this.renderResourceCardsInto(extraWrap.querySelector('.sheet-fixed-res'), tabResources, tok, sysResByKey);
+        if (tabRolls.length) this.renderFixedRollButtons(extraWrap.querySelector('.sheet-fixed-rolls'), tabRolls, tok);
+      } else {
+        paneEl.innerHTML = `
+          ${tabAttrs.length ? '<div class="sheet-fixed-stats grid grid-cols-3 gap-1.5 text-center"></div>' : ''}
+          ${tabResources.length ? '<div class="sheet-fixed-res grid grid-cols-2 gap-1.5"></div>' : ''}
+          ${tabRolls.length ? '<div class="sheet-fixed-rolls grid grid-cols-2 gap-1.5"></div>' : ''}
+          ${
+            !tabAttrs.length && !tabResources.length && !tabRolls.length
+              ? '<div class="text-[10px] opacity-55 text-center py-3">Sin campos asignados desde Opciones → Sistema.</div>'
+              : ''
+          }
+          ${
+            targetTabObj.sumTotal
+              ? `<div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px] mt-auto">
+                  <span class="opacity-70 font-medium">Σ Suma total</span>
+                  <strong class="font-bold tabular-nums text-xs">${tabSum}</strong>
+                </div>`
+              : ''
+          }
+        `;
+        if (tabAttrs.length) this.renderStatCardsInto(paneEl.querySelector('.sheet-fixed-stats'), tabAttrs, tok, sysCfg, showScores, pb);
+        if (tabResources.length) this.renderResourceCardsInto(paneEl.querySelector('.sheet-fixed-res'), tabResources, tok, sysResByKey);
+        if (tabRolls.length) this.renderFixedRollButtons(paneEl.querySelector('.sheet-fixed-rolls'), tabRolls, tok);
+      }
+    };
+
+    if (activeTabObj?.id === 'attrs') {
+      populateFixedPane(this.els.sheetPaneAttrs, activeTabObj);
+    } else if (isFixedCustom) {
+      populateFixedPane(this.els.sheetPaneCustom, activeTabObj);
+    }
+
+    const esc = (s) => this.escapeHtml(s);
 
     if (this.els.sheetSkillsList) {
       const skills = Array.isArray(tok.skills) ? tok.skills : [];
@@ -303,8 +478,7 @@ export const SheetViewMethods = {
         btn.addEventListener('click', () => {
           const sk = (tok.skills || []).find((x) => x.id === btn.dataset.rollSkill);
           if (!sk) return;
-          Service.state.dice.modifier = getSkillTotal(sk);
-          Service.rollDice(20, `${tok.name} · ${sk.name}`);
+          Service.rollSheetCheck(tok, `${tok.name} · ${sk.name}`, getSkillTotal(sk));
         });
       });
 
@@ -315,10 +489,9 @@ export const SheetViewMethods = {
         this.openListContextMenu(cx, cy, sk.name, 'Habilidad', [
           {
             icon: '🎲',
-            label: `Tirar 1d20 ${tot >= 0 ? `+${tot}` : tot}`,
+            label: `Tirar ${sysCfg.rollFormula || '1d20+@stat'} (${tot >= 0 ? `+${tot}` : tot})`,
             onClick: () => {
-              Service.state.dice.modifier = tot;
-              Service.rollDice(20, `${tok.name} · ${sk.name}`);
+              Service.rollSheetCheck(tok, `${tok.name} · ${sk.name}`, tot);
             }
           },
           {
@@ -400,117 +573,6 @@ export const SheetViewMethods = {
       });
     }
 
-    const inv = Array.isArray(tok.inventory) ? tok.inventory : [];
-    const activeInv = isInvTab ? sheetTab : 'equipment';
-    const visibleInv = inv.filter((item) => this.getItemCategory(item.kind) === activeInv);
-    this.els.sheetInventoryList.innerHTML = visibleInv.length
-      ? visibleInv
-          .map(
-            (item) => `
-          <div
-            draggable="true"
-            data-inv-uid="${item.uid}"
-            class="group owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
-          >
-            <div class="min-w-0 pl-0.5">
-              <div class="font-semibold text-xs truncate">${item.name}</div>
-              <div class="text-[10px] opacity-65 truncate">${item.badge || ''}</div>
-            </div>
-            <div class="flex items-center gap-1.5 flex-shrink-0">
-              <button type="button" data-inv-menu="${item.uid}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones">
-                <span class="text-xs leading-none">⋯</span>
-              </button>
-              ${this.renderItemIconBadge(item, { interactive: true })}
-            </div>
-          </div>
-        `
-          )
-          .join('')
-      : `<div class="text-[11px] opacity-55 text-center py-6 px-2">Arrastra armas, escudos o pociones desde el Compendio.</div>`;
-
-    const openInvMenu = (uid, cx, cy) => {
-      const item = visibleInv.find((x) => x.uid === uid);
-      if (!item) return;
-      this.openListContextMenu(cx, cy, item.name, item.badge || 'Objeto', [
-        {
-          icon: '⚡',
-          label: 'Usar / Tirar',
-          onClick: () => {
-            const msg = Service.useTokenInventoryItem(tok.id, item.uid);
-            if (msg) this.showActionToast(msg);
-          }
-        },
-        {
-          icon: '🗑️',
-          label: 'Quitar del inventario',
-          danger: true,
-          onClick: () => Service.removeTokenInventoryItem(tok.id, item.uid)
-        }
-      ]);
-    };
-
-    this.els.sheetInventoryList.querySelectorAll('[data-inv-uid]').forEach((row) => {
-      const uid = row.dataset.invUid;
-      row.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openInvMenu(uid, e.clientX, e.clientY);
-      });
-      row.addEventListener('dragstart', (e) => {
-        this.draggingInvUid = uid;
-        row.classList.add('opacity-50');
-        if (e.dataTransfer) {
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', `inv:${uid}`);
-        }
-      });
-      row.addEventListener('dragend', () => {
-        this.draggingInvUid = null;
-        row.classList.remove('opacity-50');
-        this.els.sheetInventoryList.querySelectorAll('[data-inv-uid]').forEach((r) => {
-          r.style.borderTop = '';
-          r.style.borderBottom = '';
-        });
-      });
-      row.addEventListener('dragover', (e) => {
-        if (!this.draggingInvUid || this.draggingInvUid === uid) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const rect = row.getBoundingClientRect();
-        const after = e.clientY >= rect.top + rect.height / 2;
-        row.style.borderTop = after ? '' : '2px solid var(--accent-primary)';
-        row.style.borderBottom = after ? '2px solid var(--accent-primary)' : '';
-      });
-      row.addEventListener('dragleave', () => {
-        row.style.borderTop = '';
-        row.style.borderBottom = '';
-      });
-      row.addEventListener('drop', (e) => {
-        if (!this.draggingInvUid || this.draggingInvUid === uid) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const rect = row.getBoundingClientRect();
-        const after = e.clientY >= rect.top + rect.height / 2;
-        const sourceUid = this.draggingInvUid;
-        this.draggingInvUid = null;
-        row.style.borderTop = '';
-        row.style.borderBottom = '';
-        Service.reorderTokenInventoryItem(tok.id, sourceUid, uid, after);
-      });
-    });
-
-    this.els.sheetInventoryList.querySelectorAll('[data-use-inv]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const msg = Service.useTokenInventoryItem(tok.id, btn.dataset.useInv);
-        if (msg) this.showActionToast(msg);
-      });
-    });
-    this.els.sheetInventoryList.querySelectorAll('[data-inv-menu]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const r = btn.getBoundingClientRect();
-        openInvMenu(btn.dataset.invMenu, r.right, r.bottom + 4);
-      });
-    });
+    this.renderSheetInventory(tok, sheetTab, isInvTab);
   }
 };

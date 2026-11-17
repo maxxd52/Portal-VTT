@@ -1,4 +1,4 @@
-import { BrowserVault } from './browserVault.js?v=20261116b';
+import { BrowserVault } from './browserVault.js?v=20261116z39';
 import { CartridgePacker } from './cartridgePacker.js';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
 
@@ -60,13 +60,26 @@ export const CompendiumServiceMethods = {
     const acBonus = Number(tpl.acBonus) || 0;
     const heal = Number(tpl.heal) || 0;
     const lightRadius = Number(tpl.lightRadius) || 0;
-    const statTarget = String(tpl.statTarget || (acBonus > 0 ? 'ac' : 'ac'));
-    const statBonus = Number(tpl.statBonus !== undefined ? tpl.statBonus : acBonus) || 0;
+    const passives = Array.isArray(tpl.passives)
+      ? tpl.passives.filter((p) => p && p.target && (Number(p.value) || 0) !== 0).map((p) => ({
+          target: String(p.target),
+          value: Number(p.value) || 0
+        }))
+      : [];
+    const steps = Array.isArray(tpl.steps) ? JSON.parse(JSON.stringify(tpl.steps)) : [];
+    const firstPassive = passives[0];
+    const statTarget = firstPassive ? firstPassive.target : String(tpl.statTarget || (acBonus > 0 ? 'ac' : 'ac'));
+    const statBonus = firstPassive ? firstPassive.value : (Number(tpl.statBonus !== undefined ? tpl.statBonus : acBonus) || 0);
     const targetLabels = { ac: 'CA', str: 'FUE', dex: 'DES', con: 'CON', int: 'INT', wis: 'SAB', cha: 'CAR', maxHp: 'HP' };
     let badge = String(tpl.badge || '').trim();
     if (!badge) {
-      if (tpl.formula) badge = String(tpl.formula).trim();
-      else if ((kind === 'armor' || kind === 'equipment') && statBonus !== 0) {
+      if (steps.length > 1) badge = `${steps.length} pasos`;
+      else if (steps.length === 1 && steps[0].type === 'roll' && steps[0].formula) badge = steps[0].formula;
+      else if (tpl.formula) badge = String(tpl.formula).trim();
+      else if (passives.length > 0) {
+        const lbl = targetLabels[firstPassive.target] || firstPassive.target.toUpperCase();
+        badge = `${firstPassive.value >= 0 ? '+' : ''}${firstPassive.value} ${lbl}`;
+      } else if ((kind === 'armor' || kind === 'equipment') && statBonus !== 0) {
         badge = `${statBonus >= 0 ? '+' : ''}${statBonus} ${targetLabels[statTarget] || 'CA'}`;
       } else if (kind === 'consumable' && heal > 0) badge = `Cura +${heal} HP`;
       else if (kind === 'light') badge = `Luz +${Math.max(1, Math.round((lightRadius || 320) / 80))} cas`;
@@ -86,10 +99,12 @@ export const CompendiumServiceMethods = {
       bonusMod,
       die: Math.max(0, die),
       statTarget,
-      statBonus: kind === 'armor' || kind === 'equipment' ? statBonus : 0,
+      statBonus: kind === 'armor' || kind === 'equipment' || passives.length > 0 ? statBonus : 0,
       acBonus: (kind === 'armor' || kind === 'equipment') && statTarget === 'ac' ? statBonus : 0,
       heal: kind === 'consumable' ? heal : 0,
       lightRadius: kind === 'light' ? lightRadius || 320 : 0,
+      passives: passives.length > 0 ? passives : undefined,
+      steps: steps.length > 0 ? steps : undefined,
       icon: String(tpl.icon || '').trim(),
       color: tpl.color || '#8b5cf6'
     };

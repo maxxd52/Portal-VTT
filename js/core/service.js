@@ -2,15 +2,17 @@
    SERVICE: LÓGICA DE NEGOCIO, MUTACIONES Y SINCRONIZACIÓN
    ========================================================================== */
 
-import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116b';
-import { BrowserVault } from '../services/browserVault.js?v=20261116b';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116b';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261116b';
+import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116z39';
+import { BrowserVault } from '../services/browserVault.js?v=20261116z39';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116z39';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261116z39';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261116b';
+import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261116z39';
+import { SystemServiceMethods } from '../services/systemService.js?v=20261116z39';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261116z39';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { createInitialState, generateRoomCode } from './model.js?v=20261116b';
-import { Selector } from './selector.js?v=20261116b';
+import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261116z39';
+import { Selector } from './selector.js?v=20261116z39';
 
 const getOrCreateClientId = () => {
   try {
@@ -36,6 +38,8 @@ export const Service = {
 
   ...CompendiumServiceMethods,
   ...DiceServiceMethods,
+  ...SequenceServiceMethods,
+  ...SystemServiceMethods,
   ...TokenServiceMethods,
 
   captureSnapshot() {
@@ -177,7 +181,9 @@ export const Service = {
     const code = generateRoomCode();
     const next = createInitialState();
     next.role = 'gm';
-    next.ruleset = ruleset === 'free' ? 'free' : 'dnd55';
+    const presetKey = SYSTEM_PRESETS[ruleset] ? ruleset : 'dnd55';
+    next.ruleset = presetKey === 'dnd55' ? 'dnd55' : 'free';
+    this.applySystemPreset(presetKey, next);
     next.room.code = code;
     next.room.moduleTitle = String(title || '').trim() || `Portal ${code}`;
     next.dynamicLighting = Boolean(dynamicLighting);
@@ -236,6 +242,33 @@ export const Service = {
     if (!world) return;
     if (world.moduleTitle) this.state.room.moduleTitle = world.moduleTitle;
     if (world.ruleset) this.state.ruleset = world.ruleset;
+    if (world.systemConfig && typeof world.systemConfig === 'object') {
+      const curCfg = this.state.systemConfig || {};
+      this.state.systemConfig = {
+        ...curCfg,
+        ...world.systemConfig,
+        enabledTabs: {
+          ...(curCfg.enabledTabs || { skills: true, traits: true, inventory: true }),
+          ...(world.systemConfig.enabledTabs || {})
+        },
+        customTabs: Array.isArray(world.systemConfig.customTabs) ? world.systemConfig.customTabs : [],
+        sheetTabs: Array.isArray(world.systemConfig.sheetTabs) ? world.systemConfig.sheetTabs : null,
+        sheetBlocks: Array.isArray(world.systemConfig.sheetBlocks) ? world.systemConfig.sheetBlocks : null,
+        fixedRolls: Array.isArray(world.systemConfig.fixedRolls) ? world.systemConfig.fixedRolls : [],
+        resourceSchema: Array.isArray(world.systemConfig.resourceSchema) ? world.systemConfig.resourceSchema : [],
+        statusesSchema: Array.isArray(world.systemConfig.statusesSchema) ? world.systemConfig.statusesSchema : null
+      };
+      if (this.state.dice) {
+        if (this.state.systemConfig.resultMode) this.state.dice.resultMode = this.state.systemConfig.resultMode;
+        if (this.state.systemConfig.successThreshold) this.state.dice.successThreshold = this.state.systemConfig.successThreshold;
+      }
+    }
+    if (Array.isArray(world.sheetSchema) && world.sheetSchema.length > 0) {
+      this.state.sheetSchema = world.sheetSchema;
+    }
+    if (this.state.systemConfig?.preset === 'free' && !Array.isArray(this.state.systemConfig.sheetBlocks)) {
+      this.ensureGenericBlocksInitialized(true);
+    }
     if (world.mapId) this.state.mapId = world.mapId;
     if (world.activeMapKey) this.state.activeMapKey = world.activeMapKey;
     if (world.mapGrids && typeof world.mapGrids === 'object') this.state.mapGrids = world.mapGrids;
@@ -489,13 +522,37 @@ export const Service = {
     this.notify();
   },
 
+  getSystemInitiativeFormula() {
+    const cfg = this.state.systemConfig || {};
+    const f = String(cfg.initiativeFormula ?? '').trim();
+    if (f) return f;
+    return cfg.preset === 'free' ? '1d20+@agi' : '1d20+@des';
+  },
+
+  rollTokenInitiative(tok) {
+    if (!tok) return null;
+    const formula = this.getSystemInitiativeFormula();
+    const roll = this.rollFormula(formula, tok, `${tok.name} · Iniciativa`);
+    if (roll && this.state.combat?.active && this.state.systemConfig?.autoInitiative !== false) {
+      this.setTokenInitiative(tok.id, roll.total, roll.isDeckRoll ? roll.headline : '');
+    }
+    return roll;
+  },
+
   startCombat() {
     const visibleTokens = (this.state.tokens || []).filter((t) => !t.hidden || this.state.role === 'gm');
+    const cfg = this.state.systemConfig || {};
+    const mode = cfg.initiativeMode === 'manual' ? 'manual' : 'auto';
+    const formula = this.getSystemInitiativeFormula();
     const order = visibleTokens
       .map((t) => {
-        const dex = Number(t.stats?.dex) || 0;
-        const init = Math.floor(Math.random() * 20) + 1 + dex;
-        return { tokenId: t.id, init };
+        if (mode === 'manual') return { tokenId: t.id, init: 0 };
+        const res = typeof this.rollFormula === 'function'
+          ? this.rollFormula(formula, t, `${t.name} · Iniciativa`, '', { silent: true })
+          : { total: Math.floor(Math.random() * 20) + 1 + (Number(t.stats?.dex) || 0), isDeckRoll: false, headline: '' };
+        const entry = { tokenId: t.id, init: Number(res?.total) || 0 };
+        if (res?.isDeckRoll && res.headline) entry.label = res.headline;
+        return entry;
       })
       .sort((a, b) => b.init - a.init);
     this.state.combat = {
@@ -505,7 +562,7 @@ export const Service = {
       order
     };
     if (order[0]) this.state.selectedTokenId = order[0].tokenId;
-    this.recordEvent('COMBATE', 'Combate iniciado');
+    this.recordEvent('COMBATE', mode === 'manual' ? 'Combate iniciado (iniciativa manual)' : 'Combate iniciado');
     this.notify();
   },
 
@@ -525,13 +582,20 @@ export const Service = {
     this.notify();
   },
 
-  setTokenInitiative(tokenId, initVal) {
+  setTokenInitiative(tokenId, initVal, displayLabel = '') {
     const c = this.state.combat;
     if (!c || !c.active) return;
     const init = Number(initVal) || 0;
     const existing = c.order.find((o) => o.tokenId === tokenId);
-    if (existing) existing.init = init;
-    else c.order.push({ tokenId, init });
+    if (existing) {
+      existing.init = init;
+      if (displayLabel) existing.label = displayLabel;
+      else delete existing.label;
+    } else {
+      const entry = { tokenId, init };
+      if (displayLabel) entry.label = displayLabel;
+      c.order.push(entry);
+    }
     c.order.sort((a, b) => b.init - a.init);
     this.notify();
   },

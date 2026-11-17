@@ -110,7 +110,7 @@ export const BrowserVault = {
                     res({
                       code,
                       title: world?.moduleTitle || code,
-                      ruleset: world?.ruleset || 'dnd55',
+                      ruleset: world?.systemConfig?.preset || world?.ruleset || 'dnd55',
                       tokenCount: Array.isArray(world?.tokens) ? world.tokens.length : 0,
                       mapId: world?.mapId || 'bastion'
                     });

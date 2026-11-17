@@ -2,24 +2,33 @@
    DICE VIEW: DOCK, HISTORIAL, OVERLAY 3D Y PERSONALIZACIÓN DE DADOS
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261116b';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261113b';
+import { Selector } from '../core/selector.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z39';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261116z39';
 
 export const DiceViewMethods = {
   bindDiceEvents() {
+    const parseDieKey = (raw) => (raw === 'fudge' || raw === 'card' ? raw : Number(raw));
     this.els.diceTrayBar.addEventListener('click', (e) => {
       const dieBtn = e.target.closest('[data-die]');
       if (dieBtn) {
-        Service.addDieToHand(Number(dieBtn.dataset.die));
+        Service.addDieToHand(parseDieKey(dieBtn.dataset.die));
       }
     });
     this.els.diceTrayBar.addEventListener('contextmenu', (e) => {
       const dieBtn = e.target.closest('[data-die]');
       if (dieBtn) {
         e.preventDefault();
-        Service.removeDieFromHand(Number(dieBtn.dataset.die));
+        Service.removeDieFromHand(parseDieKey(dieBtn.dataset.die));
       }
     });
+    const shuffleBtn = this.els.btnDiceShuffleDeck || document.getElementById('btnDiceShuffleDeck');
+    if (shuffleBtn) {
+      shuffleBtn.addEventListener('click', () => {
+        Service.shuffleDeck();
+        if (typeof this.showActionToast === 'function') this.showActionToast('🔀 Baraja mezclada (54/54)');
+      });
+    }
     window.addEventListener('pointermove', (e) => {
       if (this.els.diceHandCursor && Array.isArray(Service.state.dice.hand) && Service.state.dice.hand.length > 0) {
         const tx = Math.min(window.innerWidth - 76, e.clientX + 14);
@@ -42,6 +51,11 @@ export const DiceViewMethods = {
         });
       });
     }
+    if (this.els.inpDiceThreshold) {
+      this.els.inpDiceThreshold.addEventListener('change', (e) => {
+        Service.setDiceSuccessThreshold(e.target.value);
+      });
+    }
     if (this.els.diceVisibilitySeg) {
       this.els.diceVisibilitySeg.querySelectorAll('[data-dice-vis]').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -53,6 +67,9 @@ export const DiceViewMethods = {
       this.dismissedRoll = Service.state.dice.lastRoll || null;
       this.els.dice3dOverlay.classList.remove('is-open');
       Dice3DEngine.clear();
+      if (Service.state.activeSequence || Service.state.activeRollRequest) {
+        Service.clearActiveSequence();
+      }
     });
 
     const applyDiceRollToSelected = (multiplier, isHeal) => {
@@ -73,6 +90,9 @@ export const DiceViewMethods = {
       this.dismissedRoll = Service.state.dice.lastRoll || null;
       this.els.dice3dOverlay?.classList.remove('is-open');
       Dice3DEngine.clear();
+      if (Service.state.activeSequence || Service.state.activeRollRequest) {
+        Service.clearActiveSequence();
+      }
     };
     this.setDicePopoverOpen = (open) => {
       if (!this.els.diceStylePopover) return;
@@ -292,10 +312,13 @@ export const DiceViewMethods = {
 
     for (const entry of entries) {
       const row = document.createElement('div');
-      row.className = 'owl-subpanel rounded-xl px-2.5 py-2 flex items-center justify-between gap-2';
+      row.className = 'owl-subpanel rounded-xl px-2.5 py-2 flex flex-col gap-1.5 cursor-pointer transition-colors hover:bg-white/5';
+
+      const summaryLine = document.createElement('div');
+      summaryLine.className = 'flex items-center justify-between gap-2 min-w-0';
 
       const left = document.createElement('div');
-      left.className = 'min-w-0 flex flex-col gap-0.5';
+      left.className = 'flex-1 min-w-0 flex flex-col gap-0.5';
 
       const titleLine = document.createElement('div');
       titleLine.className = 'flex items-center gap-1.5 min-w-0';
@@ -331,15 +354,58 @@ export const DiceViewMethods = {
       detail.textContent = detailParts.join(' · ');
       left.appendChild(detail);
 
+      const rightWrap = document.createElement('div');
+      rightWrap.className = 'flex items-center gap-1.5 shrink-0 max-w-[112px]';
+
       const total = document.createElement('span');
       let totalTone = '';
       if (entry.isCrit) totalTone = 'text-emerald-400';
       else if (entry.isFumble) totalTone = 'text-rose-400';
-      total.className = `font-mono-tech font-bold text-sm tabular-nums shrink-0 ${totalTone}`;
+      total.className = `font-mono-tech font-bold text-sm tabular-nums truncate ${totalTone}`;
       total.textContent = entry.headline || String(entry.total ?? entry.chosen ?? '');
 
-      row.appendChild(left);
-      row.appendChild(total);
+      const chevron = document.createElement('span');
+      chevron.className = 'text-[9px] opacity-45 shrink-0 transition-transform';
+      chevron.textContent = '▾';
+
+      rightWrap.appendChild(total);
+      rightWrap.appendChild(chevron);
+
+      summaryLine.appendChild(left);
+      summaryLine.appendChild(rightWrap);
+      row.appendChild(summaryLine);
+
+      const expandedBox = document.createElement('div');
+      expandedBox.className = 'hidden flex-col gap-1 pt-1.5 border-t text-[10.5px] leading-snug';
+      expandedBox.style.borderColor = 'var(--hairline)';
+
+      const fullTitle = document.createElement('div');
+      fullTitle.className = 'font-semibold break-words';
+      fullTitle.textContent = entry.label || `1d${entry.sides || 20}`;
+      expandedBox.appendChild(fullTitle);
+
+      const fullRoll = document.createElement('div');
+      fullRoll.className = 'font-mono-tech opacity-80 break-words';
+      const modeTag = entry.resultMode === 'each' ? 'c/u · ' : entry.resultMode === 'max' ? 'Mayor · ' : entry.resultMode === 'min' ? 'Menor · ' : '';
+      const critTag = entry.isCrit ? ' · Crítico' : entry.isFumble ? ' · Pifia' : '';
+      fullRoll.textContent = `${modeTag}[${diceValues.join(', ')}]${modStr} → ${entry.headline || String(entry.total ?? entry.chosen ?? '')}${critTag}`;
+      expandedBox.appendChild(fullRoll);
+
+      if (entry.message) {
+        const fullMsg = document.createElement('p');
+        fullMsg.className = 'opacity-85 whitespace-pre-wrap break-words';
+        fullMsg.textContent = entry.message;
+        expandedBox.appendChild(fullMsg);
+      }
+
+      row.appendChild(expandedBox);
+      row.addEventListener('click', () => {
+        const isHidden = expandedBox.classList.contains('hidden');
+        expandedBox.classList.toggle('hidden', !isHidden);
+        expandedBox.classList.toggle('flex', isHidden);
+        chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
+      });
+
       listEl.appendChild(row);
     }
   },
@@ -349,11 +415,25 @@ export const DiceViewMethods = {
     this.els.lblDiceMod.textContent = mod >= 0 ? `+${mod}` : `${mod}`;
     this.els.lblDiceMod.style.color = mod !== 0 ? 'var(--accent-primary)' : '';
 
-    const activeMode = state.dice.resultMode || 'sum';
+    const allowedModes = Selector.getSystemResultModes(state);
+    const allowedSet = new Set(allowedModes);
+    const activeMode = allowedSet.has(state.dice.resultMode) ? state.dice.resultMode : allowedModes[0];
     if (this.els.diceResultSeg) {
+      this.els.diceResultSeg.classList.toggle('hidden', allowedModes.length <= 1);
+      this.els.diceResultSeg.style.gridTemplateColumns = `repeat(${Math.max(1, allowedModes.length)}, minmax(0, 1fr))`;
       this.els.diceResultSeg.querySelectorAll('[data-result-mode]').forEach((btn) => {
+        const enabled = allowedSet.has(btn.dataset.resultMode);
+        btn.classList.toggle('hidden', !enabled);
         btn.classList.toggle('is-active', btn.dataset.resultMode === activeMode);
       });
+    }
+    if (this.els.diceThresholdWrap) {
+      const isSuccess = activeMode === 'success';
+      this.els.diceThresholdWrap.classList.toggle('hidden', !isSuccess);
+      this.els.diceThresholdWrap.classList.toggle('flex', isSuccess);
+    }
+    if (this.els.inpDiceThreshold && document.activeElement !== this.els.inpDiceThreshold) {
+      this.els.inpDiceThreshold.value = String(state.dice.successThreshold || 6);
     }
 
     const activeVis = state.dice.visibility || 'public';
@@ -380,13 +460,23 @@ export const DiceViewMethods = {
       handCounts.set(sides, (handCounts.get(sides) || 0) + 1);
     }
     if (this.els.diceTrayBar) {
+      const trayTools = Selector.getSystemTrayTools(state);
+      const allowedDice = new Set(trayTools.dice);
       for (const btn of this.els.diceTrayBar.querySelectorAll('[data-die]')) {
-        const count = handCounts.get(Number(btn.dataset.die)) || 0;
+        if (!btn.dataset.trayExtra) {
+          btn.classList.toggle('hidden', !allowedDice.has(String(btn.dataset.die)));
+        }
+        const dieKey = btn.dataset.die === 'fudge' || btn.dataset.die === 'card' ? btn.dataset.die : Number(btn.dataset.die);
+        const count = handCounts.get(dieKey) || 0;
         if (count > 0) {
           btn.dataset.count = String(count);
         } else {
           delete btn.dataset.count;
         }
+      }
+      for (const btn of this.els.diceTrayBar.querySelectorAll('[data-tray-extra]')) {
+        const key = btn.dataset.trayExtra;
+        btn.classList.toggle('hidden', !trayTools[key]);
       }
     }
     if (this.els.diceHandCursor) {
@@ -402,20 +492,73 @@ export const DiceViewMethods = {
       }
     }
 
+    const seq = state.activeSequence;
+    if (seq && seq.mode !== 'roll') {
+      const curStep = Array.isArray(seq.steps) && seq.currentIndex >= 0 ? seq.steps[seq.currentIndex] : null;
+      const modeTitle = curStep ? curStep.label || seq.itemName : seq.itemName;
+      const prefix = seq.casterName ? `${seq.casterName} · ` : '';
+      this.els.lblDiceFormula.textContent = `${prefix}${modeTitle}`;
+      if (this.els.lblDiceBadge) {
+        const shapeNames = { circle: 'Círculo', cube: 'Cubo', cone: 'Cono', line: 'Línea', targets: 'Objetivos' };
+        const badgeLbl = seq.mode === 'area'
+          ? shapeNames[state.areaSelectConfig?.shape || curStep?.shape] || 'Área'
+          : seq.mode === 'save_request'
+            ? 'Solicitud'
+            : seq.mode === 'apply_hp'
+              ? 'Aplicar'
+              : 'Efecto';
+        this.els.lblDiceBadge.className = 'owl-roll-pill shrink-0';
+        this.els.lblDiceBadge.textContent = badgeLbl;
+      }
+      this.els.lblDiceTotal.classList.add('hidden');
+      this.els.lblDiceDetail.classList.add('hidden');
+      if (this.els.diceRollChips) {
+        this.els.diceRollChips.classList.add('hidden');
+        this.els.diceRollChips.classList.remove('flex');
+      }
+      if (this.els.diceRollActions) {
+        this.els.diceRollActions.classList.add('hidden');
+        this.els.diceRollActions.classList.remove('flex');
+      }
+      if (this.els.lblDiceMessage) {
+        const msgText = String(seq.stepMessage || seq.itemMessage || '').trim();
+        this.els.lblDiceMessage.textContent = msgText;
+        this.els.lblDiceMessage.classList.toggle('hidden', !msgText);
+      }
+      this.els.dice3dOverlay.style.setProperty('--roll-glow', 'rgba(139, 92, 246, 0.22)');
+      this.els.dice3dOverlay.classList.add('is-open');
+      return;
+    }
+
     const roll = state.dice.lastRoll;
     if (!roll) return;
+    this.els.lblDiceDetail.classList.remove('hidden');
     if (!Dice3DEngine.isFlying && roll !== this.dismissedRoll) {
       this.els.dice3dOverlay.classList.add('is-open');
     }
     const diceList = Array.isArray(roll.dice) && roll.dice.length > 0
       ? roll.dice
       : [{ sides: roll.sides, chosen: roll.chosen }];
-    const summary = Service.computeRollSummary(diceList, roll.mod, activeMode);
+    const rollMode = roll.resultMode || activeMode;
+    const rollThr = Number(roll.successThreshold) || Number(state.dice.successThreshold) || 6;
+    const summary = Service.computeRollSummary(diceList, roll.mod, rollMode, rollThr, { target: roll.target });
     this.currentRollTotal = Math.max(0, Number(summary.total) || 0);
     if (this.els.diceRollActions) {
-      const hasTarget = Boolean(state.selectedTokenId && this.currentRollTotal > 0);
-      this.els.diceRollActions.classList.toggle('hidden', !hasTarget);
-      this.els.diceRollActions.classList.toggle('flex', hasTarget);
+      this.els.diceRollActions.classList.add('hidden');
+      this.els.diceRollActions.classList.remove('flex');
+    }
+    const deckActionsEl = this.els.diceDeckActions || document.getElementById('diceDeckActions');
+    if (deckActionsEl) {
+      const showDeck = Boolean(roll.isDeckRoll);
+      deckActionsEl.classList.toggle('hidden', !showDeck);
+      deckActionsEl.classList.toggle('flex', showDeck);
+      const shuffleBtn = this.els.btnDiceShuffleDeck || document.getElementById('btnDiceShuffleDeck');
+      if (shuffleBtn && showDeck) {
+        const rem = Number.isFinite(Number(roll.deckRemaining))
+          ? Number(roll.deckRemaining)
+          : (state.deck?.cards?.length ?? 54);
+        shuffleBtn.textContent = `🔀 Barajar (${rem}/54)`;
+      }
     }
     const modTxt = roll.mod === 0 ? '' : roll.mod > 0 ? ` + ${roll.mod}` : ` − ${Math.abs(roll.mod)}`;
     this.els.lblDiceFormula.textContent = `${roll.label || '1d' + roll.sides}${modTxt}`;
@@ -426,17 +569,24 @@ export const DiceViewMethods = {
     }
 
     if (this.els.lblDiceBadge) {
-      const modeNames = { each: 'c/u', max: 'Mayor', min: 'Menor' };
+      const modeNames = { each: 'c/u', max: 'Mayor', min: 'Menor', success: `Éxitos ≥${rollThr}` };
       let badgeText = '';
       let badgeClass = 'owl-roll-pill';
       if (summary.isCrit) {
-        badgeText = 'Crítico';
+        badgeText = summary.critLabel || 'Crítico';
         badgeClass = 'owl-roll-pill is-crit';
       } else if (summary.isFumble) {
-        badgeText = 'Pifia';
+        badgeText = summary.fumbleLabel || 'Pifia';
         badgeClass = 'owl-roll-pill is-fumble';
-      } else if (modeNames[activeMode]) {
-        badgeText = modeNames[activeMode];
+      } else if (summary.outcomeTag) {
+        badgeText = summary.outcomeTag;
+        badgeClass = summary.outcomeTone === 'success'
+          ? 'owl-roll-pill is-crit'
+          : summary.outcomeTone === 'fail'
+            ? 'owl-roll-pill is-fumble'
+            : 'owl-roll-pill';
+      } else if (modeNames[rollMode]) {
+        badgeText = modeNames[rollMode];
       }
       if (roll.visibility === 'private') {
         const privLabel = roll.rollerRole === 'gm' ? 'Solo DJ' : 'Privada · DJ';
@@ -446,40 +596,39 @@ export const DiceViewMethods = {
       this.els.lblDiceBadge.textContent = badgeText;
     }
 
-    const glowColor = summary.isCrit
+    const isPositive = summary.isCrit || summary.outcomeTone === 'success';
+    const isNegative = summary.isFumble || summary.outcomeTone === 'fail';
+    const isPartial = summary.outcomeTone === 'partial';
+    const glowColor = isPositive
       ? 'rgba(16, 185, 129, 0.28)'
-      : summary.isFumble
+      : isNegative
         ? 'rgba(239, 68, 68, 0.28)'
-        : 'rgba(139, 92, 246, 0.22)';
+        : isPartial
+          ? 'rgba(245, 158, 11, 0.26)'
+          : 'rgba(139, 92, 246, 0.22)';
     this.els.dice3dOverlay.style.setProperty('--roll-glow', glowColor);
 
-    const isEachMulti = activeMode === 'each' && diceList.length > 1;
+    const isEachMulti = rollMode === 'each' && diceList.length > 1;
     this.els.lblDiceTotal.classList.toggle('hidden', isEachMulti);
     this.els.lblDiceTotal.textContent = summary.headline;
-    this.els.lblDiceTotal.style.color = summary.isCrit
+    this.els.lblDiceTotal.style.color = isPositive
       ? 'var(--crit-text)'
-      : summary.isFumble
+      : isNegative
         ? 'var(--fumble-text)'
-        : 'var(--text-primary)';
+        : isPartial
+          ? '#fbbf24'
+          : 'var(--text-primary)';
 
     if (this.els.diceRollChips) {
-      if (diceList.length > 1) {
-        const pickedIdx = activeMode === 'max'
-          ? diceList.reduce((best, d, i, arr) => (d.chosen > arr[best].chosen ? i : best), 0)
-          : activeMode === 'min'
-            ? diceList.reduce((best, d, i, arr) => (d.chosen < arr[best].chosen ? i : best), 0)
-            : -1;
+      if (isEachMulti) {
         this.els.diceRollChips.classList.remove('hidden');
         this.els.diceRollChips.classList.add('flex');
-        this.els.diceRollChips.innerHTML = diceList.map((d, i) => {
-          const val = isEachMulti ? d.chosen + roll.mod : d.chosen;
-          const cls = isEachMulti
-            ? 'owl-roll-chip is-hero'
-            : i === pickedIdx
-              ? 'owl-roll-chip is-picked'
-              : 'owl-roll-chip';
-          return `<span class="${cls}" title="d${d.sides}: ${d.chosen}">${val}</span>`;
-        }).join('');
+        this.els.diceRollChips.innerHTML = diceList
+          .map((d) => {
+            const val = d.chosen + roll.mod;
+            return `<span class="owl-roll-chip is-hero" title="d${d.sides}: ${d.chosen}">${val}</span>`;
+          })
+          .join('');
       } else {
         this.els.diceRollChips.classList.add('hidden');
         this.els.diceRollChips.classList.remove('flex');
@@ -487,7 +636,9 @@ export const DiceViewMethods = {
       }
     }
 
-    if (diceList.length === 1) {
+    if (rollMode === 'success') {
+      this.els.lblDiceDetail.textContent = summary.detail;
+    } else if (diceList.length === 1) {
       this.els.lblDiceDetail.textContent = roll.mod !== 0
         ? `Natural ${diceList[0].chosen}${modTxt}`
         : `Natural ${diceList[0].chosen}`;
@@ -496,9 +647,9 @@ export const DiceViewMethods = {
         ? `Base: ${diceList.map((d) => d.chosen).join(' · ')}`
         : `${diceList.length} dados individuales`;
     } else {
-      this.els.lblDiceDetail.textContent = activeMode === 'max'
+      this.els.lblDiceDetail.textContent = rollMode === 'max'
         ? `Mayor de ${diceList.length} dados`
-        : activeMode === 'min'
+        : rollMode === 'min'
           ? `Menor de ${diceList.length} dados`
           : `Suma de ${diceList.length} dados`;
     }

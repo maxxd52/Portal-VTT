@@ -237,6 +237,24 @@ export const Dice3DEngine = {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   },
 
+  computeGlyphPlacement(ctx, text, size, fontSize, sides) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const m = ctx.measureText(text);
+    const hasBox = m && typeof m.actualBoundingBoxAscent === 'number' && typeof m.actualBoundingBoxDescent === 'number';
+    const drawX = hasBox && typeof m.actualBoundingBoxLeft === 'number' && typeof m.actualBoundingBoxRight === 'number'
+      ? size / 2 + (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2
+      : size / 2;
+    const drawY = hasBox
+      ? size / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2
+      : size / 2 + fontSize * 0.34;
+    const showUnderline = (text === '6' || text === '9') && sides !== 6;
+    const underY = hasBox
+      ? drawY + m.actualBoundingBoxDescent + Math.max(2, Math.round(fontSize * 0.08))
+      : size / 2 + Math.round(fontSize * 0.44);
+    return { drawX, drawY, showUnderline, underY };
+  },
+
   getFaceTexture(label, styleOrColor, fontScale = 1, outerEdgesUV = null, sides = 6) {
     const style = typeof styleOrColor === 'string' ? { bodyColor: styleOrColor } : styleOrColor || {};
     const bgColorHex = style.bodyColor || '#8b5cf6';
@@ -320,20 +338,18 @@ export const Dice3DEngine = {
       ctx.fillText(text, size / 2, size / 2 + 1);
       ctx.restore();
     } else {
+      const { drawX, drawY, showUnderline, underY } = this.computeGlyphPlacement(ctx, text, size, fontSize, sides);
       ctx.lineWidth = Math.max(3, Math.round(4 * fontScale));
       ctx.strokeStyle = 'rgba(15, 23, 42, 0.72)';
-      ctx.strokeText(text, size / 2, size / 2 + 1);
+      ctx.strokeText(text, drawX, drawY);
 
       ctx.fillStyle = numberColor;
-      ctx.fillText(text, size / 2, size / 2 + 1);
-    }
+      ctx.fillText(text, drawX, drawY);
 
-    // Subrayado discreto para distinguir 6 y 9
-    if (text === '6' || text === '9') {
-      ctx.fillStyle = numberColor;
-      const underY = size / 2 + Math.round(fontSize * 0.54);
-      const underW = Math.round(fontSize * 0.46);
-      ctx.fillRect(size / 2 - underW / 2, underY, underW, Math.max(2, Math.round(2.5 * fontScale)));
+      if (showUnderline) {
+        const underW = Math.round(fontSize * 0.46);
+        ctx.fillRect(drawX - underW / 2, underY, underW, Math.max(2, Math.round(2.5 * fontScale)));
+      }
     }
 
     const texture = new window.THREE.CanvasTexture(canvas);
@@ -397,19 +413,17 @@ export const Dice3DEngine = {
       const baseSize = charUnits >= 3 ? 20 : charUnits === 2 ? 25 : 34;
       const fontSize = Math.round(baseSize * fontScale);
       ctx.font = `700 ${fontSize}px "JetBrains Mono", "Segoe UI Symbol", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      const { drawX, drawY, showUnderline, underY } = this.computeGlyphPlacement(ctx, text, size, fontSize, sides);
       ctx.lineJoin = 'round';
       ctx.lineWidth = Math.max(2, Math.round(2.5 * fontScale));
       ctx.strokeStyle = '#686868';
-      ctx.strokeText(text, size / 2, size / 2 + 1);
+      ctx.strokeText(text, drawX, drawY);
       ctx.fillStyle = '#343434';
-      ctx.fillText(text, size / 2, size / 2 + 1);
+      ctx.fillText(text, drawX, drawY);
 
-      if (text === '6' || text === '9') {
-        const underY = size / 2 + Math.round(fontSize * 0.54);
+      if (showUnderline) {
         const underW = Math.round(fontSize * 0.46);
-        ctx.fillRect(size / 2 - underW / 2, underY, underW, Math.max(2, Math.round(2.5 * fontScale)));
+        ctx.fillRect(drawX - underW / 2, underY, underW, Math.max(2, Math.round(2.5 * fontScale)));
       }
     }
 
@@ -612,15 +626,19 @@ export const Dice3DEngine = {
       const n = face.normal;
 
       const centroid = new THREE.Vector3();
+      const seenVerts = new Set();
       let vertTotal = 0;
       for (const t of face.triIndices) {
         for (let k = 0; k < 3; k++) {
           vA.fromBufferAttribute(posAttr, t * 3 + k);
+          const vKey = `${vA.x.toFixed(3)},${vA.y.toFixed(3)},${vA.z.toFixed(3)}`;
+          if (seenVerts.has(vKey)) continue;
+          seenVerts.add(vKey);
           centroid.add(vA);
           vertTotal += 1;
         }
       }
-      centroid.divideScalar(vertTotal);
+      centroid.divideScalar(Math.max(1, vertTotal));
 
       // Alinear vAxis con la simetría propia de la cara (arista en d6, vértice/ápice en el resto)
       const vAxis = new THREE.Vector3();
@@ -766,6 +784,171 @@ export const Dice3DEngine = {
     };
   },
 
+  buildCoinDie(styleOrColor, isHeads = true) {
+    const THREE = window.THREE;
+    const styleObj = typeof styleOrColor === 'string'
+      ? { bodyColor: styleOrColor, numberColor: '#ffffff' }
+      : { ...(styleOrColor || {}) };
+    const geom = new THREE.CylinderGeometry(1.18, 1.18, 0.22, 32);
+    const bodyHex = styleObj.bodyColor || '#8b5cf6';
+    const bevelSize = styleObj.bevelSize !== undefined ? Number(styleObj.bevelSize) : 1;
+    const coinEdgesUV = Array.from({ length: 32 }, (_, i) => {
+      const a1 = (i / 32) * Math.PI * 2;
+      const a2 = ((i + 1) / 32) * Math.PI * 2;
+      return [
+        [0.5 + Math.cos(a1) * 0.485, 0.5 + Math.sin(a1) * 0.485],
+        [0.5 + Math.cos(a2) * 0.485, 0.5 + Math.sin(a2) * 0.485]
+      ];
+    });
+
+    const makeFaceMat = (symbol, active) => {
+      const tex = this.getFaceTexture(symbol, styleObj, 1.5, coinEdgesUV, 2);
+      const bump = this.getFaceBumpTexture(symbol, bevelSize, 1.5, coinEdgesUV, 2);
+      return new THREE.MeshStandardMaterial({
+        map: tex,
+        bumpMap: bump,
+        bumpScale: 0.032,
+        emissiveMap: active ? tex : null,
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: 0,
+        roughness: 0.28,
+        metalness: 0.14
+      });
+    };
+
+    const matEdge = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(bodyHex),
+      roughness: 0.28,
+      metalness: 0.14
+    });
+    const matHeads = makeFaceMat('★', isHeads);
+    const matTails = makeFaceMat('✕', !isHeads);
+    const targetQuat = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      isHeads ? Math.PI / 2 : -Math.PI / 2
+    );
+
+    return {
+      mesh: new THREE.Mesh(geom, [matEdge, matHeads, matTails]),
+      targetQuat,
+      targetMaterial: isHeads ? matHeads : matTails,
+      otherMaterials: [matEdge, isHeads ? matTails : matHeads]
+    };
+  },
+
+  buildCardDie(styleOrColor, card = {}) {
+    const THREE = window.THREE;
+    const styleObj = typeof styleOrColor === 'string'
+      ? { bodyColor: styleOrColor, numberColor: '#ffffff', bevelColor: '#0f172a' }
+      : { ...(styleOrColor || {}) };
+    const bodyHex = styleObj.bodyColor || '#8b5cf6';
+    const bevelHex = styleObj.bevelColor || '#0f172a';
+    const numHex = styleObj.numberColor || '#ffffff';
+
+    const makeCardTex = (isFront) => {
+      if (typeof document === 'undefined' || !document.createElement) {
+        return this.getFaceTexture(isFront ? (card.label || 'A♠') : '★', styleObj, 1.1, null, 54);
+      }
+      const w = 256;
+      const h = 360;
+      const cv = document.createElement('canvas');
+      cv.width = w;
+      cv.height = h;
+      const ctx = cv.getContext('2d');
+
+      if (isFront) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        const ink = card.red ? '#dc2626' : '#0f172a';
+        ctx.fillStyle = ink;
+        const valText = card.isJoker ? 'JOKER' : (card.val || card.label || 'A');
+        const suitText = card.suit || '♠';
+
+        const drawCorner = () => {
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.font = card.isJoker ? '800 36px system-ui, sans-serif' : '800 62px "JetBrains Mono", system-ui, sans-serif';
+          ctx.fillText(valText, 0, 0);
+          if (!card.isJoker) {
+            ctx.font = '700 48px system-ui, sans-serif';
+            ctx.fillText(suitText, 2, 62);
+          }
+        };
+
+        ctx.save();
+        ctx.translate(18, 16);
+        drawCorner();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(w - 18, h - 16);
+        ctx.rotate(Math.PI);
+        drawCorner();
+        ctx.restore();
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = card.isJoker ? '800 116px system-ui, sans-serif' : '700 132px system-ui, sans-serif';
+        ctx.fillText(suitText, w / 2, h / 2 + 4);
+      } else {
+        ctx.fillStyle = bodyHex;
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = bevelHex;
+        ctx.lineWidth = 14;
+        ctx.strokeRect(12, 12, w - 24, h - 24);
+        ctx.strokeStyle = numHex;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(28, 28, w - 56, h - 56);
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 72);
+        ctx.lineTo(w - 58, h / 2);
+        ctx.lineTo(w / 2, h - 72);
+        ctx.lineTo(58, h / 2);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = numHex;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '700 46px system-ui, sans-serif';
+        ctx.fillText('✦', w / 2, h / 2);
+      }
+
+      const tex = new THREE.CanvasTexture(cv);
+      tex.needsUpdate = true;
+      return tex;
+    };
+
+    const geom = new THREE.BoxGeometry(1.38, 1.96, 0.05);
+    const matEdge = new THREE.MeshStandardMaterial({ color: new THREE.Color(bevelHex), roughness: 0.35, metalness: 0.1 });
+    const frontTex = makeCardTex(true);
+    const matFront = new THREE.MeshStandardMaterial({
+      map: frontTex,
+      emissiveMap: frontTex,
+      emissive: new THREE.Color(0xffffff),
+      emissiveIntensity: 0,
+      roughness: 0.35,
+      metalness: 0.05
+    });
+    const matBack = new THREE.MeshStandardMaterial({
+      map: makeCardTex(false),
+      roughness: 0.32,
+      metalness: 0.14
+    });
+
+    return {
+      mesh: new THREE.Mesh(geom, [matEdge, matEdge, matEdge, matEdge, matFront, matBack]),
+      targetQuat: new THREE.Quaternion(),
+      targetMaterial: matFront,
+      otherMaterials: [matEdge, matBack]
+    };
+  },
+
   disposeGroup() {
     this.disposeObjectTree(this.scene, this.diceGroup);
     this.diceGroup = null;
@@ -835,6 +1018,16 @@ export const Dice3DEngine = {
     return { emissiveIntensity, neighborShade };
   },
 
+  canRoll3D() {
+    return Boolean(this.renderer && this.scene && this.canvas && typeof window.THREE !== 'undefined');
+  },
+
+  prepareFlight() {
+    if (this.canRoll3D()) {
+      this.isFlying = true;
+    }
+  },
+
   roll(sides, colorHex = '#8b5cf6', rolledValue = null) {
     this.rollHand([{ sides, colorHex, value: rolledValue }]);
   },
@@ -849,8 +1042,9 @@ export const Dice3DEngine = {
     this.diceGroup = new THREE.Group();
     const actors = [];
 
-    // Expandir cada dado (d100 se desdobla en par de d10)
-    const builtMeshes = [];
+    // Expandir cada dado (d100 se desdobla en par inseparable de d10)
+    const meshUnits = [];
+    let totalDice = 0;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const sides = Number(item.sides) || 20;
@@ -859,22 +1053,38 @@ export const Dice3DEngine = {
         ? item.value
         : Math.floor(Math.random() * sides) + 1;
 
-      if (sides === 100) {
+      if (item.kind === 'card' || sides === 54) {
+        meshUnits.push([this.buildCardDie(dieStyle, item.card || { label: 'A♠', val: 'A', suit: '♠', red: false })]);
+        totalDice += 1;
+      } else if (item.kind === 'coin' || sides === 2) {
+        const isHeads = item.value !== null && item.value !== undefined ? Number(item.value) >= 1 : Math.random() < 0.5;
+        meshUnits.push([this.buildCoinDie(dieStyle, isHeads)]);
+        totalDice += 1;
+      } else if (item.kind === 'fudge' || sides === 3) {
+        const fudgeLabels = ['−', '−', '◯', '◯', '+', '+'];
+        const v = item.value !== null && item.value !== undefined ? Number(item.value) : (Math.floor(Math.random() * 3) - 1);
+        const targetIdx = v > 0 ? 4 : v < 0 ? 0 : 2;
+        meshUnits.push([this.buildNumberedDie(6, dieStyle, targetIdx, fudgeLabels, false)]);
+        totalDice += 1;
+      } else if (sides === 100) {
         const tensIdx = value === 100 ? 0 : Math.floor(value / 10);
         const unitsIdx = value === 100 ? 0 : value % 10;
         const tensLabels = ['00', '10', '20', '30', '40', '50', '60', '70', '80', '90'];
         const unitsLabels = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-        builtMeshes.push(this.buildNumberedDie(10, dieStyle, tensIdx, tensLabels, false));
-        builtMeshes.push(this.buildNumberedDie(10, { ...dieStyle, bodyColor: '#334155' }, unitsIdx, unitsLabels, false));
+        meshUnits.push([
+          this.buildNumberedDie(10, dieStyle, tensIdx, tensLabels, false),
+          this.buildNumberedDie(10, { ...dieStyle, bodyColor: '#334155' }, unitsIdx, unitsLabels, false)
+        ]);
+        totalDice += 2;
       } else {
         const labels = sides === 10 ? ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] : null;
         const targetIdx = Math.max(0, Math.min(sides - 1, value - 1));
-        builtMeshes.push(this.buildNumberedDie(sides, dieStyle, targetIdx, labels, true));
+        meshUnits.push([this.buildNumberedDie(sides, dieStyle, targetIdx, labels, true)]);
+        totalDice += 1;
       }
     }
 
-    const totalDice = builtMeshes.length;
-    if (!this.canvas) return;
+    if (!this.canvas || totalDice === 0) return;
 
     this.isFlying = true;
     this.canvas.classList.remove('hidden');
@@ -900,18 +1110,34 @@ export const Dice3DEngine = {
 
     const trayTop = this.trayEl ? this.trayEl.getBoundingClientRect().top : vh - 80;
     const overlayClearance = totalDice > 8 ? 196 : totalDice > 1 ? 180 : 148;
-    const openOverlayTop = this.overlayEl && this.overlayEl.classList.contains('is-open')
-      ? this.overlayEl.getBoundingClientRect().top - 26
-      : Infinity;
-    const zoneBottomSy = Math.min(trayTop - overlayClearance, openOverlayTop);
+    let cardTop = Infinity;
+    if (this.overlayEl) {
+      const rect = this.overlayEl.getBoundingClientRect();
+      const closedOffset = this.overlayEl.classList.contains('is-open') ? 0 : 6;
+      if (rect.height > 0) {
+        cardTop = rect.top - closedOffset - 26;
+      }
+    }
+    const zoneBottomSy = Math.min(trayTop - overlayClearance, cardTop);
 
-    // Zona fija sobre la tarjeta de tirada donde se reúnen y descansan sin cambiar de cámara
+    // Zona fija sobre la tarjeta: máximo 4 dados por fila (5 filas para 20 dados) sin partir pares d100
+    const maxCols = 4;
+    const packedRows = [[]];
+    for (let u = 0; u < meshUnits.length; u++) {
+      const unit = meshUnits[u];
+      const curRow = packedRows[packedRows.length - 1];
+      if (curRow.length > 0 && curRow.length + unit.length > maxCols) {
+        packedRows.push([...unit]);
+      } else {
+        curRow.push(...unit);
+      }
+    }
     const sizeScale = Math.max(0.75, Math.min(1.35, Number(style && style.sizeScale) || 1));
     const groupScale = totalDice === 1 ? sizeScale : Math.min(sizeScale, 1.18);
-    const cols = totalDice === 1 ? 1 : totalDice === 2 ? 2 : Math.min(7, Math.ceil(Math.sqrt(totalDice * 1.45)));
-    const rows = Math.ceil(totalDice / cols);
-    const maxZoneW = Math.min(vw * 0.68, 580 * Math.max(1, groupScale));
-    const maxZoneH = Math.min(vh * 0.28, 210 * Math.max(1, groupScale), Math.max(96, zoneBottomSy - 84));
+    const cols = packedRows.reduce((m, row) => Math.max(m, row.length), 1);
+    const rows = packedRows.length;
+    const maxZoneW = Math.min(vw * 0.68, 460 * Math.max(1, groupScale));
+    const maxZoneH = Math.min(vh * 0.36, 290 * Math.max(1, groupScale), Math.max(96, zoneBottomSy - 76));
     const cellPx = totalDice === 1 ? 96 * sizeScale : Math.min(84 * groupScale, maxZoneW / (cols * 1.14), maxZoneH / (rows * 1.06));
     const cellStepX = cellPx * 1.14;
     const cellStepY = cellPx * 1.06;
@@ -925,29 +1151,31 @@ export const Dice3DEngine = {
     const aimY = targetY !== null ? targetY : vh * 0.35;
     const shadowTex = this.getShadowTexture();
 
-    for (let idx = 0; idx < totalDice; idx++) {
-      const die = builtMeshes[idx];
-      die.mesh.scale.setScalar(dieScale);
-      this.diceGroup.add(die.mesh);
+    let flatIdx = 0;
+    for (let r = 0; r < rows; r++) {
+      const rowMeshes = packedRows[r];
+      const rowCount = rowMeshes.length;
+      for (let c = 0; c < rowCount; c++) {
+        const idx = flatIdx++;
+        const die = rowMeshes[c];
+        die.mesh.scale.setScalar(dieScale);
+        this.diceGroup.add(die.mesh);
 
-      const shadowMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({
-          map: shadowTex,
-          transparent: true,
-          opacity: 0.68,
-          depthWrite: false
-        })
-      );
-      this.diceGroup.add(shadowMesh);
+        const shadowMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(1, 1),
+          new THREE.MeshBasicMaterial({
+            map: shadowTex,
+            transparent: true,
+            opacity: 0.68,
+            depthWrite: false
+          })
+        );
+        this.diceGroup.add(shadowMesh);
 
-      const r = Math.floor(idx / cols);
-      const c = idx % cols;
-      const rowCount = r === rows - 1 ? totalDice - r * cols : cols;
-      const jitterX = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.04;
-      const jitterY = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.06;
-      const endSx = zoneCx + (c - (rowCount - 1) / 2) * cellStepX + jitterX;
-      const endSy = zoneCy + (r - (rows - 1) / 2) * cellStepY + jitterY;
+        const jitterX = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.04;
+        const jitterY = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.06;
+        const endSx = zoneCx + (c - (rowCount - 1) / 2) * cellStepX + jitterX;
+        const endSy = zoneCy + (r - (rows - 1) / 2) * cellStepY + jitterY;
 
       const fanNorm = totalDice === 1 ? 0 : (idx / (totalDice - 1)) * 2 - 1;
       const sx0 = Math.max(48, Math.min(vw - 48, vw * 0.5 + fanNorm * Math.min(260, vw * 0.24) + (Math.random() - 0.5) * 90));
@@ -1007,6 +1235,7 @@ export const Dice3DEngine = {
         returnAngle,
         impactQuat
       });
+      }
     }
 
     this.scene.add(this.diceGroup);
