@@ -2,7 +2,7 @@
    SHEET INVENTORY VIEW: INVENTARIO, MENÚ CONTEXTUAL Y DRAG & DROP
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z40';
 
 export const SheetInventoryViewMethods = {
   renderSheetInventory(tok, sheetTab, isInvTab) {

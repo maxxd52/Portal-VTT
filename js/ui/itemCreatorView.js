@@ -2,8 +2,8 @@
    ITEM CREATOR VIEW: CREADOR MODULAR DE COMPLEMENTOS POR BLOQUES
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z39';
-import { Service } from '../core/service.js?v=20261116z39';
+import { Selector } from '../core/selector.js?v=20261116z40';
+import { Service } from '../core/service.js?v=20261116z40';
 
 export const ItemCreatorViewMethods = {
   creatorPassives: [],

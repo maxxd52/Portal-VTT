@@ -2,26 +2,26 @@
    VIEW: RENDERIZADO DE LIENZOS, COMPENDIO, FICHA IZQUIERDA Y MENÚ CONTEXTUAL
    ========================================================================== */
 
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261116z39';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261116z40';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Selector } from './selector.js?v=20261116z39';
-import { Service } from './service.js?v=20261116z39';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261116z39';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261116z39';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261116z39';
-import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261116z39';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261116z39';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261116z39';
-import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261116z39';
-import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261116z39';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261116z39';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261116z39';
-import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261116z39';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261116z39';
-import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261116z39';
-import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261116z39';
-import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261116z39';
-import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261116z39';
+import { Selector } from './selector.js?v=20261116z40';
+import { Service } from './service.js?v=20261116z40';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261116z40';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261116z40';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261116z40';
+import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261116z40';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261116z40';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261116z40';
+import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261116z40';
+import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261116z40';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261116z40';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261116z40';
+import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261116z40';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261116z40';
+import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261116z40';
+import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261116z40';
+import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261116z40';
+import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261116z40';
 
 export const View = {
   els: {},

@@ -2,8 +2,8 @@
    SYSTEM SERVICE: PRESETS, REGLAS DEL PORTAL Y CONSTRUCTOR DE PESTAÑAS/ATRIBUTOS
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261116z39';
-import { Selector } from '../core/selector.js?v=20261116z39';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261116z40';
 
 export const SystemServiceMethods = {
   applySystemPreset(presetKey, targetState = this.state) {
@@ -342,6 +342,10 @@ export const SystemServiceMethods = {
     if (updated.kind === 'text') {
       const parsedRows = Number(updated.textRows);
       updated.textRows = [1, 3, 5].includes(parsedRows) ? parsedRows : 1;
+    }
+    if (updated.kind === 'number') {
+      updated.valueMode = updated.valueMode === 'calc' ? 'calc' : 'manual';
+      if (updated.calcFormula !== undefined) updated.calcFormula = String(updated.calcFormula);
     }
     if (updated.kind === 'resource') {
       updated.max = Math.max(0, Math.min(999, Math.trunc(Number(updated.max) || 0)));

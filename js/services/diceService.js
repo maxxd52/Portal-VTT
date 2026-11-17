@@ -1,7 +1,7 @@
-import { Dice3DEngine } from './dice3dEngine.js?v=20261116z39';
+import { Dice3DEngine } from './dice3dEngine.js?v=20261116z40';
 import { RealtimeBridge } from './realtimeBridge.js';
-import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261116z39';
-import { Selector } from '../core/selector.js?v=20261116z39';
+import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261116z40';
 
 /**
  * Dice hand, style, formula evaluation, rolling & private/public visibility methods mixed into Service.
@@ -518,9 +518,13 @@ export const DiceServiceMethods = {
       ac: Number(tok?.ac) || 0,
       ca: Number(tok?.ac) || 0
     };
+    const numBlocks = Selector.getSystemSheetBlocks(this.state).filter((b) => b.kind === 'number');
     const defs = Selector.getSheetStatsDef(this.state, tok);
     defs.forEach((def) => {
-      const val = Number(stats[def.key]) || 0;
+      const blk = numBlocks.find((b) => b.key === def.key);
+      const val = blk && blk.valueMode === 'calc'
+        ? Selector.resolveTokenBlockValue(this.state, tok, blk)
+        : (Number(stats[def.key]) || 0);
       if (def.key) vars[def.key] = val;
       if (def.alias) vars[def.alias] = val;
       const normLabel = Selector.normalizeStatKey(def.label);

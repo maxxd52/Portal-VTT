@@ -2,8 +2,8 @@
    SHEET BLOCKS VIEW: RENDERIZADO UNIFICADO DE LOS 4 BLOQUES (1 A 3 COLUMNAS)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z39';
-import { Service } from '../core/service.js?v=20261116z39';
+import { Selector } from '../core/selector.js?v=20261116z40';
+import { Service } from '../core/service.js?v=20261116z40';
 
 export const SheetBlocksViewMethods = {
   renderSheetBlocksInto(containerEl, blocks, tok, sysCfg, { sumTotal = false } = {}) {
@@ -35,31 +35,36 @@ export const SheetBlocksViewMethods = {
       return found;
     };
 
+    const evalState = Service?.state?.systemConfig?.sheetBlocks ? Service.state : { systemConfig: { ...(sysCfg || {}), sheetBlocks: blocks } };
     const cardsHtml = blocks
       .map((blk) => {
         const subSpan = Selector.resolveBlockGridSpan(blk);
         const spanStyle = `grid-column: span ${subSpan} / span ${subSpan};`;
 
         if (blk.kind === 'number') {
-          const val = blk.key === 'ac' ? (Number.isFinite(Number(tok.ac)) ? Number(tok.ac) : 10) : (Number(stats[blk.key]) || 0);
+          const isCalc = blk.valueMode === 'calc';
+          const val = Selector.resolveTokenBlockValue(evalState, tok, blk);
           const canRoll = blk.rollMode !== 'none';
           const rollHint = blk.rollMode === 'custom' ? blk.formula : (sysCfg.rollFormula || '1d20+@stat');
           const isWide = subSpan >= 3;
           const showFormulaHint = canRoll && subSpan >= 4;
+          const fxBadge = isCalc ? '<span class="text-[8.5px] font-mono-tech opacity-55 shrink-0" title="Autocalculado">fx</span>' : '';
           const lblInner = isWide
             ? `<span class="flex items-center justify-between gap-2 min-w-0 w-full">
-                <span class="inline-flex items-center gap-1 min-w-0">${canRoll ? '<span class="text-[10px] opacity-60 shrink-0">🎲</span>' : ''}<span class="text-[11px] font-semibold opacity-80 truncate">${esc(blk.label)}</span></span>
+                <span class="inline-flex items-center gap-1 min-w-0">${canRoll ? '<span class="text-[10px] opacity-60 shrink-0">🎲</span>' : ''}<span class="text-[11px] font-semibold opacity-80 truncate">${esc(blk.label)}</span>${fxBadge}</span>
                 ${showFormulaHint ? `<span class="text-[9.5px] font-mono-tech opacity-50 shrink-0">${esc(rollHint)}</span>` : ''}
               </span>`
-            : `<span class="text-[9.5px] font-semibold opacity-75 tracking-wide truncate block">${esc(blk.label)}</span>`;
+            : `<span class="text-[9.5px] font-semibold opacity-75 tracking-wide truncate block">${esc(blk.label)}${isCalc ? ' <span class="opacity-55 font-mono-tech text-[8px]">fx</span>' : ''}</span>`;
           const lblHtml = canRoll
             ? `<button type="button" data-blk-roll-num="${esc(blk.id)}" class="${isWide ? 'flex-1 min-w-0 text-left' : 'w-full text-center'} hover:opacity-80" title="Tirar ${esc(blk.label)} (${esc(rollHint)})">${lblInner}</button>`
             : `<span class="${isWide ? 'flex-1 min-w-0 text-left' : 'w-full text-center'}">${lblInner}</span>`;
-          const numInput = `<input type="number" data-blk-num="${esc(blk.key)}" value="${val}" min="-99" max="999" class="owl-num-input ${isWide ? 'w-14 shrink-0' : 'w-full max-w-[60px]'} text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />`;
+          const numDisplay = isCalc
+            ? `<span data-blk-calc="${esc(blk.key)}" class="${isWide ? 'min-w-[3.25rem] shrink-0 px-2' : 'w-full max-w-[60px]'} text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 select-none opacity-90" title="Calculado: ${esc(blk.calcFormula || '0')}">${val}</span>`
+            : `<input type="number" data-blk-num="${esc(blk.key)}" value="${val}" min="-99" max="999" class="owl-num-input ${isWide ? 'w-14 shrink-0' : 'w-full max-w-[60px]'} text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />`;
           return `
             <div style="${spanStyle}" class="owl-subpanel rounded-xl ${isWide ? 'px-2.5 py-1 flex items-center justify-between gap-2' : 'p-1.5 flex flex-col items-center justify-center gap-1'} min-w-0">
               ${lblHtml}
-              ${numInput}
+              ${numDisplay}
             </div>
           `;
         }
@@ -212,7 +217,7 @@ export const SheetBlocksViewMethods = {
 
     const numBlocks = blocks.filter((b) => b.kind === 'number');
     const sumVal = numBlocks.reduce(
-      (acc, b) => acc + (b.key === 'ac' ? (Number(tok.ac) || 0) : (Number(stats[b.key]) || 0)),
+      (acc, b) => acc + Selector.resolveTokenBlockValue(evalState, tok, b),
       0
     );
 
@@ -237,7 +242,7 @@ export const SheetBlocksViewMethods = {
       btn.addEventListener('click', () => {
         const blk = blocks.find((b) => b.id === btn.dataset.blkRollNum);
         if (!blk || blk.rollMode === 'none') return;
-        const val = blk.key === 'ac' ? (Number(tok.ac) || 0) : (Number(tok.stats?.[blk.key]) || 0);
+        const val = Selector.resolveTokenBlockValue(evalState, tok, blk);
         Service.rollSheetCheck(tok, `${tok.name} · ${blk.label}`, val, blk.rollMode === 'custom' ? blk.formula : '');
       });
     });

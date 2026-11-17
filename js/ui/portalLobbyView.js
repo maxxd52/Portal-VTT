@@ -1,7 +1,7 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261116z39';
+import { BrowserVault } from '../services/browserVault.js?v=20261116z40';
 import { CartridgePacker } from '../services/cartridgePacker.js';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Service } from '../core/service.js?v=20261116z39';
+import { Service } from '../core/service.js?v=20261116z40';
 
 /**
  * Portal-VTT entry lobby: create a portal with ruleset/options, join by code/URL, or resume recent portals.

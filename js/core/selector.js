@@ -2,7 +2,7 @@
    SELECTOR: CONSULTAS PURAS DE COORDENADAS, RAYCASTING 2D Y SERIALIZACIÓN
    ========================================================================== */
 
-import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261116z39';
+import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261116z40';
 
 export const Selector = {
   normalizeStatKey(raw) {
@@ -519,6 +519,98 @@ export const Selector = {
         fail: String(rawLabels.fail ?? '').trim() || 'Fallo'
       }
     };
+  },
+
+  evaluateArithmeticExpr(expr) {
+    const tokens = String(expr || '').replace(/\s+/g, '').match(/(?:floor|ceil|round)|(?:\d+(?:\.\d+)?)|[+\-*/()]/gi) || [];
+    let pos = 0;
+    const peek = () => tokens[pos];
+    const consume = () => tokens[pos++];
+    const parseFactor = () => {
+      const tok = peek();
+      if (tok === '+' || tok === '-') {
+        const sign = consume() === '-' ? -1 : 1;
+        return sign * parseFactor();
+      }
+      if (tok === 'floor' || tok === 'ceil' || tok === 'round') {
+        const fn = consume().toLowerCase();
+        if (peek() === '(') consume();
+        const val = parseExpr();
+        if (peek() === ')') consume();
+        if (fn === 'floor') return Math.floor(val);
+        if (fn === 'ceil') return Math.ceil(val);
+        return Math.round(val);
+      }
+      if (tok === '(') {
+        consume();
+        const val = parseExpr();
+        if (peek() === ')') consume();
+        return val;
+      }
+      const num = Number(consume());
+      return Number.isFinite(num) ? num : 0;
+    };
+    const parseTerm = () => {
+      let left = parseFactor();
+      while (peek() === '*' || peek() === '/') {
+        const op = consume();
+        const right = parseFactor();
+        left = op === '*' ? left * right : right !== 0 ? left / right : left;
+      }
+      return left;
+    };
+    const parseExpr = () => {
+      let left = parseTerm();
+      while (peek() === '+' || peek() === '-') {
+        const op = consume();
+        const right = parseTerm();
+        left = op === '+' ? left + right : left - right;
+      }
+      return left;
+    };
+    const res = parseExpr();
+    return Number.isFinite(res) ? Math.round(res) : 0;
+  },
+
+  resolveTokenBlockValue(state, tok, blk, visited = new Set()) {
+    if (!tok || !blk) return 0;
+    if (blk.valueMode !== 'calc') {
+      return blk.key === 'ac'
+        ? (Number.isFinite(Number(tok.ac)) ? Number(tok.ac) : 10)
+        : (Number(tok.stats?.[blk.key]) || 0);
+    }
+    const selfKey = String(blk.key || blk.id || '');
+    if (visited.has(selfKey) || visited.size > 6) return 0;
+    const nextVisited = new Set(visited);
+    nextVisited.add(selfKey);
+
+    const blocks = this.getSystemSheetBlocks(state).filter((b) => b.kind === 'number');
+    const byKey = new Map();
+    blocks.forEach((b) => {
+      if (b.key) byKey.set(b.key, b);
+      const norm = this.normalizeStatKey(b.label);
+      if (norm && !byKey.has(norm)) byKey.set(norm, b);
+    });
+
+    const stats = tok.stats || {};
+    const expr = String(blk.calcFormula || '0')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/@([a-z0-9_]+)/gi, (_, rawKey) => {
+        const k = String(rawKey || '').toLowerCase();
+        const refBlk = byKey.get(k);
+        if (refBlk) return `(${this.resolveTokenBlockValue(state, tok, refBlk, nextVisited)})`;
+        if (k === 'hp') return `(${Number(tok.hp) || 0})`;
+        if (k === 'maxhp') return `(${Number(tok.maxHp) || 0})`;
+        if (k === 'ac' || k === 'ca') return `(${Number(tok.ac) || 0})`;
+        if (Array.isArray(tok.resources)) {
+          const res = tok.resources.find((r) => this.normalizeStatKey(r.name) === k);
+          if (res) return `(${Number(res.cur) || 0})`;
+        }
+        return `(${Number(stats[k]) || 0})`;
+      });
+    return this.evaluateArithmeticExpr(expr);
   },
 
   extractSerializableWorld(state) {

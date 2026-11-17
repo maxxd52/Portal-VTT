@@ -2,7 +2,7 @@
    SEQUENCE SERVICE: SECUENCIAS DE ACCIONES, ÁREAS Y SOLICITUDES DE TIRADA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z39';
+import { Selector } from '../core/selector.js?v=20261116z40';
 import { RealtimeBridge } from './realtimeBridge.js';
 
 export const SequenceServiceMethods = {

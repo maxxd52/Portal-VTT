@@ -2,8 +2,8 @@
    SHEET VIEW: FICHA DE PERSONAJE, ATRIBUTOS, HABILIDADES, RASGOS E INVENTARIO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z39';
-import { Service } from '../core/service.js?v=20261116z39';
+import { Selector } from '../core/selector.js?v=20261116z40';
+import { Service } from '../core/service.js?v=20261116z40';
 
 export const SheetViewMethods = {
   bindSheetEvents() {

@@ -2,17 +2,17 @@
    SERVICE: LÓGICA DE NEGOCIO, MUTACIONES Y SINCRONIZACIÓN
    ========================================================================== */
 
-import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116z39';
-import { BrowserVault } from '../services/browserVault.js?v=20261116z39';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116z39';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261116z39';
+import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116z40';
+import { BrowserVault } from '../services/browserVault.js?v=20261116z40';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116z40';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261116z40';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261116z39';
-import { SystemServiceMethods } from '../services/systemService.js?v=20261116z39';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261116z39';
+import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261116z40';
+import { SystemServiceMethods } from '../services/systemService.js?v=20261116z40';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261116z40';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261116z39';
-import { Selector } from './selector.js?v=20261116z39';
+import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261116z40';
+import { Selector } from './selector.js?v=20261116z40';
 
 const getOrCreateClientId = () => {
   try {

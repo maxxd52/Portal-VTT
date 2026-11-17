@@ -2,7 +2,7 @@
    MODEL: ESTADO INICIAL Y GENERADOR DE CÓDIGOS DE SALA
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261116z39';
+import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261116z40';
 
 export const DEFAULT_DICE_STYLE = {
   bodyColor: '#8b5cf6',

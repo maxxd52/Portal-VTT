@@ -2,9 +2,9 @@
    SYSTEM OPTIONS VIEW: CONSTRUCTOR POR BLOQUES DE 2 CAPAS ESTILO APPLE
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261116z39';
-import { Selector } from '../core/selector.js?v=20261116z39';
-import { Service } from '../core/service.js?v=20261116z39';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261116z40';
+import { Service } from '../core/service.js?v=20261116z40';
 
 const BLOCK_BADGES = {
   number: { icon: '🔢', name: 'Número' },
@@ -100,17 +100,62 @@ export const SystemOptionsViewMethods = {
       let specificHtml = '';
       if (blk.kind === 'number') {
         const rm = blk.rollMode || 'base';
+        const vm = blk.valueMode === 'calc' ? 'calc' : 'manual';
+        const otherStats = statsDefs.filter((st) => (st.alias || st.key) !== blk.key);
+        const calcOpChips = [
+          ['+', '+'],
+          ['-', '−'],
+          ['*', '×'],
+          ['/', '÷'],
+          ['(', '('],
+          [')', ')'],
+          ['floor(', 'floor('],
+          ['1', '1'],
+          ['2', '2'],
+          ['5', '5'],
+          ['10', '10']
+        ]
+          .map(([tokVal, lbl]) => `<button type="button" data-blk-calc-tok="${esc(tokVal)}" class="owl-seg-btn owl-subpanel px-1.5 py-0.5 text-[9.5px] font-mono-tech">${lbl}</button>`)
+          .join('');
+        const calcStatChips = otherStats.length
+          ? otherStats
+              .map((st) => `<button type="button" data-blk-calc-tok="@${esc(st.alias || st.key)}" class="owl-seg-btn owl-subpanel px-1.5 py-0.5 text-[9.5px] font-semibold" title="Insertar @${esc(st.alias || st.key)}">@${esc(st.label)}</button>`)
+              .join('')
+          : '<span class="text-[9.5px] opacity-55 italic">Creá otros bloques 🔢 Número para referenciarlos acá.</span>';
         specificHtml = `
           <div class="flex flex-col gap-1.5">
-            <label class="flex flex-col gap-0.5">
-              <span class="text-[10px] opacity-65">Al hacer clic en el nombre</span>
-              <select data-blk-edit-rollmode="${esc(blk.id)}" class="owl-input px-2 py-1 text-[11px]">
-                <option value="base" ${rm === 'base' ? 'selected' : ''}>Tira dado base</option>
-                <option value="none" ${rm === 'none' ? 'selected' : ''}>Solo dato (no tira)</option>
-                <option value="custom" ${rm === 'custom' ? 'selected' : ''}>Fórmula propia</option>
-              </select>
-            </label>
-            ${rm === 'custom' ? renderFormulaEditor(blk, 'Fórmula propia', `Ej: 2d6+@${blk.key}`, '') : ''}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 items-end">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-[10px] opacity-65">Valor en la ficha</span>
+                <div class="owl-seg grid grid-cols-2 gap-0.5 text-[10.5px]">
+                  <button type="button" data-blk-valuemode="manual" class="owl-seg-btn py-1 ${vm === 'manual' ? 'is-active' : ''}">Editable</button>
+                  <button type="button" data-blk-valuemode="calc" class="owl-seg-btn py-1 ${vm === 'calc' ? 'is-active' : ''}">Calculado (fx)</button>
+                </div>
+              </div>
+              <label class="flex flex-col gap-0.5">
+                <span class="text-[10px] opacity-65">Al hacer clic en el nombre</span>
+                <select data-blk-edit-rollmode="${esc(blk.id)}" class="owl-input px-2 py-1 text-[11px]">
+                  <option value="base" ${rm === 'base' ? 'selected' : ''}>Tira dado base</option>
+                  <option value="none" ${rm === 'none' ? 'selected' : ''}>Solo dato (no tira)</option>
+                  <option value="custom" ${rm === 'custom' ? 'selected' : ''}>Fórmula propia</option>
+                </select>
+              </label>
+            </div>
+            ${
+              vm === 'calc'
+                ? `<div class="flex flex-col gap-1 p-2 rounded-xl owl-subpanel">
+                    <span class="text-[10px] opacity-70">Fórmula de cálculo (autocalculado, solo lectura en ficha)</span>
+                    <div class="flex items-center gap-1">
+                      <input type="text" data-blk-edit="calcFormula" value="${esc(blk.calcFormula ?? '')}" placeholder="Ej: 10+@des o floor((@fue-10)/2)" class="owl-input px-2 py-1 text-[11px] font-mono-tech flex-1 min-w-0" />
+                      <button type="button" id="btnBlkCalcBack" class="owl-btn owl-panel px-2 py-1 rounded-lg text-[10px]" title="Borrar último carácter">⌫</button>
+                      <button type="button" id="btnBlkCalcClear" class="owl-btn owl-panel px-2 py-1 rounded-lg text-[10px] opacity-75" title="Vaciar fórmula">Limpiar</button>
+                    </div>
+                    <div class="flex flex-wrap gap-1">${calcOpChips}</div>
+                    <div class="flex flex-wrap gap-1">${calcStatChips}</div>
+                  </div>`
+                : ''
+            }
+            ${rm === 'custom' ? renderFormulaEditor(blk, 'Fórmula propia de tirada', `Ej: 2d6+@${blk.key}`, '') : ''}
           </div>
         `;
       } else if (blk.kind === 'resource') {
@@ -962,6 +1007,25 @@ export const SystemOptionsViewMethods = {
         btn.addEventListener('click', () => {
           Service.updateSystemBlock(blkId, { pipStates: Number(btn.dataset.blkPipStates) || 1 });
         });
+      });
+      insp.querySelectorAll('[data-blk-valuemode]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          Service.updateSystemBlock(blkId, { valueMode: btn.dataset.blkValuemode });
+        });
+      });
+      const readCalcFormula = () => String(insp.querySelector('[data-blk-edit="calcFormula"]')?.value ?? '');
+      insp.querySelectorAll('[data-blk-calc-tok]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const next = `${readCalcFormula()}${btn.dataset.blkCalcTok}`;
+          Service.updateSystemBlock(blkId, { calcFormula: next });
+        });
+      });
+      insp.querySelector('#btnBlkCalcBack')?.addEventListener('click', () => {
+        const cur = readCalcFormula();
+        Service.updateSystemBlock(blkId, { calcFormula: cur.slice(0, -1) });
+      });
+      insp.querySelector('#btnBlkCalcClear')?.addEventListener('click', () => {
+        Service.updateSystemBlock(blkId, { calcFormula: '' });
       });
       insp.querySelector('[data-blk-edit-rollmode]')?.addEventListener('change', (e) => {
         Service.updateSystemBlock(blkId, { rollMode: e.target.value });

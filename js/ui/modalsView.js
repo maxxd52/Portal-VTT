@@ -1,11 +1,11 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261116z39';
+import { BrowserVault } from '../services/browserVault.js?v=20261116z40';
 import { CartridgePacker } from '../services/cartridgePacker.js';
 import { RealtimeBridge } from '../services/realtimeBridge.js';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261116z39';
-import { createInitialState, generateRoomCode } from '../core/model.js?v=20261116z39';
-import { Selector } from '../core/selector.js?v=20261116z39';
-import { Service } from '../core/service.js?v=20261116z39';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261116z40';
+import { createInitialState, generateRoomCode } from '../core/model.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261116z40';
+import { Service } from '../core/service.js?v=20261116z40';
 
 /**
  * Room/Cartridge/Shelf modal, Google Drive modal, Sync/Event Log modal & Handouts modal.
