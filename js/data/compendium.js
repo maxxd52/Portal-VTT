@@ -2,7 +2,7 @@
    MODEL: COMPENDIO SRD (PERSONAJES, OBJETOS, MAPAS) Y MUROS PREDEFINIDOS
    ========================================================================== */
 
-import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261116z40';
+import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261117b1';
 
 export const COMPENDIUM_ACTORS = [
   {
@@ -44,7 +44,7 @@ export const COMPENDIUM_ACTORS = [
   {
     key: 'goblin',
     name: 'Acechador Trasgo',
-    role: 'Hostil SRD',
+    role: 'Secundario SRD',
     color: '#ef4444',
     isAlly: false,
     visionRadius: 420,

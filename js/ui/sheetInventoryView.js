@@ -2,7 +2,7 @@
    SHEET INVENTORY VIEW: INVENTARIO, MENÚ CONTEXTUAL Y DRAG & DROP
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261116z40';
+import { Service } from '../core/service.js?v=20261117b1';
 
 export const SheetInventoryViewMethods = {
   renderSheetInventory(tok, sheetTab, isInvTab) {
@@ -17,14 +17,14 @@ export const SheetInventoryViewMethods = {
           <div
             draggable="true"
             data-inv-uid="${item.uid}"
-            class="group owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
+            class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
           >
             <div class="min-w-0 pl-0.5">
               <div class="font-semibold text-xs truncate">${this.escapeHtml(item.name)}</div>
               <div class="text-[10px] opacity-65 truncate">${this.escapeHtml(item.badge || '')}</div>
             </div>
             <div class="flex items-center gap-1.5 flex-shrink-0">
-              <button type="button" data-inv-menu="${item.uid}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones">
+              <button type="button" data-inv-menu="${item.uid}" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones">
                 <span class="text-xs leading-none">⋯</span>
               </button>
               ${this.renderItemIconBadge(item, { interactive: true })}

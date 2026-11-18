@@ -2,8 +2,8 @@
    SHEET RESOURCES VIEW: RECURSOS Y CONTADORES FLEXIBLES EN LA FICHA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 export const SheetResourcesViewMethods = {
   bindSheetResourceEvents() {
@@ -12,7 +12,7 @@ export const SheetResourcesViewMethods = {
         const opening = this.els.sheetResourceForm.classList.contains('hidden');
         this.els.sheetResourceForm.classList.toggle('hidden', !opening);
         this.els.sheetResourceForm.classList.toggle('flex', opening);
-        this.els.btnToggleResourceForm.classList.toggle('owl-btn-accent', opening);
+        this.els.btnToggleResourceForm.classList.toggle('portal-btn-accent', opening);
         if (opening && this.els.inpSheetResName) this.els.inpSheetResName.focus();
       });
     }
@@ -31,7 +31,7 @@ export const SheetResourcesViewMethods = {
         this.els.inpSheetResName.value = '';
         this.els.sheetResourceForm.classList.add('hidden');
         this.els.sheetResourceForm.classList.remove('flex');
-        this.els.btnToggleResourceForm?.classList.remove('owl-btn-accent');
+        this.els.btnToggleResourceForm?.classList.remove('portal-btn-accent');
       });
     }
   },
@@ -102,9 +102,9 @@ export const SheetResourcesViewMethods = {
         if (max === 0) {
           bodyHtml = `
             <div class="flex items-center justify-between gap-1.5">
-              <button type="button" data-res-delta="${res.id}:-1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none">-</button>
-              <input type="number" data-res-cur="${res.id}" value="${cur}" min="0" max="999" class="owl-num-input w-12 text-center text-xs font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />
-              <button type="button" data-res-delta="${res.id}:1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none">+</button>
+              <button type="button" data-res-delta="${res.id}:-1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none">-</button>
+              <input type="number" data-res-cur="${res.id}" value="${cur}" min="0" max="999" class="portal-num-input w-12 text-center text-xs font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />
+              <button type="button" data-res-delta="${res.id}:1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none">+</button>
             </div>
           `;
         } else if (usePips) {
@@ -116,11 +116,11 @@ export const SheetResourcesViewMethods = {
         } else {
           bodyHtml = `
             <div class="flex items-center justify-between gap-1">
-              <button type="button" data-res-delta="${res.id}:-1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">-</button>
+              <button type="button" data-res-delta="${res.id}:-1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">-</button>
               <div class="flex-1 h-1.5 rounded-full bg-black/25 overflow-hidden">
                 <div class="h-full rounded-full transition-all" style="width:${pct}%; background:${color};"></div>
               </div>
-              <button type="button" data-res-delta="${res.id}:1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">+</button>
+              <button type="button" data-res-delta="${res.id}:1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">+</button>
             </div>
           `;
         }
@@ -134,7 +134,7 @@ export const SheetResourcesViewMethods = {
           : `<button type="button" data-res-del="${res.id}" class="absolute top-0.5 right-1 opacity-0 group-hover:opacity-65 hover:!opacity-100 text-[10px] leading-none px-0.5 text-rose-400" title="Quitar recurso">×</button>`;
 
         return `
-          <div class="owl-subpanel rounded-xl px-2 py-1.5 flex flex-col gap-1 relative group">
+          <div class="portal-subpanel rounded-xl px-2 py-1.5 flex flex-col gap-1 relative group">
             <div class="flex items-center justify-between gap-1 ${isLocked ? '' : 'pr-3'}">
               <span class="inline-flex items-center gap-1 min-w-0">
                 <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:${color};"></span>

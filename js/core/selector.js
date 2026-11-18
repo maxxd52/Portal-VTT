@@ -2,7 +2,7 @@
    SELECTOR: CONSULTAS PURAS DE COORDENADAS, RAYCASTING 2D Y SERIALIZACIÓN
    ========================================================================== */
 
-import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261116z40';
+import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261117b1';
 
 export const Selector = {
   normalizeStatKey(raw) {
@@ -613,9 +613,31 @@ export const Selector = {
     return this.evaluateArithmeticExpr(expr);
   },
 
+  getPlayerInvites(state) {
+    const list = state?.playerInvites;
+    return Array.isArray(list) && list.length > 0 ? list : [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }];
+  },
+
+  getActiveInvite(state) {
+    const list = this.getPlayerInvites(state);
+    return list.find((i) => i.id === state?.activeInviteId) || list[0] || null;
+  },
+
+  getPlayerAssignedTokenIds(state) {
+    if (state?.role !== 'player') return (state?.tokens || []).map((t) => t.id);
+    const inv = this.getActiveInvite(state);
+    const allowed = new Set((state?.tokens || []).filter((t) => t.isAlly !== false).map((t) => t.id));
+    return (Array.isArray(inv?.tokenIds) ? inv.tokenIds : []).filter((id) => allowed.has(id));
+  },
+
+  isSpectator(state) {
+    return state?.role === 'player' && this.getPlayerAssignedTokenIds(state).length === 0;
+  },
+
   extractSerializableWorld(state) {
     return {
       moduleTitle: state.room.moduleTitle,
+      playerInvites: JSON.parse(JSON.stringify(this.getPlayerInvites(state))),
       ruleset: state.ruleset || 'dnd55',
       systemConfig: JSON.parse(JSON.stringify(state.systemConfig || {})),
       sheetSchema: JSON.parse(JSON.stringify(state.sheetSchema || [])),

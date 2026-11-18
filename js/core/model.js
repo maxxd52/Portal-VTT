@@ -2,7 +2,7 @@
    MODEL: ESTADO INICIAL Y GENERADOR DE CÓDIGOS DE SALA
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261116z40';
+import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261117b1';
 
 export const DEFAULT_DICE_STYLE = {
   bodyColor: '#8b5cf6',
@@ -159,7 +159,9 @@ export function generateRoomCode() {
 export function createInitialState() {
   const params = new URLSearchParams(window.location.search);
   const roomParam = (params.get('room') || 'MESA-01').toUpperCase();
-  const roleParam = params.get('role') === 'player' ? 'player' : 'gm';
+  const inviteParam = (params.get('invite') || '').trim();
+  const roleParam = params.get('role') === 'player' || inviteParam ? 'player' : 'gm';
+  const isGuestPlayer = roleParam === 'player';
 
   const makeStarter = (keys) =>
     keys
@@ -202,9 +204,9 @@ export function createInitialState() {
     dynamicLighting: true,
     wallType: 'wall', // 'wall' | 'door'
     wallAnchor: null, // { x, y }
-    walls: buildPresetWallsForMap('bastion'),
-    mapId: 'bastion',
-    activeMapKey: 'bastion',
+    walls: isGuestPlayer ? [] : buildPresetWallsForMap('bastion'),
+    mapId: isGuestPlayer ? 'empty' : 'bastion',
+    activeMapKey: isGuestPlayer ? 'empty' : 'bastion',
     customMapUrl: '',
     mapGrids: {},
     notes: [],
@@ -215,8 +217,10 @@ export function createInitialState() {
     customItems: [],
     customMaps: [],
     compendiumFolders: { actors: [], items: [], maps: [] },
-    sheetOpen: true,
-    drawerOpen: true,
+    sheetOpen: roleParam !== 'player',
+    drawerOpen: roleParam !== 'player',
+    activeInviteId: inviteParam || '',
+    playerInvites: [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }],
     room: {
       code: roomParam,
       moduleTitle: 'Aventura_Bastion'
@@ -233,8 +237,8 @@ export function createInitialState() {
       y: 60,
       zoom: 0.85
     },
-    selectedTokenId: 'tok-1',
-    tokens: [
+    selectedTokenId: roleParam === 'player' ? null : 'tok-1',
+    tokens: isGuestPlayer ? [] : [
       {
         id: 'tok-1',
         name: 'Kaelen',
@@ -292,7 +296,7 @@ export function createInitialState() {
       {
         id: 'tok-4',
         name: 'Acechador Trasgo',
-        role: 'Hostil SRD',
+        role: 'Secundario SRD',
         color: '#ef4444',
         isAlly: false,
         visionRadius: 420,

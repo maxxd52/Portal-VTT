@@ -1,4 +1,4 @@
-# Arquitectura — Portal-VTT (`OWL-TABLE`)
+# Arquitectura — Portal-VTT
 
 Aplicación VTT minimalista 100% client-side construida con **ES Modules nativos**, **Tailwind CSS** y **Canvas 2D / Three.js** (sin bundler ni backend obligatorio).
 
@@ -39,12 +39,14 @@ Para mantener la base de código navegable tanto para humanos como para agentes 
 |---|---|
 | `js/services/systemService.js` | Presets de sistema (`dnd55`, `pbta`, `pool`, `d100`, `free`), pestañas/atributos/recursos/estados por portal y `rollSheetCheck` |
 | `js/services/tokenService.js` | Selección, movimiento, invocación, inventario, stats, recursos flexibles, habilidades, rasgos, luz/aura y propiedad |
-| `js/services/diceService.js` | Mano de dados, tiradas 2D/3D, fórmulas (`@stat`, `@recurso`), modos de lectura, historial y broadcast |
+| `js/services/diceService.js` | Mano de dados, estilo 3D, modos de lectura, tiradas directas, historial y broadcast |
+| `js/services/diceFormulaService.js` | Baraja de 54 cartas, evaluación aritmética, resolución de fórmulas (`@stat`, `dF`, moneda) y resúmenes |
 | `js/services/sequenceService.js` | Secuencias multi-paso (ataques, áreas, salvaciones de objetivos y aplicación masiva) |
+| `js/services/combatService.js` | Iniciativa por fórmula, agrupación de Secundarios, turnos y tracker de combate |
 | `js/services/compendiumService.js` | Actores/objetos/mapas personalizados, exportación/importación JSON y biblioteca de cartuchos |
 | `js/services/browserVault.js` | Persistencia local en IndexedDB/localStorage y listado de portales (`listRooms`) |
-| `js/services/realtimeBridge.js` | Sincronización local multi-pestaña (`BroadcastChannel`) y presencia |
-| `js/services/cartridgePacker.js` | Empaquetado y lectura de cartuchos portables `.owltable` |
+| `js/services/realtimeBridge.js` | Sincronización local multi-pestaña (`BroadcastChannel`) y WebRTC (`PeerJS`) |
+| `js/services/cartridgePacker.js` | Empaquetado y lectura de cartuchos portables `.portal` |
 | `js/services/dice3dEngine.js` | Motor 3D de dados con Three.js + física |
 
 ### Módulos de UI (`js/ui/`)
@@ -52,7 +54,8 @@ Para mantener la base de código navegable tanto para humanos como para agentes 
 |---|---|
 | `js/ui/domCache.js` | Catálogo centralizado de referencias DOM (`collectViewElements`) e íconos SVG base |
 | `js/ui/portalLobbyView.js` | Lobby de entrada mínimo (nombre + sistema, unirse o abrir portales recientes diferenciados) |
-| `js/ui/systemOptionsView.js` | Modal global `Opciones → Sistema y Reglas` (reglas por preset o constructor completo en Sistema Genérico) |
+| `js/ui/systemOptionsView.js` | Modal global `Opciones → Sistema y Reglas` (reglas, iniciativa, estados y opciones de ficha) |
+| `js/ui/systemBlockBuilderView.js` | Constructor modular por bloques, inspector de atributos/recursos, pestañas y vista previa en vivo |
 | `js/ui/boardView.js` | Interacción sobre el tablero (pan, zoom, drag de tokens, doble clic para ficha) |
 | `js/ui/contextMenuView.js` | Menú contextual separado para tokens (HP, tamaño, bando, estados del sistema, luz/aura) vs mapa |
 | `js/ui/canvasView.js` | Renderizado del mapa, grilla, trazos vectoriales, niebla de guerra, notas y pings |
@@ -86,7 +89,7 @@ DOM / Canvas (js/core/view.js + js/ui/*)
 Service (js/core/service.js + js/services/*) ──► Selector (js/core/selector.js) [cálculos puros]
    │
    ├──► BrowserVault (IndexedDB / localStorage)
-   ├──► RealtimeBridge (BroadcastChannel owltable_<roomCode>)
+   ├──► RealtimeBridge (BroadcastChannel portal_<roomCode>)
    └──► notify(opts) ──► View.render(state, opts)
 ```
 

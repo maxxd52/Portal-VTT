@@ -1,6 +1,6 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116z40';
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 export const CompendiumViewMethods = {
   bindCompendiumEvents() {
@@ -26,8 +26,8 @@ export const CompendiumViewMethods = {
       if (this.els.lblCustomItemFormTitle) this.els.lblCustomItemFormTitle.textContent = 'Nuevo complemento';
       if (this.els.lblCustomFormTitle) this.els.lblCustomFormTitle.textContent = 'Nuevo personaje';
       if (this.els.lblCustomMapFormTitle) this.els.lblCustomMapFormTitle.textContent = 'Nuevo escenario';
-      if (this.els.btnToggleCustomToken) this.els.btnToggleCustomToken.classList.remove('owl-btn-accent');
-      if (this.els.btnNewCompendiumFolder) this.els.btnNewCompendiumFolder.classList.remove('owl-btn-accent');
+      if (this.els.btnToggleCustomToken) this.els.btnToggleCustomToken.classList.remove('portal-btn-accent');
+      if (this.els.btnNewCompendiumFolder) this.els.btnNewCompendiumFolder.classList.remove('portal-btn-accent');
       setCompendiumBrowseVisible(true);
     };
     const closeAllCompendiumForms = this.closeAllCompendiumForms;
@@ -43,7 +43,7 @@ export const CompendiumViewMethods = {
         if (formEl !== this.els.compendiumFolderForm) {
           setCompendiumBrowseVisible(false);
         }
-        if (triggerBtn) triggerBtn.classList.add('owl-btn-accent');
+        if (triggerBtn) triggerBtn.classList.add('portal-btn-accent');
         if (focusEl) focusEl.focus();
       }
     };
@@ -140,7 +140,7 @@ export const CompendiumViewMethods = {
       const saved = Service.saveCustomActor({
         key: this.editingCompendiumKey || undefined,
         name,
-        role: this.els.inpCustomTokenRole.value.trim() || (isAlly ? 'Aliado' : 'Enemigo'),
+        role: this.els.inpCustomTokenRole.value.trim() || (isAlly ? 'Protagonista' : 'Secundario'),
         folder: this.els.inpCustomTokenFolder.value.trim(),
         isAlly,
         imageUrl: this.els.inpCustomTokenImg.value.trim(),
@@ -253,14 +253,14 @@ export const CompendiumViewMethods = {
           const isOpen = Boolean(q) || !this.collapsedFolders.has(folderKey);
           return `
             <div class="flex flex-col">
-              <div data-toggle-folder="${folderName}" class="group owl-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-pointer select-none">
+              <div data-toggle-folder="${folderName}" class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-pointer select-none">
                 <div class="flex items-center gap-2 min-w-0">
                   <svg class="w-3 h-3 opacity-60 transition-transform ${isOpen ? 'rotate-90' : ''}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4" /></svg>
                   <svg class="w-3.5 h-3.5 opacity-75 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /></svg>
                   <span class="font-semibold text-xs truncate">${folderName}</span>
                   <span class="text-[10px] opacity-50 tabular-nums">${children.length}</span>
                 </div>
-                <button type="button" data-folder-menu="${folderName}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones de carpeta">
+                <button type="button" data-folder-menu="${folderName}" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" title="Opciones de carpeta">
                   <span class="text-xs leading-none">⋯</span>
                 </button>
               </div>
@@ -320,7 +320,7 @@ export const CompendiumViewMethods = {
     };
 
     const moreDotsBtn = (attr, val) => `
-      <button type="button" ${attr}="${val}" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0" title="Opciones">
+      <button type="button" ${attr}="${val}" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0" title="Opciones">
         <span class="text-xs leading-none">⋯</span>
       </button>
     `;
@@ -384,7 +384,7 @@ export const CompendiumViewMethods = {
             draggable="true"
             data-drag-spec="actor:${a.key}"
             data-actor-key="${a.key}"
-            class="group owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            class="group portal-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
           >
             <div class="flex items-center gap-2.5 min-w-0">
               <span class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] text-white flex-shrink-0 overflow-hidden" style="background:${a.color};">
@@ -392,7 +392,7 @@ export const CompendiumViewMethods = {
               </span>
               <div class="min-w-0">
                 <div class="font-semibold text-xs truncate">${a.name}</div>
-                <div class="text-[11px] opacity-65 truncate">${a.role} · HP ${a.hp} · CA ${a.ac || 12}</div>
+                <div class="text-[11px] opacity-65 truncate">${a.isAlly === false ? 'Secundario' : 'Protagonista'} · ${a.role} · HP ${a.hp} · CA ${a.ac || 12}</div>
               </div>
             </div>
             ${moreDotsBtn('data-actor-menu', a.key)}
@@ -464,7 +464,7 @@ export const CompendiumViewMethods = {
             draggable="true"
             data-drag-spec="item:${it.key}"
             data-item-key="${it.key}"
-            class="group owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            class="group portal-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
           >
             <div class="flex items-center gap-2.5 min-w-0">
               ${this.renderItemIconBadge(it)}
@@ -541,7 +541,7 @@ export const CompendiumViewMethods = {
             draggable="true"
             data-drag-spec="map:${m.key}"
             data-map-key="${m.key}"
-            class="group owl-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            class="group portal-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
           >
             <div class="min-w-0">
               <div class="font-semibold text-xs truncate">${m.name}</div>

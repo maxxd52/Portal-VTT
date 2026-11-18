@@ -2,8 +2,19 @@
    ITEM CREATOR VIEW: CREADOR MODULAR DE COMPLEMENTOS POR BLOQUES
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
+
+const CREATOR_ICONS = {
+  passive: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6l7-3z"/></svg>',
+  roll: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg>',
+  area: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  save: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>',
+  apply: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>',
+  up: '<svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10L8 5.5l4.5 4.5"/></svg>',
+  down: '<svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6L8 10.5 12.5 6"/></svg>',
+  close: '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>'
+};
 
 export const ItemCreatorViewMethods = {
   creatorPassives: [],
@@ -97,16 +108,16 @@ export const ItemCreatorViewMethods = {
     const passivesHtml = this.creatorPassives
       .map(
         (p, idx) => `
-        <div class="owl-subpanel rounded-lg p-1.5 flex items-center justify-between gap-1.5 text-[11px]" data-passive-idx="${idx}">
-          <span class="opacity-75 font-semibold shrink-0">🛡️ Pasivo</span>
+        <div class="portal-subpanel rounded-xl px-2 py-1.5 flex items-center justify-between gap-1.5 text-[11px]" data-passive-idx="${idx}">
+          <span class="inline-flex items-center gap-1.5 opacity-80 font-semibold shrink-0">${CREATOR_ICONS.passive}<span>Pasivo</span></span>
           <div class="flex items-center gap-1 min-w-0">
-            <input type="number" data-p-val="${idx}" value="${Number(p.value) || 0}" min="-20" max="99" class="owl-num-input w-11 py-0.5 text-center text-[11px] font-semibold" />
-            <select data-p-target="${idx}" class="owl-input px-1.5 py-0.5 text-[10px] font-semibold cursor-pointer">
+            <input type="number" data-p-val="${idx}" value="${Number(p.value) || 0}" min="-20" max="99" class="portal-num-input w-11 py-0.5 text-center text-[11px] font-semibold" />
+            <select data-p-target="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold cursor-pointer">
               ${passiveOptions
                 .map((o) => `<option value="${esc(o.key)}" ${p.target === o.key ? 'selected' : ''}>${esc(o.label)}</option>`)
                 .join('')}
             </select>
-            <button type="button" data-p-del="${idx}" class="w-5 h-5 rounded-full hover:bg-red-500/20 text-red-400 text-xs leading-none" title="Quitar">×</button>
+            <button type="button" data-p-del="${idx}" class="portal-btn w-5 h-5 p-0 rounded-full hover:bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0" title="Quitar">${CREATOR_ICONS.close}</button>
           </div>
         </div>`
       )
@@ -116,30 +127,30 @@ export const ItemCreatorViewMethods = {
       .map((s, idx) => {
         const controls = `
           <div class="flex items-center gap-0.5 shrink-0">
-            ${idx > 0 ? `<button type="button" data-s-up="${idx}" class="w-5 h-5 rounded hover:bg-white/10 text-[10px]" title="Subir">↑</button>` : ''}
-            ${idx < this.creatorSteps.length - 1 ? `<button type="button" data-s-down="${idx}" class="w-5 h-5 rounded hover:bg-white/10 text-[10px]" title="Bajar">↓</button>` : ''}
-            <button type="button" data-s-del="${idx}" class="w-5 h-5 rounded-full hover:bg-red-500/20 text-red-400 text-xs leading-none" title="Quitar">×</button>
+            ${idx > 0 ? `<button type="button" data-s-up="${idx}" class="portal-btn w-5 h-5 p-0 rounded hover:bg-white/10 flex items-center justify-center" title="Subir">${CREATOR_ICONS.up}</button>` : ''}
+            ${idx < this.creatorSteps.length - 1 ? `<button type="button" data-s-down="${idx}" class="portal-btn w-5 h-5 p-0 rounded hover:bg-white/10 flex items-center justify-center" title="Bajar">${CREATOR_ICONS.down}</button>` : ''}
+            <button type="button" data-s-del="${idx}" class="portal-btn w-5 h-5 p-0 rounded-full hover:bg-rose-500/20 text-rose-400 flex items-center justify-center" title="Quitar">${CREATOR_ICONS.close}</button>
           </div>`;
 
-        const stepNoteInput = `<input type="text" data-s-msg="${idx}" value="${esc(s.message)}" placeholder="Nota de este paso (opcional)..." class="owl-input px-2 py-0.5 text-[10px] opacity-85" />`;
+        const stepNoteInput = `<input type="text" data-s-msg="${idx}" value="${esc(s.message)}" placeholder="Nota de este paso (opcional)..." class="portal-input px-2 py-0.5 text-[10px] opacity-85" />`;
 
         if (s.type === 'roll') {
           const op = this.creatorFormulaOp === '-' ? '-' : '+';
           const opSwitch = `
-            <div class="owl-seg inline-grid grid-cols-2 gap-0.5 text-[10px] mr-0.5" title="Modo: sumar (+) o restar (−)">
-              <button type="button" data-s-formula-op="+" class="owl-seg-btn px-1.5 py-0.5 font-bold ${op === '+' ? 'is-active' : ''}">+</button>
-              <button type="button" data-s-formula-op="-" class="owl-seg-btn px-1.5 py-0.5 font-bold ${op === '-' ? 'is-active' : ''}">−</button>
+            <div class="portal-seg inline-grid grid-cols-2 gap-0.5 text-[10px] mr-0.5" title="Modo: sumar (+) o restar (−)">
+              <button type="button" data-s-formula-op="+" class="portal-seg-btn px-1.5 py-0.5 font-bold ${op === '+' ? 'is-active' : ''}">+</button>
+              <button type="button" data-s-formula-op="-" class="portal-seg-btn px-1.5 py-0.5 font-bold ${op === '-' ? 'is-active' : ''}">−</button>
             </div>`;
           const statChips = stats
             .map(
               (st) =>
-                `<button type="button" data-s-add-stat="${idx}:${esc(st.alias || st.key)}" class="owl-seg-btn owl-subpanel px-1.5 py-0.5 text-[9.5px] font-semibold" title="${op === '-' ? 'Restar' : 'Sumar'} @${esc(st.alias || st.key)}">${op === '-' ? '−' : ''}@${esc(st.label)}</button>`
+                `<button type="button" data-s-add-stat="${idx}:${esc(st.alias || st.key)}" class="portal-seg-btn portal-panel px-1.5 py-0.5 text-[9.5px] font-semibold" title="${op === '-' ? 'Restar' : 'Sumar'} @${esc(st.alias || st.key)}">${op === '-' ? '−' : ''}@${esc(st.label)}</button>`
             )
             .join('');
           const diceChips = [4, 6, 8, 10, 12, 20]
             .map(
               (d) =>
-                `<button type="button" data-s-add-die="${idx}:${d}" class="owl-seg-btn owl-subpanel px-1.5 py-0.5 text-[9.5px] font-mono-tech" title="Clic: ${op === '-' ? 'restar' : 'sumar'} d${d} · Clic derecho: quitar 1d${d}">${op}d${d}</button>`
+                `<button type="button" data-s-add-die="${idx}:${d}" class="portal-seg-btn portal-panel px-1.5 py-0.5 text-[9.5px] font-mono-tech" title="Clic: ${op === '-' ? 'restar' : 'sumar'} d${d} · Clic derecho: quitar 1d${d}">${op}d${d}</button>`
             )
             .join('');
           const rMode = s.resultMode || 'inherit';
@@ -153,24 +164,26 @@ export const ItemCreatorViewMethods = {
             ['success', 'Éxitos (≥ N)']
           ];
           const thrInput = rMode === 'success'
-            ? `<span class="text-[10px] opacity-65">≥</span><input type="number" data-s-thr="${idx}" value="${rThr}" min="1" max="100" class="owl-num-input w-10 py-0.5 text-center text-[10px]" title="Umbral de éxito" />`
+            ? `<span class="text-[10px] opacity-65">≥</span><input type="number" data-s-thr="${idx}" value="${rThr}" min="1" max="100" class="portal-num-input w-10 py-0.5 text-center text-[10px]" title="Umbral de éxito" />`
             : '';
           return `
-            <div class="owl-subpanel rounded-lg p-1.5 flex flex-col gap-1 text-[10.5px]">
-              <div class="flex items-center justify-between gap-1">
-                <span class="font-semibold opacity-80 shrink-0">🎲 ${idx + 1}.</span>
-                <input type="text" data-s-label="${idx}" value="${esc(s.label)}" placeholder="Etiqueta (ej. Ataque)" class="owl-input px-1.5 py-0.5 text-[10.5px] flex-1 min-w-0" />
+            <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1.5 text-[10.5px]">
+              <div class="flex items-center justify-between gap-1.5">
+                <span class="inline-flex items-center gap-1 font-semibold opacity-80 shrink-0">${CREATOR_ICONS.roll}<span>${idx + 1}.</span></span>
+                <input type="text" data-s-label="${idx}" value="${esc(s.label)}" placeholder="Etiqueta (ej. Ataque)" class="portal-input px-1.5 py-0.5 text-[10.5px] flex-1 min-w-0" />
                 ${controls}
               </div>
-              <input type="text" data-s-formula="${idx}" value="${esc(s.formula)}" placeholder="1d20+@fue" class="owl-input px-2 py-1 text-[11px] font-mono-tech" />
+              <input type="text" data-s-formula="${idx}" value="${esc(s.formula)}" placeholder="1d20+@fue" class="portal-input px-2 py-1 text-[11px] font-mono-tech" />
               <div class="flex items-center gap-1">
-                <select data-s-rmode="${idx}" class="owl-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
+                <select data-s-rmode="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
                   ${modeOpts.map(([k, lbl]) => `<option value="${k}" ${rMode === k ? 'selected' : ''}>${lbl}</option>`).join('')}
                 </select>
                 ${thrInput}
               </div>
-              <div class="flex flex-wrap items-center gap-1">${opSwitch}${diceChips}</div>
-              <div class="flex flex-wrap gap-1">${statChips}</div>
+              <div class="portal-formula-bar">
+                ${opSwitch}${diceChips}
+                ${statChips ? `<div class="w-full pt-1 mt-0.5 border-t flex flex-wrap gap-1" style="border-color: var(--hairline);">${statChips}</div>` : ''}
+              </div>
               ${stepNoteInput}
             </div>`;
         }
@@ -179,23 +192,23 @@ export const ItemCreatorViewMethods = {
           const shape = s.shape || 'circle';
           const isTargets = shape === 'targets';
           const shapeOpts = [
-            ['circle', '⭕ Círculo'],
-            ['cube', '⬜ Cubo'],
-            ['cone', '📐 Cono'],
-            ['line', '➖ Línea'],
-            ['targets', '👆 Objetivos']
+            ['circle', 'Círculo'],
+            ['cube', 'Cubo'],
+            ['cone', 'Cono'],
+            ['line', 'Línea'],
+            ['targets', 'Objetivos']
           ];
           const val = isTargets
             ? Math.max(1, Math.round(Number(s.maxTargets ?? s.radiusCells) || 3))
             : Number(s.radiusCells) || 2;
           return `
-            <div class="owl-subpanel rounded-lg p-1.5 flex flex-col gap-1 text-[10.5px]">
-              <div class="flex items-center justify-between gap-1">
-                <span class="font-semibold opacity-80 shrink-0">🎯 ${idx + 1}.</span>
-                <select data-s-shape="${idx}" class="owl-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
+            <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1 text-[10.5px]">
+              <div class="flex items-center justify-between gap-1.5">
+                <span class="inline-flex items-center gap-1 font-semibold opacity-80 shrink-0">${CREATOR_ICONS.area}<span>${idx + 1}.</span></span>
+                <select data-s-shape="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
                   ${shapeOpts.map(([k, lbl]) => `<option value="${k}" ${shape === k ? 'selected' : ''}>${lbl}</option>`).join('')}
                 </select>
-                <input type="number" data-s-radius="${idx}" value="${val}" min="${isTargets ? 1 : 0.5}" max="20" step="${isTargets ? 1 : 0.5}" class="owl-num-input w-11 py-0.5 text-center text-[10.5px]" title="${isTargets ? 'Máximo de objetivos' : 'Casillas'}" />
+                <input type="number" data-s-radius="${idx}" value="${val}" min="${isTargets ? 1 : 0.5}" max="20" step="${isTargets ? 1 : 0.5}" class="portal-num-input w-11 py-0.5 text-center text-[10.5px]" title="${isTargets ? 'Máximo de objetivos' : 'Casillas'}" />
                 <span class="text-[9.5px] opacity-65 shrink-0">${isTargets ? 'obj' : 'cas'}</span>
                 ${controls}
               </div>
@@ -205,16 +218,16 @@ export const ItemCreatorViewMethods = {
 
         if (s.type === 'save_request') {
           return `
-            <div class="owl-subpanel rounded-lg p-1.5 flex flex-col gap-1 text-[10.5px]">
-              <div class="flex items-center justify-between gap-1">
-                <span class="font-semibold opacity-80 shrink-0">⚡ ${idx + 1}. Pedir</span>
-                <select data-s-stat="${idx}" class="owl-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
+            <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1 text-[10.5px]">
+              <div class="flex items-center justify-between gap-1.5">
+                <span class="inline-flex items-center gap-1 font-semibold opacity-80 shrink-0">${CREATOR_ICONS.save}<span>${idx + 1}. Pedir</span></span>
+                <select data-s-stat="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
                   ${stats
                     .map((st) => `<option value="${esc(st.key)}" ${s.statKey === st.key ? 'selected' : ''}>${esc(st.label)}</option>`)
                     .join('')}
                 </select>
                 <span class="text-[10px] opacity-65">CD</span>
-                <input type="number" data-s-dc="${idx}" value="${Number(s.dc) || 0}" min="0" max="40" class="owl-num-input w-10 py-0.5 text-center text-[10.5px]" />
+                <input type="number" data-s-dc="${idx}" value="${Number(s.dc) || 0}" min="0" max="40" class="portal-num-input w-10 py-0.5 text-center text-[10.5px]" />
                 ${controls}
               </div>
               ${stepNoteInput}
@@ -226,19 +239,19 @@ export const ItemCreatorViewMethods = {
           const statusDefs = Selector.getSystemStatuses(Service.state);
           const curCond = s.conditionKey || statusDefs[0]?.key || 'confused';
           const condSelect = eff === 'condition'
-            ? `<select data-s-cond="${idx}" class="owl-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
+            ? `<select data-s-cond="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
                 ${statusDefs.map((st) => `<option value="${esc(st.key)}" ${curCond === st.key ? 'selected' : ''}>${esc(st.label)}</option>`).join('')}
               </select>`
             : '';
           return `
-            <div class="owl-subpanel rounded-lg p-1.5 flex flex-col gap-1 text-[10.5px]">
-              <div class="flex items-center justify-between gap-1">
-                <span class="font-semibold opacity-80 shrink-0">🩸 ${idx + 1}.</span>
-                <select data-s-effect="${idx}" class="owl-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
-                  <option value="damage" ${eff === 'damage' ? 'selected' : ''}>🩸 Daño</option>
-                  <option value="heal" ${eff === 'heal' ? 'selected' : ''}>💚 Curación</option>
-                  <option value="condition" ${eff === 'condition' ? 'selected' : ''}>✨ Estado</option>
-                  <option value="bonus" ${eff === 'bonus' ? 'selected' : ''}>⚡ Bono (+Barra)</option>
+            <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1 text-[10.5px]">
+              <div class="flex items-center justify-between gap-1.5">
+                <span class="inline-flex items-center gap-1 font-semibold opacity-80 shrink-0">${CREATOR_ICONS.apply}<span>${idx + 1}.</span></span>
+                <select data-s-effect="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
+                  <option value="damage" ${eff === 'damage' ? 'selected' : ''}>Daño</option>
+                  <option value="heal" ${eff === 'heal' ? 'selected' : ''}>Curación</option>
+                  <option value="condition" ${eff === 'condition' ? 'selected' : ''}>Estado</option>
+                  <option value="bonus" ${eff === 'bonus' ? 'selected' : ''}>Bono (+Barra)</option>
                 </select>
                 ${condSelect}
                 ${controls}

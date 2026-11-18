@@ -1,18 +1,18 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261116z40';
-import { CartridgePacker } from '../services/cartridgePacker.js';
-import { RealtimeBridge } from '../services/realtimeBridge.js';
+import { BrowserVault } from '../services/browserVault.js?v=20261117b1';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261117b1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261116z40';
-import { createInitialState, generateRoomCode } from '../core/model.js?v=20261116z40';
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261117b1';
+import { createInitialState, generateRoomCode } from '../core/model.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 /**
  * Room/Cartridge/Shelf modal, Google Drive modal, Sync/Event Log modal & Handouts modal.
  */
 export const ModalsViewMethods = {
   bindModalEvents() {
-    // 8. Modal Salas, Cartuchos .owltable y Estantería Solo Lectura
+    // 8. Modal Salas, Cartuchos .portal y Estantería Solo Lectura
     this.els.btnOpenRoomModal.addEventListener('click', () => {
       this.els.roomModal.classList.add('is-open');
       this.renderRoomModal(Service.state);
@@ -21,11 +21,32 @@ export const ModalsViewMethods = {
       this.els.roomModal.classList.remove('is-open');
     });
 
+    const roomNavTabs = this.els.roomModal.querySelectorAll('[data-room-nav-tab]');
+    const roomPanes = this.els.roomModal.querySelectorAll('[data-room-pane]');
+    roomNavTabs.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.roomNavTab;
+        roomNavTabs.forEach((b) => b.classList.toggle('is-active', b.dataset.roomNavTab === target));
+        roomPanes.forEach((p) => {
+          const active = p.dataset.roomPane === target;
+          p.classList.toggle('hidden', !active);
+          p.classList.toggle('flex', active);
+        });
+      });
+    });
+
+    [this.els.roomModal, this.els.driveModal, this.els.syncModal].forEach((modalEl) => {
+      modalEl?.addEventListener('click', (e) => {
+        if (e.target === modalEl) modalEl.classList.remove('is-open');
+      });
+    });
+
     this.els.btnCreateNewRoom.addEventListener('click', () => {
       const nextCode = generateRoomCode();
       Service.state.room.code = nextCode;
       Service.state.role = 'gm';
-      RealtimeBridge.connect(nextCode, (msg) => this.handleRealtimeMessage(msg));
+      RealtimeBridge.connect(nextCode, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+      this.startPresenceHeartbeat();
       Service.notify();
       this.renderRoomModal(Service.state);
       this.showRoomToast(`Sala efímera ${nextCode} activada.`);
@@ -37,22 +58,44 @@ export const ModalsViewMethods = {
       if (!code) return;
       Service.state.room.code = code;
       await Service.restoreFromVault();
-      RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg));
+      RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+      this.startPresenceHeartbeat();
       Service.notify();
       this.renderRoomModal(Service.state);
       this.showRoomToast(`Conectado a sala ${code}.`);
     });
 
+    const copyInviteUrl = async (inputEl, toastMsg) => {
+      if (!inputEl) return;
+      const val = inputEl.value;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(val);
+        } else {
+          inputEl.select();
+          document.execCommand('copy');
+        }
+      } catch (_) {
+        inputEl.select();
+        document.execCommand('copy');
+      }
+      this.showRoomToast(toastMsg);
+    };
+
     this.els.btnCopyPlayerUrl.addEventListener('click', () => {
-      this.els.inpPlayerInviteUrl.select();
-      document.execCommand('copy');
-      this.showRoomToast('Enlace de Jugadores copiado.');
+      copyInviteUrl(this.els.inpPlayerInviteUrl, 'Enlace de Jugadores copiado.');
     });
 
+    if (this.els.btnAddPlayerInvite) {
+      this.els.btnAddPlayerInvite.addEventListener('click', () => {
+        const created = Service.addPlayerInvite();
+        this.renderRoomModal(Service.state);
+        this.showRoomToast(`${created.label} creado en Modo Espectador.`);
+      });
+    }
+
     this.els.btnCopyGmUrl.addEventListener('click', () => {
-      this.els.inpGmInviteUrl.select();
-      document.execCommand('copy');
-      this.showRoomToast('Enlace de Director (GM) copiado.');
+      copyInviteUrl(this.els.inpGmInviteUrl, 'Enlace de Director (GM) copiado.');
     });
 
     this.els.inpLocalMapWebp.addEventListener('change', async (e) => {
@@ -73,17 +116,17 @@ export const ModalsViewMethods = {
       const title = (this.els.inpModuleTitle.value.trim() || 'Modulo_VTT').replace(/[^a-zA-Z0-9_-]/g, '_');
       Service.state.room.moduleTitle = title;
       try {
-        const blob = await CartridgePacker.buildOwltableBlob(Service.state);
+        const blob = await CartridgePacker.buildPortalBlob(Service.state);
         const kbSize = Math.max(1, Math.round(blob.size / 1024));
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${title}.owltable`;
+        a.download = `${title}.portal`;
         a.click();
         URL.revokeObjectURL(url);
-        this.showRoomToast(`Cartucho ${title}.owltable exportado (${kbSize} KB).`);
+        this.showRoomToast(`Cartucho ${title}.portal exportado (${kbSize} KB).`);
       } catch (err) {
-        this.showRoomToast(err.message || 'Error al empaquetar .owltable.');
+        this.showRoomToast(err.message || 'Error al empaquetar .portal.');
       }
     });
 
@@ -223,30 +266,36 @@ export const ModalsViewMethods = {
       this.els.roomPresenceList.innerHTML = peers
         .map(
           (p) =>
-            `<span class="owl-panel px-2 py-0.5 rounded-full text-[10px] font-mono-tech">${p.role === 'gm' ? 'DJ' : 'Jugador'}${p.self ? ' (tú)' : ''}</span>`
+            `<span class="portal-panel px-2 py-0.5 rounded-full text-[10px] font-mono-tech">${p.role === 'gm' ? 'DJ' : 'Jugador'}${p.self ? ' (tú)' : ''}</span>`
         )
         .join('');
     }
 
+    const esc = (s) => this.escapeHtml(s);
     const shelf = state.shelfModules || [];
     this.els.shelfModulesList.innerHTML = shelf.length
       ? shelf
           .map(
             (m) => `
-            <div class="owl-panel rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 text-[11px]">
-              <div class="min-w-0">
-                <div class="font-bold truncate">📦 ${m.title}</div>
-                <div class="font-mono-tech text-[9px] opacity-65 truncate">${m.url}</div>
+            <div class="portal-panel rounded-xl px-2.5 py-2 flex items-center justify-between gap-2 text-[11px]">
+              <div class="flex items-center gap-2 min-w-0">
+                <svg class="w-3.5 h-3.5 opacity-75 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                <div class="min-w-0">
+                  <div class="font-semibold truncate">${esc(m.title)}</div>
+                  <div class="font-mono-tech text-[9.5px] opacity-60 truncate">${esc(m.url)}</div>
+                </div>
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
-                <button type="button" data-load-shelf="${m.id}" class="owl-btn owl-btn-accent px-2 py-1 text-[10px] font-semibold">Cargar</button>
-                <button type="button" data-del-shelf="${m.id}" class="owl-btn owl-subpanel w-6 h-6 text-[10px] text-red-400">✕</button>
+                <button type="button" data-load-shelf="${esc(m.id)}" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-lg text-[10.5px] font-semibold">Cargar</button>
+                <button type="button" data-del-shelf="${esc(m.id)}" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center text-rose-400 opacity-75 hover:opacity-100" title="Quitar">
+                  <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                </button>
               </div>
             </div>
           `
           )
           .join('')
-      : `<span class="text-[10px] opacity-65">Aún no has enlazado cartuchos .owltable externos.</span>`;
+      : `<span class="text-[10.5px] opacity-60">Aún no has enlazado cartuchos .portal externos.</span>`;
 
     this.els.shelfModulesList.querySelectorAll('[data-load-shelf]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -274,8 +323,112 @@ export const ModalsViewMethods = {
     const baseUrl = isRealHttp
       ? `${window.location.origin}${window.location.pathname}`
       : 'https://tu-vtt.web.app/';
-    this.els.inpPlayerInviteUrl.value = `${baseUrl}?room=${state.room.code}&role=player`;
+    const invites = Selector.getPlayerInvites(state);
+    this.els.inpPlayerInviteUrl.value = `${baseUrl}?room=${state.room.code}&role=player&invite=${invites[0]?.id || 'inv-1'}`;
     this.els.inpGmInviteUrl.value = `${baseUrl}?room=${state.room.code}&role=gm`;
+
+    const isGm = state.role !== 'player';
+    this.els.btnAddPlayerInvite?.classList.toggle('hidden', !isGm);
+    this.els.gmInviteRow?.classList.toggle('hidden', !isGm);
+
+    if (this.els.playerInvitesList) {
+      const boardProtags = (state.tokens || []).filter((t) => t.isAlly !== false);
+      const boardById = new Map(boardProtags.map((t) => [t.id, t]));
+      const spawnedKeys = new Set(boardProtags.map((t) => t.actorKey).filter(Boolean));
+      const spawnedNames = new Set(boardProtags.map((t) => t.name));
+      const compProtags = (state.customActors || []).filter(
+        (a) => a.isAlly !== false && !spawnedKeys.has(a.key) && !spawnedNames.has(a.name)
+      );
+
+      if (!isGm) {
+        const cur = Selector.getActiveInvite(state);
+        const curNames = (cur?.tokenIds || []).map((id) => boardById.get(id)?.name).filter(Boolean);
+        this.els.playerInvitesList.innerHTML = `
+          <div class="portal-subpanel rounded-xl px-3 py-2 text-[11px] flex items-center justify-between gap-2">
+            <span class="font-semibold">${esc(cur?.label || 'Invitación')}</span>
+            <span class="opacity-75">${curNames.length ? esc(curNames.join(', ')) : 'Modo Espectador'}</span>
+          </div>
+        `;
+      } else {
+        this.els.playerInvitesList.innerHTML = invites
+          .map((inv) => {
+            const validIds = (Array.isArray(inv.tokenIds) ? inv.tokenIds : []).filter((id) => boardById.has(id));
+            const isSpec = validIds.length === 0;
+            const statusTxt = isSpec ? 'Modo Espectador' : `${validIds.length} Protagonista${validIds.length > 1 ? 's' : ''}`;
+            const tokenPills = boardProtags
+              .map((t) => {
+                const active = validIds.includes(t.id);
+                return `<button type="button" data-toggle-invite-char="${esc(inv.id)}|${esc(t.id)}" class="portal-btn h-6 px-2 rounded-full text-[10px] font-semibold gap-1 ${active ? 'portal-btn-accent' : 'portal-panel opacity-75 hover:opacity-100'}"><span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(t.color || '#8b5cf6')};"></span><span class="truncate max-w-[115px]">${esc(t.name)}</span></button>`;
+              })
+              .join('');
+            const compPills = compProtags
+              .map((a) => `<button type="button" data-toggle-invite-char="${esc(inv.id)}|actor:${esc(a.key)}" class="portal-btn h-6 px-2 rounded-full text-[10px] font-medium gap-1 portal-panel opacity-70 hover:opacity-100" title="Invoca este Protagonista en mesa y lo asigna"><span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(a.color || '#8b5cf6')};"></span><span class="truncate max-w-[100px]">${esc(a.name)}</span><span class="text-[9px] opacity-65">+</span></button>`)
+              .join('');
+            return `
+              <div class="portal-subpanel rounded-xl p-2.5 flex flex-col gap-2">
+                <div class="flex flex-wrap items-center justify-between gap-1.5">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <input type="text" data-invite-name="${esc(inv.id)}" value="${esc(inv.label)}" class="portal-input px-2 py-1 text-[11px] font-semibold w-28 min-w-0" />
+                    <span class="text-[10px] px-2 py-0.5 rounded-full portal-panel opacity-80 whitespace-nowrap">${statusTxt}</span>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" data-preview-invite="${esc(inv.id)}" class="portal-btn portal-panel px-2 py-1 rounded-lg text-[10px] font-medium whitespace-nowrap" title="Previsualizar la mesa con este enlace">Probar</button>
+                    <button type="button" data-copy-invite="${esc(inv.id)}" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-lg text-[10.5px] font-semibold whitespace-nowrap">Copiar enlace</button>
+                    <button type="button" data-del-invite="${esc(inv.id)}" class="portal-btn portal-panel w-6 h-6 p-0 rounded-full flex items-center justify-center text-rose-400 opacity-75 hover:opacity-100" title="Eliminar enlace">✕</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-1">
+                  <button type="button" data-clear-invite-chars="${esc(inv.id)}" class="portal-btn h-6 px-2 rounded-full text-[10px] font-semibold ${isSpec ? 'portal-btn-accent' : 'portal-panel opacity-75 hover:opacity-100'}">👁️ Modo Espectador</button>
+                  ${tokenPills}
+                  ${compPills}
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+
+        this.els.playerInvitesList.querySelectorAll('[data-invite-name]').forEach((inp) => {
+          inp.addEventListener('change', () => Service.renamePlayerInvite(inp.dataset.inviteName, inp.value));
+        });
+        this.els.playerInvitesList.querySelectorAll('[data-preview-invite]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            this.els.roomModal.classList.remove('is-open');
+            Service.previewPlayerInvite(btn.dataset.previewInvite);
+          });
+        });
+        this.els.playerInvitesList.querySelectorAll('[data-copy-invite]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const url = `${baseUrl}?room=${state.room.code}&role=player&invite=${btn.dataset.copyInvite}`;
+            try {
+              if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+            } catch (_) {}
+            const invObj = invites.find((x) => x.id === btn.dataset.copyInvite);
+            this.showRoomToast(`Enlace "${invObj?.label || 'Jugador'}" copiado.`);
+          });
+        });
+        this.els.playerInvitesList.querySelectorAll('[data-del-invite]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            Service.removePlayerInvite(btn.dataset.delInvite);
+            this.renderRoomModal(Service.state);
+          });
+        });
+        this.els.playerInvitesList.querySelectorAll('[data-clear-invite-chars]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            Service.clearInviteCharacters(btn.dataset.clearInviteChars);
+            this.renderRoomModal(Service.state);
+          });
+        });
+        this.els.playerInvitesList.querySelectorAll('[data-toggle-invite-char]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const raw = btn.dataset.toggleInviteChar || '';
+            const sep = raw.indexOf('|');
+            if (sep < 0) return;
+            await Service.toggleInviteCharacter(raw.slice(0, sep), raw.slice(sep + 1));
+            this.renderRoomModal(Service.state);
+          });
+        });
+      }
+    }
   },
 
   renderSyncModal(state) {

@@ -1,9 +1,12 @@
-import { BrowserVault } from './browserVault.js?v=20261116z40';
-import { CartridgePacker } from './cartridgePacker.js';
+import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { BrowserVault } from './browserVault.js?v=20261117b1';
+import { CartridgePacker } from './cartridgePacker.js?v=20261117b1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261117b1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
 
 /**
- * Custom compendium CRUD, folder management & .owltable cartridge/shelf methods mixed into Service.
+ * Custom compendium CRUD, folder management & .portal cartridge/shelf methods mixed into Service.
  */
 export const CompendiumServiceMethods = {
   saveCustomActor(tpl) {
@@ -14,7 +17,7 @@ export const CompendiumServiceMethods = {
       isCustom: true,
       folder,
       name: String(tpl.name || 'Personaje').trim(),
-      role: String(tpl.role || (isAlly ? 'Aliado' : 'Enemigo')).trim(),
+      role: String(tpl.role || (isAlly ? 'Protagonista' : 'Secundario')).trim(),
       color: tpl.color || (isAlly ? '#8b5cf6' : '#ef4444'),
       isAlly,
       visionRadius: isAlly ? 520 : 280,
@@ -226,5 +229,110 @@ export const CompendiumServiceMethods = {
     const pkg = await CartridgePacker.parseCartridgeBuffer(buffer);
     if (pkg && pkg.world) pkg.world.moduleTitle = shelfEntry.title;
     await this.loadModulePackage(pkg);
+  },
+
+  ensurePlayerInvites() {
+    if (!Array.isArray(this.state.playerInvites) || this.state.playerInvites.length === 0) {
+      this.state.playerInvites = [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }];
+    }
+    return this.state.playerInvites;
+  },
+
+  syncInvitesChange() {
+    RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(this.state) });
+    this.notify();
+  },
+
+  addPlayerInvite() {
+    const list = this.ensurePlayerInvites();
+    const inv = {
+      id: `inv-${Date.now().toString(36).slice(-5)}`,
+      label: `Enlace ${list.length + 1}`,
+      tokenIds: []
+    };
+    list.push(inv);
+    this.syncInvitesChange();
+    return inv;
+  },
+
+  removePlayerInvite(inviteId) {
+    const list = this.ensurePlayerInvites().filter((i) => i.id !== inviteId);
+    this.state.playerInvites = list.length > 0 ? list : [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }];
+    if (this.state.activeInviteId === inviteId) {
+      this.state.activeInviteId = this.state.playerInvites[0]?.id || 'inv-1';
+    }
+    this.syncInvitesChange();
+  },
+
+  renamePlayerInvite(inviteId, nextLabel) {
+    const inv = this.ensurePlayerInvites().find((i) => i.id === inviteId);
+    const clean = String(nextLabel || '').trim();
+    if (!inv || !clean) return;
+    inv.label = clean;
+    this.syncInvitesChange();
+  },
+
+  clearInviteCharacters(inviteId) {
+    const inv = this.ensurePlayerInvites().find((i) => i.id === inviteId);
+    if (!inv) return;
+    inv.tokenIds = [];
+    this.syncInvitesChange();
+  },
+
+  async toggleInviteCharacter(inviteId, targetSpec) {
+    const inv = this.ensurePlayerInvites().find((i) => i.id === inviteId);
+    if (!inv || !targetSpec) return;
+    let tokenId = String(targetSpec);
+    if (tokenId.startsWith('actor:')) {
+      const actorKey = tokenId.slice(6);
+      const allActors = [...(this.state.customActors || []), ...COMPENDIUM_ACTORS];
+      const tpl = allActors.find((a) => a.key === actorKey);
+      const existing = (this.state.tokens || []).find(
+        (t) => t.isAlly !== false && (t.actorKey === actorKey || (tpl && t.name === tpl.name))
+      );
+      if (existing) {
+        tokenId = existing.id;
+      } else {
+        if (!tpl) return;
+        const spawned = await this.spawnActorFromTemplate(
+          tpl,
+          440 + Math.round(Math.random() * 140),
+          440 + Math.round(Math.random() * 140)
+        );
+        tokenId = spawned.id;
+      }
+    }
+    if (!Array.isArray(inv.tokenIds)) inv.tokenIds = [];
+    if (inv.tokenIds.includes(tokenId)) {
+      inv.tokenIds = inv.tokenIds.filter((id) => id !== tokenId);
+    } else {
+      inv.tokenIds.push(tokenId);
+    }
+    this.syncInvitesChange();
+  },
+
+  previewPlayerInvite(inviteId) {
+    this.state.activeInviteId = inviteId;
+    this.setRole('player');
+  },
+
+  syncPlayerRoleState() {
+    const list = this.ensurePlayerInvites();
+    if (!this.state.activeInviteId || !list.some((i) => i.id === this.state.activeInviteId)) {
+      this.state.activeInviteId = list[0]?.id || 'inv-1';
+    }
+    const assigned = Selector.getPlayerAssignedTokenIds(this.state);
+    if (assigned.length === 0) {
+      this.state.selectedTokenId = null;
+      this.state.sheetOpen = false;
+      this.state.drawerOpen = false;
+      this.state.tool = 'select';
+    } else {
+      if (!assigned.includes(this.state.selectedTokenId)) {
+        this.state.selectedTokenId = assigned[0];
+        this.state.sheetOpen = true;
+      }
+      this.state.drawerOpen = false;
+    }
   }
 };

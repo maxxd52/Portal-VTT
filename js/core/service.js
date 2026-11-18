@@ -2,24 +2,25 @@
    SERVICE: LÓGICA DE NEGOCIO, MUTACIONES Y SINCRONIZACIÓN
    ========================================================================== */
 
-import { buildPresetWallsForMap } from '../data/compendium.js?v=20261116z40';
-import { BrowserVault } from '../services/browserVault.js?v=20261116z40';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261116z40';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261116z40';
-import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261116z40';
-import { SystemServiceMethods } from '../services/systemService.js?v=20261116z40';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261116z40';
+import { buildPresetWallsForMap } from '../data/compendium.js?v=20261117b1';
+import { BrowserVault } from '../services/browserVault.js?v=20261117b1';
+import { CombatServiceMethods } from '../services/combatService.js?v=20261117b1';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261117b1';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261117b1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
+import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261117b1';
+import { SystemServiceMethods } from '../services/systemService.js?v=20261117b1';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261117b1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261116z40';
-import { Selector } from './selector.js?v=20261116z40';
+import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261117b1';
+import { Selector } from './selector.js?v=20261117b1';
 
 const getOrCreateClientId = () => {
   try {
-    let cid = sessionStorage.getItem('owl_client_id');
+    let cid = sessionStorage.getItem('portal_client_id');
     if (!cid) {
       cid = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-      sessionStorage.setItem('owl_client_id', cid);
+      sessionStorage.setItem('portal_client_id', cid);
     }
     return cid;
   } catch (_) {
@@ -36,6 +37,7 @@ export const Service = {
   undoStack: [],
   redoStack: [],
 
+  ...CombatServiceMethods,
   ...CompendiumServiceMethods,
   ...DiceServiceMethods,
   ...SequenceServiceMethods,
@@ -89,8 +91,7 @@ export const Service = {
   canControlToken(tok) {
     if (!tok) return false;
     if (this.state.role === 'gm') return true;
-    if (tok.ownerId) return tok.ownerId === this.clientId;
-    return tok.isAlly !== false;
+    return Selector.getPlayerAssignedTokenIds(this.state).includes(tok.id);
   },
 
   updatePeerPresence(peer) {
@@ -145,8 +146,10 @@ export const Service = {
   },
 
   notify(opts = {}) {
-    if (!opts.skipVaultSave) {
+    if (!opts.skipVaultSave && this.state.role === 'gm') {
       BrowserVault.saveRoom(this.state.room.code, Selector.extractSerializableWorld(this.state));
+    } else if (!opts.skipVaultSave && this.state.role === 'player') {
+      RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(this.state) });
     }
     this.listeners.forEach((fn) => fn(this.state, opts));
   },
@@ -171,6 +174,7 @@ export const Service = {
     const savedShelf = await BrowserVault.loadShelf();
     if (savedShelf) this.state.shelfModules = savedShelf;
 
+    if (this.state.role !== 'gm') return;
     const saved = await BrowserVault.loadRoom(this.state.room.code);
     if (saved && Array.isArray(saved.tokens)) {
       this.applyFullWorldState(saved, true);
@@ -223,6 +227,9 @@ export const Service = {
     const next = createInitialState();
     next.role = role === 'player' ? 'player' : 'gm';
     next.room.code = code;
+    if (next.role === 'player') {
+      Object.assign(next, { mapId: 'empty', activeMapKey: 'empty', walls: [], tokens: [], selectedTokenId: null, sheetOpen: false, drawerOpen: false });
+    }
     this.state = next;
     this.loadedMapImage = null;
     this.undoStack = [];
@@ -293,6 +300,7 @@ export const Service = {
       };
     }
     if (Array.isArray(world.tokens)) this.state.tokens = world.tokens;
+    if (Array.isArray(world.playerInvites)) this.state.playerInvites = world.playerInvites;
     if (Array.isArray(world.strokes)) this.state.strokes = world.strokes;
     if (Array.isArray(world.fogRects)) this.state.fogRects = world.fogRects;
     if (Array.isArray(world.notes)) this.state.notes = world.notes;
@@ -304,7 +312,11 @@ export const Service = {
         order: Array.isArray(world.combat.order) ? world.combat.order : []
       };
     }
-    this.state.selectedTokenId = this.state.tokens[0] ? this.state.tokens[0].id : null;
+    if (this.state.role === 'player') {
+      this.syncPlayerRoleState();
+    } else {
+      this.state.selectedTokenId = this.state.tokens[0] ? this.state.tokens[0].id : null;
+    }
     this.notify({
       clearExplored: true,
       redrawMap: true,
@@ -425,6 +437,9 @@ export const Service = {
 
   setRole(role) {
     this.state.role = role === 'player' ? 'player' : 'gm';
+    if (this.state.role === 'player') {
+      this.syncPlayerRoleState();
+    }
     this.notify({ redrawFog: true });
   },
 
@@ -519,90 +534,6 @@ export const Service = {
 
   deleteMapNote(id) {
     this.state.notes = (this.state.notes || []).filter((n) => n.id !== id);
-    this.notify();
-  },
-
-  getSystemInitiativeFormula() {
-    const cfg = this.state.systemConfig || {};
-    const f = String(cfg.initiativeFormula ?? '').trim();
-    if (f) return f;
-    return cfg.preset === 'free' ? '1d20+@agi' : '1d20+@des';
-  },
-
-  rollTokenInitiative(tok) {
-    if (!tok) return null;
-    const formula = this.getSystemInitiativeFormula();
-    const roll = this.rollFormula(formula, tok, `${tok.name} · Iniciativa`);
-    if (roll && this.state.combat?.active && this.state.systemConfig?.autoInitiative !== false) {
-      this.setTokenInitiative(tok.id, roll.total, roll.isDeckRoll ? roll.headline : '');
-    }
-    return roll;
-  },
-
-  startCombat() {
-    const visibleTokens = (this.state.tokens || []).filter((t) => !t.hidden || this.state.role === 'gm');
-    const cfg = this.state.systemConfig || {};
-    const mode = cfg.initiativeMode === 'manual' ? 'manual' : 'auto';
-    const formula = this.getSystemInitiativeFormula();
-    const order = visibleTokens
-      .map((t) => {
-        if (mode === 'manual') return { tokenId: t.id, init: 0 };
-        const res = typeof this.rollFormula === 'function'
-          ? this.rollFormula(formula, t, `${t.name} · Iniciativa`, '', { silent: true })
-          : { total: Math.floor(Math.random() * 20) + 1 + (Number(t.stats?.dex) || 0), isDeckRoll: false, headline: '' };
-        const entry = { tokenId: t.id, init: Number(res?.total) || 0 };
-        if (res?.isDeckRoll && res.headline) entry.label = res.headline;
-        return entry;
-      })
-      .sort((a, b) => b.init - a.init);
-    this.state.combat = {
-      active: true,
-      round: 1,
-      turnIndex: 0,
-      order
-    };
-    if (order[0]) this.state.selectedTokenId = order[0].tokenId;
-    this.recordEvent('COMBATE', mode === 'manual' ? 'Combate iniciado (iniciativa manual)' : 'Combate iniciado');
-    this.notify();
-  },
-
-  nextCombatTurn() {
-    const c = this.state.combat;
-    if (!c || !c.active || !c.order.length) return;
-    let nextIdx = c.turnIndex + 1;
-    let round = c.round || 1;
-    if (nextIdx >= c.order.length) {
-      nextIdx = 0;
-      round += 1;
-    }
-    c.turnIndex = nextIdx;
-    c.round = round;
-    const activeEntry = c.order[nextIdx];
-    if (activeEntry) this.state.selectedTokenId = activeEntry.tokenId;
-    this.notify();
-  },
-
-  setTokenInitiative(tokenId, initVal, displayLabel = '') {
-    const c = this.state.combat;
-    if (!c || !c.active) return;
-    const init = Number(initVal) || 0;
-    const existing = c.order.find((o) => o.tokenId === tokenId);
-    if (existing) {
-      existing.init = init;
-      if (displayLabel) existing.label = displayLabel;
-      else delete existing.label;
-    } else {
-      const entry = { tokenId, init };
-      if (displayLabel) entry.label = displayLabel;
-      c.order.push(entry);
-    }
-    c.order.sort((a, b) => b.init - a.init);
-    this.notify();
-  },
-
-  endCombat() {
-    this.state.combat = { active: false, round: 1, turnIndex: 0, order: [] };
-    this.recordEvent('COMBATE', 'Combate finalizado');
     this.notify();
   },
 

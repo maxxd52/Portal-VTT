@@ -1,8 +1,8 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261116z40';
-import { CartridgePacker } from '../services/cartridgePacker.js';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261116z40';
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261117b1';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261117b1';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 /**
  * Board pointer interactions, global drag-and-drop, keyboard shortcuts, context menu & tokens layer.
@@ -43,7 +43,15 @@ export const BoardViewMethods = {
 
     this.els.stage.addEventListener('pointerdown', (e) => {
       this.hideContextMenu();
-      if (e.target.closest('.owl-panel')) return;
+      if (e.target.closest('.portal-panel')) return;
+
+      if (Selector.isSpectator(Service.state)) {
+        startClient = { x: e.clientX, y: e.clientY };
+        startCam = { x: Service.state.camera.x, y: Service.state.camera.y };
+        movedDistance = 0;
+        activePointerMode = e.button === 2 ? 'rightPan' : 'pan';
+        return;
+      }
 
       // Si hay dados recogidos en mano, clic izquierdo sobre la mesa los lanza hacia ese punto
       if (e.button === 0 && Array.isArray(Service.state.dice.hand) && Service.state.dice.hand.length > 0) {
@@ -284,6 +292,8 @@ export const BoardViewMethods = {
         if (hit) tokenId = hit.id;
       }
       if (!tokenId) return;
+      const hitTok = Service.state.tokens.find((t) => t.id === tokenId);
+      if (!hitTok || !Service.canControlToken(hitTok)) return;
       Service.selectToken(tokenId, true);
     });
 
@@ -291,6 +301,12 @@ export const BoardViewMethods = {
     this.els.stage.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (movedDistance > 6) return;
+      if (Selector.isSpectator(Service.state)) return;
+      if (Service.state.role === 'player') {
+        if (!this.ctxTargetTokenId) return;
+        const tok = Service.state.tokens.find((t) => t.id === this.ctxTargetTokenId);
+        if (!tok || !Service.canControlToken(tok)) return;
+      }
       if (Service.clearDiceHand()) return;
       this.openContextMenu(e.clientX, e.clientY);
     });
@@ -312,7 +328,7 @@ export const BoardViewMethods = {
       { passive: false }
     );
 
-    // 2. Drag & Drop Global sobre el tablero (Cartuchos .owltable, Imágenes WebP y Elementos del Compendio)
+    // 2. Drag & Drop Global sobre el tablero (Cartuchos .portal, Imágenes WebP y Elementos del Compendio)
     window.addEventListener('dragover', (e) => {
       e.preventDefault();
       if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
@@ -331,7 +347,7 @@ export const BoardViewMethods = {
       this.els.dropModuleOverlay.classList.add('hidden');
 
       const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (file && /\.(owltable|zip|json)$/i.test(file.name)) {
+      if (file && /\.(portal|zip|json)$/i.test(file.name)) {
         try {
           const buffer = await file.arrayBuffer();
           const parsed = await CartridgePacker.parseCartridgeBuffer(buffer);
@@ -443,13 +459,15 @@ export const BoardViewMethods = {
         return;
       }
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
-      if ((e.ctrlKey || e.metaKey) && k === 'z') {
+      if (Selector.isSpectator(Service.state)) return;
+      const isPlayer = Service.state.role === 'player';
+      if (!isPlayer && (e.ctrlKey || e.metaKey) && k === 'z') {
         e.preventDefault();
         const ok = e.shiftKey ? Service.redo() : Service.undo();
         if (ok) this.showActionToast(e.shiftKey ? '↪️ Rehacer' : '↩️ Deshacer');
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && k === 'y') {
+      if (!isPlayer && (e.ctrlKey || e.metaKey) && k === 'y') {
         e.preventDefault();
         if (Service.redo()) this.showActionToast('↪️ Rehacer');
         return;
@@ -471,9 +489,9 @@ export const BoardViewMethods = {
       }
       if (k === 'v' || k === 'h') Service.setTool('select');
       else if (k === 'r') Service.setTool('ruler');
-      else if (k === 'p') Service.setTool('draw');
-      else if (k === 'f') Service.setTool('fog');
-      else if (k === 'w') Service.setTool('wall');
+      else if (!isPlayer && k === 'p') Service.setTool('draw');
+      else if (!isPlayer && k === 'f') Service.setTool('fog');
+      else if (!isPlayer && k === 'w') Service.setTool('wall');
       else if (k === 'g') Service.setTool('ping');
       else if (k === 'c') {
         Service.state.sheetOpen = !Service.state.sheetOpen;
@@ -539,8 +557,8 @@ export const BoardViewMethods = {
         this.els.tokensLayer.appendChild(el);
       }
 
-      const activeCombatTokId = state.combat?.active ? state.combat.order?.[state.combat.turnIndex]?.tokenId : null;
-      const isTurn = activeCombatTokId === tok.id;
+      const activeEntry = state.combat?.active ? state.combat.order?.[state.combat.turnIndex] : null;
+      const isTurn = Boolean(activeEntry && (activeEntry.tokenId === tok.id || (Array.isArray(activeEntry.tokenIds) && activeEntry.tokenIds.includes(tok.id))));
       const isAreaTarget = Boolean(
         state.activeSequence &&
         Array.isArray(state.activeSequence.targetTokenIds) &&

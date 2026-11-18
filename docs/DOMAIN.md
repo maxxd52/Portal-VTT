@@ -1,4 +1,4 @@
-# Dominio del Proyecto — OWL-TABLE (`portal-vtt`)
+# Dominio del Proyecto — Portal-VTT
 
 Guía viva de conceptos, reglas de negocio, invariantes e ideas registradas para mantener la mesa virtual simple, completa y flexible.
 
@@ -12,7 +12,7 @@ Guía viva de conceptos, reglas de negocio, invariantes e ideas registradas para
 
 | Entidad | Campos clave | Reglas / Invariantes |
 |---|---|---|
-| **Sala (`room`)** | `code`, `moduleTitle`, `role` (`'gm' \| 'player'`) | Cada pestaña opera como `'gm'` (Director) o `'player'` (Jugador) sobre el canal `owltable_<code>`. |
+| **Sala (`room`)** | `code`, `moduleTitle`, `role` (`'gm' \| 'player'`) | Cada pestaña opera como `'gm'` (Director) o `'player'` (Jugador) sobre el canal `portal_<code>`. |
 | **Escena (`mapId`, `activeMapKey`)** | `customMapUrl`, `grid`, `walls`, `fogRects`, `strokes`, `notes` | Cada escena conserva su grilla (`mapGrids`) y capas (`sceneLayers`) de forma independiente. |
 | **Token (`tokens[]`)** | `id`, `name`, `isAlly`, `ownerId`, `hidden`, `hp`, `maxHp`, `ac`, `level`, `stats`, `skills`, `traits`, `inventory`, `conditions`, `visionRadius`, `lightRadius`, `auraRadius` | `hp` acotado a `[0, maxHp]`. Si `hidden === true` o está fuera de línea de visión dinámica, los jugadores no ven tokens hostiles. |
 | **Muro / Puerta (`walls[]`)** | `id`, `x1, y1, x2, y2`, `kind` (`'wall' \| 'door'`), `open` | Las puertas cerradas y muros bloquean el polígono de visibilidad en `Selector.computeVisibilityPolygon`. |

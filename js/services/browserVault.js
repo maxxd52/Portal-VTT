@@ -3,7 +3,7 @@
    ========================================================================== */
 
 export const BrowserVault = {
-  dbName: 'OwlTableVaultDB',
+  dbName: 'PortalVaultDB',
   storeName: 'rooms',
 
   open() {

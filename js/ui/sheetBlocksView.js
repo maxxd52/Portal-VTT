@@ -2,8 +2,8 @@
    SHEET BLOCKS VIEW: RENDERIZADO UNIFICADO DE LOS 4 BLOQUES (1 A 3 COLUMNAS)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 export const SheetBlocksViewMethods = {
   renderSheetBlocksInto(containerEl, blocks, tok, sysCfg, { sumTotal = false } = {}) {
@@ -60,9 +60,9 @@ export const SheetBlocksViewMethods = {
             : `<span class="${isWide ? 'flex-1 min-w-0 text-left' : 'w-full text-center'}">${lblInner}</span>`;
           const numDisplay = isCalc
             ? `<span data-blk-calc="${esc(blk.key)}" class="${isWide ? 'min-w-[3.25rem] shrink-0 px-2' : 'w-full max-w-[60px]'} text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 select-none opacity-90" title="Calculado: ${esc(blk.calcFormula || '0')}">${val}</span>`
-            : `<input type="number" data-blk-num="${esc(blk.key)}" value="${val}" min="-99" max="999" class="owl-num-input ${isWide ? 'w-14 shrink-0' : 'w-full max-w-[60px]'} text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />`;
+            : `<input type="number" data-blk-num="${esc(blk.key)}" value="${val}" min="-99" max="999" class="portal-num-input ${isWide ? 'w-14 shrink-0' : 'w-full max-w-[60px]'} text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />`;
           return `
-            <div style="${spanStyle}" class="owl-subpanel rounded-xl ${isWide ? 'px-2.5 py-1 flex items-center justify-between gap-2' : 'p-1.5 flex flex-col items-center justify-center gap-1'} min-w-0">
+            <div style="${spanStyle}" class="portal-subpanel rounded-xl ${isWide ? 'px-2.5 py-1 flex items-center justify-between gap-2' : 'p-1.5 flex flex-col items-center justify-center gap-1'} min-w-0">
               ${lblHtml}
               ${numDisplay}
             </div>
@@ -90,9 +90,9 @@ export const SheetBlocksViewMethods = {
           if (max === 0) {
             bodyHtml = `
               <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-blk-res-delta="${esc(blk.id)}:-1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">-</button>
-                <input type="number" data-blk-res-cur="${esc(blk.id)}" value="${cur}" min="0" max="999" class="owl-num-input w-10 text-center text-xs font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />
-                <button type="button" data-blk-res-delta="${esc(blk.id)}:1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">+</button>
+                <button type="button" data-blk-res-delta="${esc(blk.id)}:-1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">-</button>
+                <input type="number" data-blk-res-cur="${esc(blk.id)}" value="${cur}" min="0" max="999" class="portal-num-input w-10 text-center text-xs font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" />
+                <button type="button" data-blk-res-delta="${esc(blk.id)}:1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">+</button>
               </div>
             `;
           } else if (usePips) {
@@ -140,11 +140,11 @@ export const SheetBlocksViewMethods = {
           } else {
             bodyHtml = `
               <div class="flex items-center justify-between gap-1">
-                <button type="button" data-blk-res-delta="${esc(blk.id)}:-1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">-</button>
+                <button type="button" data-blk-res-delta="${esc(blk.id)}:-1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">-</button>
                 <div class="flex-1 h-1.5 rounded-full bg-black/25 overflow-hidden">
                   <div class="h-full rounded-full transition-all" style="width:${pct}%; background:${color};"></div>
                 </div>
-                <button type="button" data-blk-res-delta="${esc(blk.id)}:1" class="owl-btn owl-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">+</button>
+                <button type="button" data-blk-res-delta="${esc(blk.id)}:1" class="portal-btn portal-panel w-5 h-5 p-0 rounded-full text-xs leading-none shrink-0">+</button>
               </div>
             `;
           }
@@ -152,7 +152,7 @@ export const SheetBlocksViewMethods = {
           const rightReadout = isHp
             ? `<div class="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums shrink-0">
                 <span>${cur}</span><span class="opacity-50">/</span>
-                <input type="number" data-blk-hp-max="${esc(blk.id)}" value="${max}" min="1" max="999" class="owl-num-input w-7 text-right bg-transparent outline-none" title="Máximo" />
+                <input type="number" data-blk-hp-max="${esc(blk.id)}" value="${max}" min="1" max="999" class="portal-num-input w-7 text-right bg-transparent outline-none" title="Máximo" />
               </div>`
             : max > 0
               ? `<span class="text-[10px] font-semibold tabular-nums opacity-85 shrink-0">${displayCur}/${max}</span>`
@@ -160,7 +160,7 @@ export const SheetBlocksViewMethods = {
 
           if (singleLineRes) {
             return `
-              <div style="${spanStyle}" class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-center gap-2 min-w-0">
+              <div style="${spanStyle}" class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center gap-2 min-w-0">
                 <span class="inline-flex items-center gap-1.5 min-w-0 max-w-[34%] shrink-0">
                   <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:${color};"></span>
                   <span class="text-[11px] font-medium truncate" title="${esc(blk.label)} · @${esc(blk.key)}">${esc(blk.label)}</span>
@@ -172,7 +172,7 @@ export const SheetBlocksViewMethods = {
           }
 
           return `
-            <div style="${spanStyle}" class="owl-subpanel rounded-xl px-2 py-1.5 flex flex-col justify-between gap-1 min-w-0">
+            <div style="${spanStyle}" class="portal-subpanel rounded-xl px-2 py-1.5 flex flex-col justify-between gap-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
                 <span class="inline-flex items-center gap-1 min-w-0">
                   <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:${color};"></span>
@@ -188,7 +188,7 @@ export const SheetBlocksViewMethods = {
         if (blk.kind === 'roll') {
           const showFormulaText = subSpan >= 3;
           return `
-            <button type="button" data-blk-roll-btn="${esc(blk.id)}" style="${spanStyle}" class="owl-btn owl-subpanel px-2.5 py-1.5 rounded-xl flex items-center ${showFormulaText ? 'justify-between' : 'justify-center'} gap-1.5 text-[10.5px] min-w-0" title="Tirar ${esc(blk.label)} (${esc(blk.formula)})">
+            <button type="button" data-blk-roll-btn="${esc(blk.id)}" style="${spanStyle}" class="portal-btn portal-subpanel px-2.5 py-1.5 rounded-xl flex items-center ${showFormulaText ? 'justify-between' : 'justify-center'} gap-1.5 text-[10.5px] min-w-0" title="Tirar ${esc(blk.label)} (${esc(blk.formula)})">
               <span class="font-semibold truncate">🎲 ${esc(blk.label)}</span>
               ${showFormulaText ? `<span class="text-[9.5px] font-mono-tech opacity-65 shrink-0">${esc(blk.formula)}</span>` : ''}
             </button>
@@ -198,7 +198,7 @@ export const SheetBlocksViewMethods = {
         const textRows = subSpan >= 6 ? Math.max(1, Math.min(5, Number(blk.textRows) || 1)) : 1;
         if (textRows > 1) {
           return `
-            <label style="${spanStyle}" class="owl-subpanel rounded-xl px-2.5 py-2 flex flex-col gap-1 text-left min-w-0">
+            <label style="${spanStyle}" class="portal-subpanel rounded-xl px-2.5 py-2 flex flex-col gap-1 text-left min-w-0">
               <span class="text-[10px] font-semibold opacity-70 tracking-wide truncate">${esc(blk.label)}</span>
               <textarea data-blk-text="${esc(blk.key)}" rows="${textRows}" placeholder="${esc(blk.placeholder || '...')}" class="w-full text-[11px] font-medium leading-relaxed bg-black/15 rounded-lg px-2 py-1.5 border border-white/10 focus:border-violet-400 outline-none resize-y">${esc(texts[blk.key] || '')}</textarea>
             </label>
@@ -207,7 +207,7 @@ export const SheetBlocksViewMethods = {
 
         const isInlineText = subSpan >= 4;
         return `
-          <label style="${spanStyle}" class="owl-subpanel rounded-xl ${isInlineText ? 'px-2.5 py-1 flex items-center gap-2' : 'px-2 py-1.5 flex flex-col justify-center gap-0.5'} text-left min-w-0">
+          <label style="${spanStyle}" class="portal-subpanel rounded-xl ${isInlineText ? 'px-2.5 py-1 flex items-center gap-2' : 'px-2 py-1.5 flex flex-col justify-center gap-0.5'} text-left min-w-0">
             <span class="${isInlineText ? 'text-[10.5px] opacity-75 shrink-0 max-w-[38%]' : 'text-[9.5px] opacity-65'} font-semibold tracking-wide truncate">${esc(blk.label)}</span>
             <input type="text" data-blk-text="${esc(blk.key)}" value="${esc(texts[blk.key] || '')}" placeholder="${esc(blk.placeholder || '...')}" class="${isInlineText ? 'flex-1 min-w-0 border-white/10 py-0.5' : 'w-full border-transparent'} text-[11px] font-medium bg-transparent border-b focus:border-violet-400 outline-none" />
           </label>
@@ -227,7 +227,7 @@ export const SheetBlocksViewMethods = {
       </div>
       ${
         sumTotal && numBlocks.length > 0
-          ? `<div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px] mt-1">
+          ? `<div class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px] mt-1">
               <span class="opacity-70 font-medium">Σ Suma total</span>
               <strong class="font-bold tabular-nums text-xs">${sumVal}</strong>
             </div>`

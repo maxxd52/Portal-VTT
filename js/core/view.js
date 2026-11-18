@@ -2,26 +2,26 @@
    VIEW: RENDERIZADO DE LIENZOS, COMPENDIO, FICHA IZQUIERDA Y MENÚ CONTEXTUAL
    ========================================================================== */
 
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261116z40';
-import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Selector } from './selector.js?v=20261116z40';
-import { Service } from './service.js?v=20261116z40';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261116z40';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261116z40';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261116z40';
-import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261116z40';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261116z40';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261116z40';
-import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261116z40';
-import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261116z40';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261116z40';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261116z40';
-import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261116z40';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261116z40';
-import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261116z40';
-import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261116z40';
-import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261116z40';
-import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261116z40';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261117b1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
+import { Selector } from './selector.js?v=20261117b1';
+import { Service } from './service.js?v=20261117b1';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261117b1';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261117b1';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261117b1';
+import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261117b1';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261117b1';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261117b1';
+import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261117b1';
+import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261117b1';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261117b1';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261117b1';
+import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261117b1';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261117b1';
+import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261117b1';
+import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261117b1';
+import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261117b1';
+import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261117b1';
 
 export const View = {
   els: {},
@@ -92,7 +92,7 @@ export const View = {
     const iconKey = item?.icon && ITEM_ICON_DEFS[item.icon] ? item.icon : this.getDefaultItemIcon(item?.kind);
     const color = item?.color || '#8b5cf6';
     if (opts.interactive && item?.uid) {
-      return `<button type="button" draggable="false" data-use-inv="${item.uid}" class="owl-item-use-btn w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="--item-color:${color}; background:${color}22; color:${color}; border-color:${color}55;" title="Usar / Tirar ${item.name || ''}" aria-label="Usar ${item.name || 'objeto'}">${this.renderItemIconSvg(iconKey)}</button>`;
+      return `<button type="button" draggable="false" data-use-inv="${item.uid}" class="portal-item-use-btn w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="--item-color:${color}; background:${color}22; color:${color}; border-color:${color}55;" title="Usar / Tirar ${item.name || ''}" aria-label="Usar ${item.name || 'objeto'}">${this.renderItemIconSvg(iconKey)}</button>`;
     }
     return `<span class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="background:${color}22; color:${color};">${this.renderItemIconSvg(iconKey)}</span>`;
   },
@@ -185,7 +185,11 @@ export const View = {
     this.bindEvents();
     await Service.restoreFromVault();
 
-    RealtimeBridge.connect(Service.state.room.code, (msg) => this.handleRealtimeMessage(msg));
+    RealtimeBridge.connect(
+      Service.state.room.code,
+      (msg) => this.handleRealtimeMessage(msg),
+      () => Service.state.role
+    );
     this.startPresenceHeartbeat();
 
     Service.subscribe((state, opts) => this.render(state, opts));
@@ -206,6 +210,15 @@ export const View = {
       });
     };
     sendPing();
+    if (Service.state.role === 'player') {
+      RealtimeBridge.send({ kind: 'SYNC_REQUEST', clientId: Service.clientId, role: 'player' });
+      clearTimeout(this._syncReqTimer);
+      this._syncReqTimer = setTimeout(() => {
+        if (Service.state.role === 'player') {
+          RealtimeBridge.send({ kind: 'SYNC_REQUEST', clientId: Service.clientId, role: 'player' });
+        }
+      }, 1200);
+    }
     if (this._presenceTimer) clearInterval(this._presenceTimer);
     this._presenceTimer = setInterval(sendPing, 10000);
     if (!this._presenceUnloadBound) {
@@ -228,8 +241,18 @@ export const View = {
     } else if (msg.kind === 'HANDOUT_CLOSE') {
       Service.state.activeHandout = null;
       Service.notify({ skipVaultSave: true });
+    } else if (msg.kind === 'SYNC_REQUEST') {
+      if (Service.state.role === 'gm') {
+        RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(Service.state) });
+      }
     } else if (msg.kind === 'PRESENCE_PING') {
+      const isNewPeer = msg.clientId && msg.clientId !== Service.clientId && !Service.peers.has(msg.clientId);
       Service.updatePeerPresence(msg);
+      const now = Date.now();
+      if (isNewPeer && Service.state.role === 'gm' && now - (this._lastWorldSyncAt || 0) > 400) {
+        this._lastWorldSyncAt = now;
+        RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(Service.state) });
+      }
     } else if (msg.kind === 'PRESENCE_BYE') {
       Service.updatePeerPresence({ ...msg, leaving: true });
     } else if (msg.kind === 'ROLL_REQUEST' && msg.request) {
@@ -380,8 +403,8 @@ export const View = {
       Service.notify();
     });
 
-    this.bindDrawerResize(this.els.characterSheetDrawer, 'left', 'owl_sheet_width');
-    this.bindDrawerResize(this.els.tokenDrawer, 'right', 'owl_compendium_width');
+    this.bindDrawerResize(this.els.characterSheetDrawer, 'left', 'portal_sheet_width');
+    this.bindDrawerResize(this.els.tokenDrawer, 'right', 'portal_compendium_width');
 
     this.els.btnToggleCombat.addEventListener('click', () => {
       if (Service.state.combat?.active) Service.endCombat();
@@ -497,7 +520,7 @@ export const View = {
   render(state, opts = {}) {
     document.documentElement.setAttribute('data-theme', state.theme);
     this.els.themePopover?.querySelectorAll('[data-theme-pick]').forEach((btn) => {
-      btn.classList.toggle('owl-btn-active', btn.dataset.themePick === state.theme);
+      btn.classList.toggle('portal-btn-active', btn.dataset.themePick === state.theme);
     });
 
     // Cámara
@@ -558,10 +581,21 @@ export const View = {
     this.els.rngGridOpacity.value = String(opacityPct);
     this.els.chkGridSnap.checked = Boolean(state.grid.snap);
 
-    this.els.btnRoleGM.classList.toggle('is-active', state.role === 'gm');
-    this.els.btnRolePlayer.classList.toggle('is-active', state.role === 'player');
+    const isPlayer = state.role === 'player';
+    const isSpectator = Selector.isSpectator(state);
+    this.els.btnToggleTokenDrawer?.classList.toggle('hidden', isPlayer);
+    this.els.btnToggleGridPopover?.classList.toggle('hidden', isPlayer);
+    this.els.btnOpenDriveModal?.classList.toggle('hidden', isPlayer);
+    this.els.btnOptOpenSystem?.classList.toggle('hidden', isPlayer);
+    this.els.btnToggleCombat?.classList.toggle('hidden', isPlayer);
+    this.els.btnToggleSheet?.classList.toggle('hidden', isSpectator);
+    this.els.diceTrayBar?.classList.toggle('hidden', isSpectator);
+    this.els.diceTrayBar?.classList.toggle('flex', !isSpectator);
+
+    this.els.btnRoleGM.classList.toggle('is-active', !isPlayer);
+    this.els.btnRolePlayer.classList.toggle('is-active', isPlayer);
     if (this.els.btnToggleCombat) {
-      this.els.btnToggleCombat.classList.toggle('owl-btn-active', Boolean(state.combat?.active));
+      this.els.btnToggleCombat.classList.toggle('portal-btn-active', Boolean(state.combat?.active));
     }
     if (this.els.rulerShapePill) {
       const showRuler = state.tool === 'ruler' && !state.combat?.active;
@@ -573,45 +607,8 @@ export const View = {
       });
     }
 
-    this.els.characterSheetDrawer.classList.toggle('is-open', Boolean(state.sheetOpen && Selector.getSelectedToken(state)));
-    this.els.tokenDrawer.classList.toggle('is-open', Boolean(state.drawerOpen));
-  },
-
-  renderCombatTracker(state) {
-    const pill = this.els.combatTrackerPill;
-    if (!pill) return;
-    const c = state.combat;
-    if (!c || !c.active) {
-      pill.classList.add('hidden');
-      pill.classList.remove('flex');
-      return;
-    }
-    pill.classList.remove('hidden');
-    pill.classList.add('flex');
-    this.els.lblCombatRound.textContent = `Ronda ${c.round || 1}`;
-    const tokensById = new Map((state.tokens || []).map((t) => [t.id, t]));
-    const activeEntry = c.order[c.turnIndex];
-    this.els.combatOrderList.innerHTML = c.order
-      .map((entry) => {
-        const tok = tokensById.get(entry.tokenId);
-        if (!tok) return '';
-        const isTurn = activeEntry && activeEntry.tokenId === entry.tokenId;
-        return `
-          <button
-            type="button"
-            data-combat-tok="${tok.id}"
-            class="owl-seg-btn px-2 py-1 rounded-full flex items-center gap-1.5 text-[11px] whitespace-nowrap ${isTurn ? 'is-active' : ''}"
-            title="${tok.name} · Iniciativa ${entry.init}"
-          >
-            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${tok.color};"></span>
-            <span class="font-semibold max-w-[76px] truncate">${tok.name}</span>
-            <span class="opacity-65 tabular-nums">${entry.init}</span>
-          </button>
-        `;
-      })
-      .join('');
-    this.els.combatOrderList.querySelectorAll('[data-combat-tok]').forEach((btn) => {
-      btn.addEventListener('click', () => Service.selectToken(btn.dataset.combatTok, true));
-    });
+    const selTok = Selector.getSelectedToken(state);
+    this.els.characterSheetDrawer.classList.toggle('is-open', Boolean(!isSpectator && state.sheetOpen && selTok && Service.canControlToken(selTok)));
+    this.els.tokenDrawer.classList.toggle('is-open', Boolean(!isPlayer && state.drawerOpen));
   }
 };

@@ -1,5 +1,5 @@
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 /**
  * Canvas, Fog of War, Map Notes & Vector Overlay rendering methods mixed into View.
@@ -45,7 +45,7 @@ export const CanvasViewMethods = {
         <button
           type="button"
           data-map-note="${n.id}"
-          class="owl-panel pointer-events-auto absolute -translate-x-1/2 -translate-y-full px-2 py-1 rounded-full flex items-center gap-1 text-[11px] font-semibold shadow-md hover:scale-105 transition-transform"
+          class="portal-panel pointer-events-auto absolute -translate-x-1/2 -translate-y-full px-2 py-1 rounded-full flex items-center gap-1 text-[11px] font-semibold shadow-md hover:scale-105 transition-transform"
           style="left:${n.x}px; top:${n.y}px;"
           title="${n.body || n.title}"
         >

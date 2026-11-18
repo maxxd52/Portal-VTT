@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Portal-VTT — Mesa Virtual Táctica</title>
 
-  <!-- Tailwind CSS, Three.js (r128) & fflate (Empaquetador Binario .owltable ZIP) -->
+  <!-- Tailwind CSS, Three.js (r128) & fflate (Empaquetador Binario .portal ZIP) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
   <!-- Tipografías: Plus Jakarta Sans (UI) + JetBrains Mono (Telemetría/Dados) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -18,11 +19,11 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="css/styles.css?v=20261116z40" />
+  <link rel="stylesheet" href="css/styles.css?v=20261117b1" />
 </head>
 <body>
   <!-- ========================================================================
-       1. LIENZO TÁCTICO DE PANTALLA COMPLETA (OWLBEAR RODEO STYLE)
+       1. LIENZO TÁCTICO DE PANTALLA COMPLETA (PORTAL-VTT)
        ======================================================================== -->
   <main id="vttStage" aria-label="Mesa Virtual Táctica">
     <div id="worldTransformLayer">
@@ -36,14 +37,14 @@
       <div id="mapNotesLayer" class="absolute inset-0 pointer-events-none"></div>
     </div>
 
-    <!-- Overlay Drag & Drop para Cartuchos .owltable / .owl.json / Imágenes -->
+    <!-- Overlay Drag & Drop para Cartuchos .portal / .json / Imágenes -->
     <div
       id="dropModuleOverlay"
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none bg-black/40"
     >
-      <div class="owl-panel rounded-3xl p-8 max-w-md text-center border-2 border-dashed" style="border-color: var(--accent-primary);">
+      <div class="portal-panel rounded-3xl p-8 max-w-md text-center border-2 border-dashed" style="border-color: var(--accent-primary);">
         <div class="text-3xl mb-2">📦</div>
-        <h2 class="text-base font-bold mb-1">Soltar Cartucho (.owltable / .json) o Mapa</h2>
+        <h2 class="text-base font-bold mb-1">Soltar Cartucho (.portal / .json) o Mapa</h2>
         <p class="text-xs opacity-80">Las imágenes se optimizan automáticamente a WebP y los cartuchos restauran toda la escena.</p>
       </div>
     </div>
@@ -54,7 +55,7 @@
        ======================================================================== -->
   <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     <!-- Bloque Izquierdo: Identidad, Sala Efímera, Selector de Mesas/SRD, Grilla y Rol -->
-    <div class="owl-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+    <div class="portal-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto">
       <button
         type="button"
         id="btnBrandLobby"
@@ -70,8 +71,8 @@
       <button
         type="button"
         id="btnOpenRoomModal"
-        class="owl-subpanel owl-btn px-2 py-1 rounded-lg font-mono-tech text-[11px] font-semibold"
-        title="Sala Efímera, Estantería y Cartuchos .owltable"
+        class="portal-subpanel portal-btn px-2 py-1 rounded-lg font-mono-tech text-[11px] font-semibold"
+        title="Sala Efímera, Estantería y Cartuchos .portal"
       >
         <strong id="lblActiveRoomCode" style="color: var(--accent-primary);">MESA-01</strong>
       </button>
@@ -81,7 +82,7 @@
         <button
           type="button"
           id="btnToggleGridPopover"
-          class="owl-subpanel owl-btn px-2 py-1 text-xs font-medium"
+          class="portal-subpanel portal-btn px-2 py-1 text-xs font-medium"
           title="Configurar cuadrícula táctica"
         >
           <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
@@ -91,22 +92,22 @@
 
         <div
           id="gridPopover"
-          class="owl-panel owl-pop absolute left-0 mt-2 w-64 rounded-2xl p-3 flex flex-col gap-3 text-xs z-40"
+          class="portal-panel portal-pop absolute left-0 mt-2 w-64 rounded-2xl p-3 flex flex-col gap-3 text-xs z-40"
         >
           <div class="flex flex-col gap-1.5">
             <div class="flex items-center justify-between">
               <span class="font-semibold">Tamaño de celda</span>
               <span id="lblGridSizeDetail" class="text-[11px] opacity-65 tabular-nums">80px · 1.5m</span>
             </div>
-            <div class="owl-stepper justify-between w-full px-1 py-0.5">
-              <button type="button" id="btnGridSizeMinus" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="-1px (Shift: -5px)">
+            <div class="portal-stepper justify-between w-full px-1 py-0.5">
+              <button type="button" id="btnGridSizeMinus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="-1px (Shift: -5px)">
                 <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
               </button>
               <div class="flex items-center gap-0.5">
-                <input type="number" id="inpGridSize" min="16" max="300" step="0.1" value="80" class="owl-num-input w-11 text-xs font-semibold" />
+                <input type="number" id="inpGridSize" min="16" max="300" step="0.1" value="80" class="portal-num-input w-11 text-xs font-semibold" />
                 <span class="text-[10px] opacity-55">px</span>
               </div>
-              <button type="button" id="btnGridSizePlus" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="+1px (Shift: +5px)">
+              <button type="button" id="btnGridSizePlus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="+1px (Shift: +5px)">
                 <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
               </button>
             </div>
@@ -118,27 +119,27 @@
               <button type="button" id="btnGridResetOffset" class="text-[10px] opacity-60 hover:opacity-100 transition-opacity">Centrar</button>
             </div>
             <div class="grid grid-cols-2 gap-1.5">
-              <div class="owl-stepper justify-between px-1 py-0.5">
-                <button type="button" id="btnGridOffXMinus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Izquierda">
+              <div class="portal-stepper justify-between px-1 py-0.5">
+                <button type="button" id="btnGridOffXMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Izquierda">
                   <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
                 </button>
                 <div class="flex items-center gap-0.5">
                   <span class="text-[10px] opacity-50">X</span>
-                  <input type="number" id="inpGridOffX" min="-300" max="300" step="1" value="0" class="owl-num-input w-8 text-[11px] font-semibold" />
+                  <input type="number" id="inpGridOffX" min="-300" max="300" step="1" value="0" class="portal-num-input w-8 text-[11px] font-semibold" />
                 </div>
-                <button type="button" id="btnGridOffXPlus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Derecha">
+                <button type="button" id="btnGridOffXPlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Derecha">
                   <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
                 </button>
               </div>
-              <div class="owl-stepper justify-between px-1 py-0.5">
-                <button type="button" id="btnGridOffYMinus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Arriba">
+              <div class="portal-stepper justify-between px-1 py-0.5">
+                <button type="button" id="btnGridOffYMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Arriba">
                   <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
                 </button>
                 <div class="flex items-center gap-0.5">
                   <span class="text-[10px] opacity-50">Y</span>
-                  <input type="number" id="inpGridOffY" min="-300" max="300" step="1" value="0" class="owl-num-input w-8 text-[11px] font-semibold" />
+                  <input type="number" id="inpGridOffY" min="-300" max="300" step="1" value="0" class="portal-num-input w-8 text-[11px] font-semibold" />
                 </div>
-                <button type="button" id="btnGridOffYPlus" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Abajo">
+                <button type="button" id="btnGridOffYPlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Abajo">
                   <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
                 </button>
               </div>
@@ -148,10 +149,10 @@
           <div class="flex flex-col gap-1.5">
             <span class="font-semibold">Ajustar al mapa (Cols × Filas)</span>
             <div class="flex items-center gap-1.5">
-              <input type="number" id="inpGridCols" min="2" max="150" placeholder="Cols" class="owl-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
+              <input type="number" id="inpGridCols" min="2" max="150" placeholder="Cols" class="portal-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
               <span class="text-[10px] opacity-55">×</span>
-              <input type="number" id="inpGridRows" min="2" max="150" placeholder="Filas" class="owl-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
-              <button type="button" id="btnFitGridToMap" class="owl-btn owl-btn-accent px-2.5 py-1 rounded-lg text-[11px] font-semibold ml-auto">Ajustar</button>
+              <input type="number" id="inpGridRows" min="2" max="150" placeholder="Filas" class="portal-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
+              <button type="button" id="btnFitGridToMap" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-lg text-[11px] font-semibold ml-auto">Ajustar</button>
             </div>
           </div>
 
@@ -160,32 +161,32 @@
               <span class="font-semibold">Opacidad</span>
               <span id="lblGridOpacity" class="text-[11px] opacity-65 tabular-nums">28%</span>
             </div>
-            <input type="range" id="rngGridOpacity" min="0" max="80" step="1" value="28" class="owl-slider" />
+            <input type="range" id="rngGridOpacity" min="0" max="80" step="1" value="28" class="portal-slider" />
           </div>
 
           <label class="flex items-center justify-between pt-2.5 border-t cursor-pointer" style="border-color: var(--hairline);">
             <span class="font-medium">Imán a grilla</span>
-            <span class="owl-switch">
-              <input type="checkbox" id="chkGridSnap" checked class="owl-switch-input" />
-              <span class="owl-switch-track"></span>
+            <span class="portal-switch">
+              <input type="checkbox" id="chkGridSnap" checked class="portal-switch-input" />
+              <span class="portal-switch-track"></span>
             </span>
           </label>
         </div>
       </div>
 
       <!-- Selector Rol GM / Jugador -->
-      <div id="roleSwitchGroup" class="owl-seg grid-cols-2 min-w-[120px]">
-        <button type="button" id="btnRoleGM" class="owl-seg-btn is-active">GM</button>
-        <button type="button" id="btnRolePlayer" class="owl-seg-btn">Jugador</button>
+      <div id="roleSwitchGroup" class="portal-seg grid-cols-2 min-w-[120px]">
+        <button type="button" id="btnRoleGM" class="portal-seg-btn is-active">GM</button>
+        <button type="button" id="btnRolePlayer" class="portal-seg-btn">Jugador</button>
       </div>
     </div>
 
     <!-- Bloque Derecho: Combate, Ficha, Drive, Compendio, P2P y Tema -->
-    <div class="owl-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+    <div class="portal-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto">
       <button
         type="button"
         id="btnToggleCombat"
-        class="owl-subpanel owl-btn px-2 py-1 text-xs"
+        class="portal-subpanel portal-btn px-2 py-1 text-xs"
         title="Combate / Tracker de Iniciativa"
         aria-label="Combate"
       >
@@ -198,7 +199,7 @@
       <button
         type="button"
         id="btnToggleSheet"
-        class="owl-subpanel owl-btn px-2 py-1 text-xs"
+        class="portal-subpanel portal-btn px-2 py-1 text-xs"
         title="Ficha de Personaje [C]"
         aria-label="Ficha de Personaje"
       >
@@ -212,7 +213,7 @@
       <button
         type="button"
         id="btnOpenDriveModal"
-        class="owl-subpanel owl-btn px-2 py-1 text-xs"
+        class="portal-subpanel portal-btn px-2 py-1 text-xs"
         title="Carpeta y Enlaces de Google Drive"
         aria-label="Google Drive"
       >
@@ -224,20 +225,20 @@
       <button
         type="button"
         id="btnToggleTokenDrawer"
-        class="owl-subpanel owl-btn px-2 py-1 text-xs gap-1.5"
+        class="portal-subpanel portal-btn px-2 py-1 text-xs gap-1.5"
         title="Abrir/Cerrar Compendio Arrastrable"
         aria-label="Compendio"
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
         </svg>
-        <span id="lblActiveTokensCount" class="font-mono-tech text-[10px] px-1.5 py-0.2 rounded-full owl-btn-accent">4</span>
+        <span id="lblActiveTokensCount" class="font-mono-tech text-[10px] px-1.5 py-0.2 rounded-full portal-btn-accent">4</span>
       </button>
 
       <button
         type="button"
         id="btnOpenSyncModal"
-        class="owl-subpanel owl-btn px-2 py-1 font-mono-tech text-[11px] font-semibold gap-1"
+        class="portal-subpanel portal-btn px-2 py-1 font-mono-tech text-[11px] font-semibold gap-1"
         title="Estado P2P WebRTC, Event-Log y Google Sheets"
         aria-label="Estado P2P"
       >
@@ -252,33 +253,33 @@
         <button
           type="button"
           id="btnToggleTheme"
-          class="owl-subpanel owl-btn px-2 py-1 text-xs"
+          class="portal-subpanel portal-btn px-2 py-1 text-xs"
           title="Tema de la mesa e interfaz"
         >
           ◐
         </button>
         <div
           id="themePopover"
-          class="owl-panel owl-pop absolute right-0 mt-2 w-44 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
+          class="portal-panel portal-pop absolute right-0 mt-2 w-44 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
         >
           <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Estilo de mesa</span>
-          <button type="button" data-theme-pick="slate" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+          <button type="button" data-theme-pick="slate" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#8b5cf6"></span>
             <span>Pizarra</span>
           </button>
-          <button type="button" data-theme-pick="parchment" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+          <button type="button" data-theme-pick="parchment" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#007aff"></span>
             <span>Pergamino</span>
           </button>
-          <button type="button" data-theme-pick="fantasy" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+          <button type="button" data-theme-pick="fantasy" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#d97706"></span>
             <span>Fantasía</span>
           </button>
-          <button type="button" data-theme-pick="scifi" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+          <button type="button" data-theme-pick="scifi" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#06b6d4"></span>
             <span>Ciencia Ficción</span>
           </button>
-          <button type="button" data-theme-pick="horror" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
+          <button type="button" data-theme-pick="horror" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#e11d48"></span>
             <span>Terror</span>
           </button>
@@ -289,7 +290,7 @@
         <button
           type="button"
           id="btnOpenOptions"
-          class="owl-subpanel owl-btn px-2 py-1 text-xs"
+          class="portal-subpanel portal-btn px-2 py-1 text-xs"
           title="Opciones y Portales"
           aria-label="Opciones"
         >
@@ -300,24 +301,44 @@
         </button>
         <div
           id="optionsPopover"
-          class="owl-panel owl-pop absolute right-0 mt-2 w-52 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
+          class="portal-panel portal-pop absolute right-0 mt-2 w-56 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
         >
-          <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Opciones</span>
-          <button type="button" id="btnOptOpenSystem" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
-            <span>⚙️</span>
+          <span class="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Opciones</span>
+          <button type="button" id="btnOptOpenSystem" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2.5">
+            <svg class="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" />
+              <line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" />
+              <line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="2" y1="14" x2="6" y2="14" />
+              <line x1="10" y1="8" x2="14" y2="8" />
+              <line x1="18" y1="16" x2="22" y2="16" />
+            </svg>
             <span>Sistema y Reglas</span>
           </button>
-          <button type="button" id="btnOptReturnLobby" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
-            <span>🚪</span>
-            <span>Volver a Portales</span>
-          </button>
-          <button type="button" id="btnOptOpenRoom" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
-            <span>🔗</span>
+          <button type="button" id="btnOptOpenRoom" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2.5">
+            <svg class="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
             <span>Salas e Invitaciones</span>
           </button>
-          <button type="button" id="btnOptOpenSync" class="owl-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2">
-            <span>☁️</span>
+          <button type="button" id="btnOptOpenSync" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2.5">
+            <svg class="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+            </svg>
             <span>Sincronización P2P</span>
+          </button>
+          <div class="my-1 portal-hairline"></div>
+          <button type="button" id="btnOptReturnLobby" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2.5">
+            <svg class="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>Volver a Portales</span>
           </button>
         </div>
       </div>
@@ -325,11 +346,11 @@
   </header>
 
   <!-- ========================================================================
-       3. PANEL LATERAL IZQUIERDO: FICHA DE PERSONAJE ACTIVA (FOUNDRY DROPZONE)
+       3. PANEL LATERAL IZQUIERDO: FICHA DE PERSONAJE ACTIVA
        ======================================================================== -->
   <aside
     id="characterSheetDrawer"
-    class="owl-panel owl-drawer-left fixed top-16 left-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-2.5 z-20 flex flex-col gap-2 overflow-y-auto"
+    class="portal-panel portal-drawer-left fixed top-16 left-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-2.5 z-20 flex flex-col gap-2 overflow-y-auto"
     aria-label="Ficha de Personaje Activa"
   >
     <div class="flex items-center justify-between pb-1.5 border-b" style="border-color: var(--hairline);">
@@ -350,42 +371,44 @@
           />
         </div>
       </div>
-      <button type="button" id="btnCloseSheet" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 flex-shrink-0" title="Cerrar">
+      <button type="button" id="btnCloseSheet" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 flex-shrink-0" title="Cerrar">
         <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
       </button>
     </div>
 
+    <div id="sheetAssignedSwitchBar" class="hidden items-center gap-1 flex-wrap pb-1.5 border-b" style="border-color: var(--hairline);"></div>
+
     <!-- 2. Vista Fija (siempre visible arriba de las pestañas) -->
     <div id="sheetHpDefRow" class="grid grid-cols-2 gap-1.5">
-      <div id="sheetHpCard" class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col gap-1">
+      <div id="sheetHpCard" class="portal-subpanel rounded-xl px-2.5 py-1.5 flex flex-col gap-1">
         <div class="flex items-center justify-between text-[11px] gap-1">
           <span id="lblSheetHpName" class="font-medium opacity-70 truncate">Salud</span>
           <div class="flex items-center gap-0.5 font-semibold tabular-nums">
             <span id="lblSheetHpCur">18</span>
             <span class="opacity-50">/</span>
-            <input type="number" id="inpSheetMaxHp" min="1" max="999" value="18" class="owl-num-input w-10 text-right text-[11px] font-semibold bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="HP Máximo" />
+            <input type="number" id="inpSheetMaxHp" min="1" max="999" value="18" class="portal-num-input w-10 text-right text-[11px] font-semibold bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="HP Máximo" />
           </div>
         </div>
         <div class="flex items-center justify-between gap-1.5">
-          <button type="button" id="btnSheetHpMinus" class="owl-btn owl-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center flex-shrink-0" title="Restar HP">
+          <button type="button" id="btnSheetHpMinus" class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center flex-shrink-0" title="Restar HP">
             <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
           </button>
           <div class="flex-1 h-1.5 rounded-full bg-black/25 overflow-hidden">
             <div id="barSheetHpFill" class="h-full bg-emerald-400 rounded-full transition-all" style="width: 100%;"></div>
           </div>
-          <button type="button" id="btnSheetHpPlus" class="owl-btn owl-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center flex-shrink-0" title="Sumar HP">
+          <button type="button" id="btnSheetHpPlus" class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center flex-shrink-0" title="Sumar HP">
             <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
           </button>
         </div>
       </div>
 
-      <div id="sheetDefenseCard" class="owl-subpanel rounded-xl px-2.5 py-1.5 flex flex-col justify-between gap-1">
+      <div id="sheetDefenseCard" class="portal-subpanel rounded-xl px-2.5 py-1.5 flex flex-col justify-between gap-1">
         <span id="lblSheetDefenseName" class="text-[11px] font-medium opacity-70 truncate">Defensa · CA</span>
         <div class="flex items-center justify-between gap-1">
           <div id="sheetAcWrap" class="flex items-center">
-            <input type="number" id="inpSheetAc" min="1" max="40" value="14" class="owl-num-input w-10 text-base font-semibold tabular-nums leading-none bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="Clase de Armadura" />
+            <input type="number" id="inpSheetAc" min="1" max="40" value="14" class="portal-num-input w-10 text-base font-semibold tabular-nums leading-none bg-transparent border-b border-transparent focus:border-violet-400 outline-none" title="Clase de Armadura" />
           </div>
-          <button type="button" id="btnSheetRollInit" class="owl-btn owl-btn-accent rounded-full px-2.5 py-0.5 text-[11px] font-semibold">
+          <button type="button" id="btnSheetRollInit" class="portal-btn portal-btn-accent rounded-full px-2.5 py-0.5 text-[11px] font-semibold">
             Iniciativa
           </button>
         </div>
@@ -394,15 +417,15 @@
 
     <!-- Nivel, Bono de Competencia y Velocidad (D&D 5.5e) -->
     <div id="sheetLevelRow" class="grid grid-cols-3 gap-1.5 text-[10px]">
-      <label class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
+      <label class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
         <span class="opacity-65 font-medium">Nivel</span>
-        <input type="number" id="inpSheetLevel" min="1" max="20" value="1" class="owl-num-input w-8 text-right text-[11px] font-semibold bg-transparent outline-none" />
+        <input type="number" id="inpSheetLevel" min="1" max="20" value="1" class="portal-num-input w-8 text-right text-[11px] font-semibold bg-transparent outline-none" />
       </label>
-      <div class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1" title="Bono de Competencia (calculado por nivel)">
+      <div class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1" title="Bono de Competencia (calculado por nivel)">
         <span class="opacity-65 font-medium">BC</span>
         <strong id="lblSheetPb" class="text-[11px] font-semibold tabular-nums">+2</strong>
       </div>
-      <label class="owl-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
+      <label class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
         <span class="opacity-65 font-medium">Vel.</span>
         <input type="text" id="inpSheetSpeed" value="30 ft" class="w-11 text-right text-[11px] font-semibold bg-transparent outline-none" placeholder="30 ft" />
       </label>
@@ -416,39 +439,39 @@
       <div id="sheetActiveStatusesRow" class="flex flex-wrap gap-1 empty:hidden"></div>
       <div id="sheetResourcesList" class="grid grid-cols-2 gap-1.5 empty:hidden"></div>
       <div class="flex items-center justify-between gap-1.5">
-        <button type="button" id="btnToggleResourceForm" class="owl-btn owl-subpanel px-2 py-0.5 rounded-lg text-[10px] font-medium opacity-75 hover:opacity-100">+ Recurso / Contador</button>
+        <button type="button" id="btnToggleResourceForm" class="portal-btn portal-subpanel px-2 py-0.5 rounded-lg text-[10px] font-medium opacity-75 hover:opacity-100">+ Recurso / Contador</button>
       </div>
-      <form id="sheetResourceForm" class="hidden owl-subpanel rounded-xl p-2 flex-col gap-1.5 text-[10px]">
+      <form id="sheetResourceForm" class="hidden portal-subpanel rounded-xl p-2 flex-col gap-1.5 text-[10px]">
         <div class="flex items-center gap-1">
-          <input type="text" id="inpSheetResName" placeholder="Ej: Ki, Espacios Nv.1, Cordura..." required class="owl-input px-2 py-1 text-[11px] flex-1 min-w-0" />
-          <input type="number" id="inpSheetResMax" min="0" max="999" value="4" class="owl-input w-14 px-1.5 py-1 text-[11px] text-center tabular-nums" title="Máximo (0 = contador libre sin tope)" />
+          <input type="text" id="inpSheetResName" placeholder="Ej: Ki, Espacios Nv.1, Cordura..." required class="portal-input px-2 py-1 text-[11px] flex-1 min-w-0" />
+          <input type="number" id="inpSheetResMax" min="0" max="999" value="4" class="portal-input w-14 px-1.5 py-1 text-[11px] text-center tabular-nums" title="Máximo (0 = contador libre sin tope)" />
         </div>
         <div class="flex items-center justify-between gap-1.5">
-          <select id="selSheetResKind" class="owl-input px-1.5 py-0.5 text-[10px]">
+          <select id="selSheetResKind" class="portal-input px-1.5 py-0.5 text-[10px]">
             <option value="auto" selected>Auto (● o Barra)</option>
             <option value="pips">Casillas (●)</option>
             <option value="bar">Barra</option>
           </select>
           <input type="color" id="inpSheetResColor" value="#8b5cf6" class="w-6 h-5 rounded cursor-pointer bg-transparent border-0 p-0" title="Color del recurso" />
-          <button type="submit" class="owl-btn owl-btn-accent px-2.5 py-0.5 rounded-lg text-[10px] font-semibold">Añadir</button>
+          <button type="submit" class="portal-btn portal-btn-accent px-2.5 py-0.5 rounded-lg text-[10px] font-semibold">Añadir</button>
         </div>
       </form>
     </div>
 
     <!-- Selector Único de 6 Secciones (3x2 estilo Apple) -->
-    <div id="sheetTopTabs" class="owl-seg grid-cols-3 gap-0.5 text-[10px]">
-      <button type="button" data-sheet-tab="attrs" class="owl-seg-btn is-active">Atributos</button>
-      <button type="button" data-sheet-tab="skills" class="owl-seg-btn">Habilidades</button>
-      <button type="button" data-sheet-tab="traits" class="owl-seg-btn">Rasgos</button>
-      <button type="button" data-sheet-tab="equipment" class="owl-seg-btn">Equipo</button>
-      <button type="button" data-sheet-tab="consumable" class="owl-seg-btn">Consum.</button>
-      <button type="button" data-sheet-tab="ability" class="owl-seg-btn">Capac.</button>
+    <div id="sheetTopTabs" class="portal-seg grid-cols-3 gap-0.5 text-[10px]">
+      <button type="button" data-sheet-tab="attrs" class="portal-seg-btn is-active">Atributos</button>
+      <button type="button" data-sheet-tab="skills" class="portal-seg-btn">Habilidades</button>
+      <button type="button" data-sheet-tab="traits" class="portal-seg-btn">Rasgos</button>
+      <button type="button" data-sheet-tab="equipment" class="portal-seg-btn">Equipo</button>
+      <button type="button" data-sheet-tab="consumable" class="portal-seg-btn">Consum.</button>
+      <button type="button" data-sheet-tab="ability" class="portal-seg-btn">Capac.</button>
     </div>
 
     <!-- 4. Vista de la Pestaña elegida -->
     <div
       id="sheetContentBox"
-      class="owl-subpanel rounded-xl p-2 flex-1 flex flex-col gap-1.5 border transition-colors min-h-0"
+      class="portal-subpanel rounded-xl p-2 flex-1 flex flex-col gap-1.5 border transition-colors min-h-0"
       style="border-color: var(--border-subtle);"
     >
       <!-- Vista: Atributos -->
@@ -462,13 +485,13 @@
       <!-- Vista: Habilidades / Pericias -->
       <div id="sheetPaneSkills" class="hidden flex-1 flex-col gap-1.5 min-h-0">
         <div class="flex items-center justify-between gap-1.5 shrink-0">
-          <button type="button" id="btnToggleSkillForm" class="owl-btn owl-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Habilidad</button>
-          <button type="button" id="btnLoadDnd55Skills" class="owl-btn owl-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold" title="Cargar las 18 habilidades de D&D 5.5e">Cargar 5.5e</button>
+          <button type="button" id="btnToggleSkillForm" class="portal-btn portal-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Habilidad</button>
+          <button type="button" id="btnLoadDnd55Skills" class="portal-btn portal-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold" title="Cargar las 18 habilidades de D&D 5.5e">Cargar 5.5e</button>
         </div>
         <form id="sheetSkillForm" class="hidden items-center gap-1 shrink-0">
-          <input type="text" id="inpSheetSkillName" placeholder="Habilidad..." required class="owl-input px-2 py-1 text-[11px] flex-1 min-w-0" />
-          <input type="number" id="inpSheetSkillMod" value="0" min="-20" max="30" class="owl-num-input w-11 py-1 text-[11px] font-semibold text-center" title="Modificador" />
-          <button type="submit" class="owl-btn owl-btn-accent w-7 h-7 p-0 rounded-lg flex items-center justify-center shrink-0" title="Añadir habilidad">+</button>
+          <input type="text" id="inpSheetSkillName" placeholder="Habilidad..." required class="portal-input px-2 py-1 text-[11px] flex-1 min-w-0" />
+          <input type="number" id="inpSheetSkillMod" value="0" min="-20" max="30" class="portal-num-input w-11 py-1 text-[11px] font-semibold text-center" title="Modificador" />
+          <button type="submit" class="portal-btn portal-btn-accent w-7 h-7 p-0 rounded-lg flex items-center justify-center shrink-0" title="Añadir habilidad">+</button>
         </form>
         <div id="sheetSkillsList" class="flex-1 flex flex-col gap-1 overflow-y-auto min-h-0"></div>
       </div>
@@ -476,14 +499,14 @@
       <!-- Vista: Rasgos / Ventajas / Notas -->
       <div id="sheetPaneTraits" class="hidden flex-1 flex-col gap-1.5 min-h-0">
         <div class="flex items-center justify-end shrink-0">
-          <button type="button" id="btnToggleTraitForm" class="owl-btn owl-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Rasgo</button>
+          <button type="button" id="btnToggleTraitForm" class="portal-btn portal-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Rasgo</button>
         </div>
         <form id="sheetTraitForm" class="hidden flex-col gap-1 shrink-0">
           <div class="flex items-center gap-1.5">
-            <input type="text" id="inpSheetTraitTitle" placeholder="Rasgo o ventaja..." required class="owl-input px-2 py-1 text-[11px] flex-1 min-w-0" />
-            <button type="submit" class="owl-btn owl-btn-accent w-7 h-7 p-0 rounded-lg flex items-center justify-center shrink-0" title="Añadir rasgo">+</button>
+            <input type="text" id="inpSheetTraitTitle" placeholder="Rasgo o ventaja..." required class="portal-input px-2 py-1 text-[11px] flex-1 min-w-0" />
+            <button type="submit" class="portal-btn portal-btn-accent w-7 h-7 p-0 rounded-lg flex items-center justify-center shrink-0" title="Añadir rasgo">+</button>
           </div>
-          <textarea id="inpSheetTraitDesc" rows="1" placeholder="Detalle breve (opcional)..." class="owl-input px-2 py-1 text-[10px] resize-y min-h-[28px] max-h-20"></textarea>
+          <textarea id="inpSheetTraitDesc" rows="1" placeholder="Detalle breve (opcional)..." class="portal-input px-2 py-1 text-[10px] resize-y min-h-[28px] max-h-20"></textarea>
         </form>
         <div id="sheetTraitsList" class="flex-1 flex flex-col gap-1 overflow-y-auto min-h-0"></div>
       </div>
@@ -505,7 +528,7 @@
        ======================================================================== -->
   <aside
     id="tokenDrawer"
-    class="owl-panel owl-drawer-right is-open fixed top-16 right-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
+    class="portal-panel portal-drawer-right is-open fixed top-16 right-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
     aria-label="Compendio Arrastrable"
   >
     <div class="flex items-center justify-between">
@@ -514,7 +537,7 @@
         <button
           type="button"
           id="btnNewCompendiumFolder"
-          class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-80"
+          class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-80"
           title="Nueva carpeta"
         >
           <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /><path d="M8 7v3M6.5 8.5h3" /></svg>
@@ -522,125 +545,125 @@
         <button
           type="button"
           id="btnToggleCustomToken"
-          class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center"
+          class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center"
           title="Crear nuevo elemento"
         >
           <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10" /></svg>
         </button>
-        <button type="button" id="btnCloseTokenDrawer" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75" title="Cerrar">
+        <button type="button" id="btnCloseTokenDrawer" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75" title="Cerrar">
           <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
         </button>
       </div>
     </div>
 
     <!-- Pestañas de Categoría (Segmented estilo Apple) -->
-    <div id="compendiumTabs" class="owl-seg grid-cols-3">
-      <button type="button" data-comp-tab="actors" class="owl-seg-btn is-active">Personajes</button>
-      <button type="button" data-comp-tab="items" class="owl-seg-btn">Complementos</button>
-      <button type="button" data-comp-tab="maps" class="owl-seg-btn">Escenarios</button>
+    <div id="compendiumTabs" class="portal-seg grid-cols-3">
+      <button type="button" data-comp-tab="actors" class="portal-seg-btn is-active">Personajes</button>
+      <button type="button" data-comp-tab="items" class="portal-seg-btn">Complementos</button>
+      <button type="button" data-comp-tab="maps" class="portal-seg-btn">Escenarios</button>
     </div>
 
     <input
       type="search"
       id="inpCompendiumSearch"
       placeholder="Buscar en el compendio..."
-      class="owl-input rounded-xl px-3 py-1.5 text-xs"
+      class="portal-input rounded-xl px-3 py-1.5 text-xs"
     />
 
     <datalist id="compendiumFolderList"></datalist>
 
     <!-- Creador rápido de carpeta -->
-    <form id="compendiumFolderForm" class="hidden owl-subpanel rounded-xl p-2 flex items-center gap-1.5">
-      <input type="text" id="inpNewFolderName" placeholder="Nombre de carpeta..." required class="owl-input px-2.5 py-1 text-xs flex-1 min-w-0" />
-      <button type="submit" class="owl-btn owl-btn-accent px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0">Crear</button>
+    <form id="compendiumFolderForm" class="hidden portal-subpanel rounded-xl p-2 flex items-center gap-1.5">
+      <input type="text" id="inpNewFolderName" placeholder="Nombre de carpeta..." required class="portal-input px-2.5 py-1 text-xs flex-1 min-w-0" />
+      <button type="submit" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0">Crear</button>
     </form>
 
     <!-- Creador de Personaje -->
-    <form id="customTokenForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
+    <form id="customTokenForm" class="hidden portal-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
       <div class="flex items-center justify-between">
         <span id="lblCustomFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo personaje</span>
         <button type="button" id="btnCancelCustomToken" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
       </div>
       <div class="grid grid-cols-2 gap-1.5">
-        <input type="text" id="inpCustomTokenName" placeholder="Nombre..." required class="owl-input px-2.5 py-1 text-xs" />
-        <input type="text" id="inpCustomTokenRole" placeholder="Rol / Clase" class="owl-input px-2.5 py-1 text-xs" />
+        <input type="text" id="inpCustomTokenName" placeholder="Nombre..." required class="portal-input px-2.5 py-1 text-xs" />
+        <input type="text" id="inpCustomTokenRole" placeholder="Rol / Clase" class="portal-input px-2.5 py-1 text-xs" />
       </div>
       <div class="grid grid-cols-[1fr_1fr_1.3fr] gap-1.5 items-center">
-        <label class="owl-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
+        <label class="portal-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
           <span class="opacity-60">HP</span>
-          <input type="number" id="inpCustomTokenHp" value="16" min="1" max="999" class="owl-num-input w-9 text-xs font-semibold" />
+          <input type="number" id="inpCustomTokenHp" value="16" min="1" max="999" class="portal-num-input w-9 text-xs font-semibold" />
         </label>
-        <label class="owl-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
+        <label class="portal-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
           <span class="opacity-60">CA</span>
-          <input type="number" id="inpCustomTokenAc" value="13" min="1" max="35" class="owl-num-input w-8 text-xs font-semibold" />
+          <input type="number" id="inpCustomTokenAc" value="13" min="1" max="35" class="portal-num-input w-8 text-xs font-semibold" />
         </label>
-        <select id="selCustomTokenAlly" class="owl-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
-          <option value="ally">Aliado</option>
-          <option value="enemy">Enemigo</option>
+        <select id="selCustomTokenAlly" class="portal-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
+          <option value="ally">Protagonista</option>
+          <option value="enemy">Secundario</option>
         </select>
       </div>
       <div class="grid grid-cols-3 gap-1">
-        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
           <span class="opacity-55">FUE</span>
-          <input type="number" id="inpCustomStr" value="1" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomStr" value="1" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
-        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
           <span class="opacity-55">DES</span>
-          <input type="number" id="inpCustomDex" value="1" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomDex" value="1" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
-        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
           <span class="opacity-55">CON</span>
-          <input type="number" id="inpCustomCon" value="1" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomCon" value="1" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
-        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
           <span class="opacity-55">INT</span>
-          <input type="number" id="inpCustomInt" value="0" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomInt" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
-        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
           <span class="opacity-55">SAB</span>
-          <input type="number" id="inpCustomWis" value="0" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomWis" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
-        <label class="owl-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
           <span class="opacity-55">CAR</span>
-          <input type="number" id="inpCustomCha" value="0" min="-5" max="10" class="owl-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomCha" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
       </div>
       <div class="grid grid-cols-2 gap-1.5">
         <div class="flex items-center gap-1 min-w-0">
-          <input type="text" id="inpCustomTokenImg" placeholder="URL imagen..." class="owl-input px-2 py-1 text-[11px] min-w-0 flex-1" />
-          <label for="fileCustomTokenImg" class="owl-btn owl-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir imagen local">
+          <input type="text" id="inpCustomTokenImg" placeholder="URL imagen..." class="portal-input px-2 py-1 text-[11px] min-w-0 flex-1" />
+          <label for="fileCustomTokenImg" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir imagen local">
             <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 12.5h10" /></svg>
           </label>
           <input type="file" id="fileCustomTokenImg" accept="image/*" class="hidden" />
         </div>
-        <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="owl-input px-2.5 py-1 text-[11px]" />
+        <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="portal-input px-2.5 py-1 text-[11px]" />
       </div>
       <div class="flex items-center justify-between gap-2">
         <div id="customTokenColorGrid" class="grid grid-cols-6 gap-1.5"></div>
-        <button type="submit" id="btnCustomFormSubmit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
+        <button type="submit" id="btnCustomFormSubmit" class="portal-btn portal-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
       </div>
     </form>
 
     <!-- Creador de Complemento por Bloques -->
-    <form id="customItemForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
+    <form id="customItemForm" class="hidden portal-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
       <div class="flex items-center justify-between">
         <span id="lblCustomItemFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo complemento</span>
         <button type="button" id="btnCancelCustomItem" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
       </div>
       <div class="grid grid-cols-2 gap-1.5">
-        <input type="text" id="inpCustomItemName" placeholder="Nombre..." required class="owl-input px-2.5 py-1 text-xs" />
-        <select id="selCustomItemKind" class="owl-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
+        <input type="text" id="inpCustomItemName" placeholder="Nombre..." required class="portal-input px-2.5 py-1 text-xs" />
+        <select id="selCustomItemKind" class="portal-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
           <option value="equipment">Equipo</option>
           <option value="consumable">Consumible</option>
           <option value="ability">Capacidad</option>
         </select>
       </div>
-      <div class="owl-subpanel rounded-xl px-2.5 py-2 flex items-center justify-between gap-2.5">
-        <button type="button" id="btnToggleItemIconPicker" class="owl-subpanel owl-btn p-0.5 rounded-xl flex items-center gap-1 shrink-0" title="Elegir ícono"></button>
+      <div class="portal-subpanel rounded-xl px-2.5 py-2 flex items-center justify-between gap-2.5">
+        <button type="button" id="btnToggleItemIconPicker" class="portal-subpanel portal-btn p-0.5 rounded-xl flex items-center gap-1 shrink-0" title="Elegir ícono"></button>
         <div id="customItemColorGrid" class="grid grid-cols-8 gap-1.5"></div>
       </div>
-      <div id="customItemIconGrid" class="hidden grid grid-cols-6 gap-1 owl-subpanel rounded-lg p-1.5"></div>
-      <textarea id="inpCustomItemMsg" rows="2" placeholder="Descripción o regla en mesa (opcional)..." class="owl-input px-2.5 py-1.5 text-[11px] resize-y min-h-[40px] max-h-24"></textarea>
+      <div id="customItemIconGrid" class="hidden grid grid-cols-6 gap-1 portal-subpanel rounded-lg p-1.5"></div>
+      <textarea id="inpCustomItemMsg" rows="2" placeholder="Descripción o regla en mesa (opcional)..." class="portal-input px-2.5 py-1.5 text-[11px] resize-y min-h-[40px] max-h-24"></textarea>
       <div id="customItemBlocksSection" class="hidden flex-col gap-1 flex-1 min-h-[110px]">
         <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60 shrink-0">Secuencia</span>
         <div id="customItemBlocksList" class="flex-1 flex flex-col gap-1.5 overflow-y-auto min-h-0"></div>
@@ -648,37 +671,52 @@
       <div class="flex flex-col gap-1">
         <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">Agregar bloque</span>
         <div id="itemBlockPalette" class="grid grid-cols-5 gap-1">
-          <button type="button" data-add-block="roll" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Tirada de dados">🎲 Tirada</button>
-          <button type="button" data-add-block="passive" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Modificador pasivo">🛡️ Pasivo</button>
-          <button type="button" data-add-block="area" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Seleccionar área u objetivos">🎯 Área</button>
-          <button type="button" data-add-block="save_request" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Pedir tirada a jugadores">⚡ Pedir</button>
-          <button type="button" data-add-block="apply_hp" class="owl-seg-btn owl-subpanel py-1 text-[10px] font-semibold" title="Aplicar daño, curación o estado">🩸 Aplicar</button>
+          <button type="button" data-add-block="roll" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Tirada de dados">
+            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg>
+            <span>Tirada</span>
+          </button>
+          <button type="button" data-add-block="passive" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Modificador pasivo">
+            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6l7-3z"/></svg>
+            <span>Pasivo</span>
+          </button>
+          <button type="button" data-add-block="area" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Seleccionar área u objetivos">
+            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>
+            <span>Área</span>
+          </button>
+          <button type="button" data-add-block="save_request" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Pedir tirada a jugadores">
+            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>
+            <span>Pedir</span>
+          </button>
+          <button type="button" data-add-block="apply_hp" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Aplicar daño, curación o estado">
+            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>
+            <span>Aplicar</span>
+          </button>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <input type="text" id="inpCustomItemFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="owl-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
-        <button type="submit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
+        <input type="text" id="inpCustomItemFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="portal-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
+        <button type="submit" class="portal-btn portal-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
       </div>
     </form>
 
     <!-- Creador de Escenario -->
-    <form id="customMapForm" class="hidden owl-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
+    <form id="customMapForm" class="hidden portal-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
       <div class="flex items-center justify-between">
         <span id="lblCustomMapFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo escenario</span>
         <button type="button" id="btnCancelCustomMap" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
       </div>
-      <input type="text" id="inpCustomMapName" placeholder="Nombre del escenario..." required class="owl-input px-2.5 py-1 text-xs" />
+      <input type="text" id="inpCustomMapName" placeholder="Nombre del escenario..." required class="portal-input px-2.5 py-1 text-xs" />
       <div class="flex items-center gap-1.5">
-        <input type="text" id="inpCustomMapImg" placeholder="URL imagen o sube archivo local..." required class="owl-input px-2.5 py-1 text-[11px] min-w-0 flex-1" />
-        <label for="fileCustomMapImg" class="owl-btn owl-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir mapa local">
+        <input type="text" id="inpCustomMapImg" placeholder="URL imagen o sube archivo local..." required class="portal-input px-2.5 py-1 text-[11px] min-w-0 flex-1" />
+        <label for="fileCustomMapImg" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir mapa local">
           <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 12.5h10" /></svg>
         </label>
         <input type="file" id="fileCustomMapImg" accept="image/*" class="hidden" />
       </div>
       <div class="flex items-center gap-1.5">
-        <input type="text" id="inpCustomMapDesc" placeholder="Descripción breve..." class="owl-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
-        <input type="text" id="inpCustomMapFolder" list="compendiumFolderList" placeholder="Carpeta" class="owl-input px-2 py-1 text-[11px] w-24" />
-        <button type="submit" class="owl-btn owl-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
+        <input type="text" id="inpCustomMapDesc" placeholder="Descripción breve..." class="portal-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
+        <input type="text" id="inpCustomMapFolder" list="compendiumFolderList" placeholder="Carpeta" class="portal-input px-2 py-1 text-[11px] w-24" />
+        <button type="submit" class="portal-btn portal-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
       </div>
     </form>
 
@@ -693,123 +731,124 @@
     <!-- Visor Numérico Flotante de Tirada (Dynamic HUD) -->
     <div
       id="dice3dOverlay"
-      class="owl-panel owl-pop owl-roll-card rounded-2xl px-5 pt-3 pb-3 flex flex-col items-center text-center gap-1.5 pointer-events-auto max-w-[min(92vw,340px)]"
+      class="portal-panel portal-pop portal-roll-card overflow-hidden rounded-2xl px-5 pt-3 pb-3 flex flex-col items-center text-center gap-1.5 pointer-events-auto max-w-[min(92vw,340px)]"
     >
-      <button type="button" id="btnCloseDice3d" class="owl-roll-close" title="Cerrar">✕</button>
+      <div id="sequenceWatermark" class="hidden absolute inset-0 items-center justify-center pointer-events-none select-none z-0" aria-hidden="true"></div>
+      <button type="button" id="btnCloseDice3d" class="portal-roll-close" title="Cerrar">✕</button>
       <div id="sequenceHeaderBar" class="hidden items-center justify-center gap-1.5 px-6 max-w-full"></div>
       <div class="flex items-center justify-center gap-1.5 px-6 max-w-full">
-        <span id="lblDiceFormula" class="owl-roll-pill font-mono-tech truncate max-w-[230px]">1d20 + 0</span>
-        <span id="lblDiceBadge" class="owl-roll-pill hidden shrink-0"></span>
+        <span id="lblDiceFormula" class="portal-roll-pill font-mono-tech truncate max-w-[230px]">1d20 + 0</span>
+        <span id="lblDiceBadge" class="portal-roll-pill hidden shrink-0"></span>
       </div>
       <div id="lblDiceTotal" class="text-4xl font-bold leading-none tracking-tight tabular-nums py-0.5" style="color: var(--accent-primary);">20</div>
       <div id="diceRollChips" class="hidden flex-wrap items-center justify-center gap-1.5 py-0.5"></div>
       <p id="lblDiceMessage" class="hidden text-[11px] leading-snug opacity-85 max-w-full max-h-24 overflow-y-auto px-1 text-center" style="overflow-wrap: anywhere;"></p>
       <div id="lblDiceDetail" class="text-[11px] font-medium opacity-70 tabular-nums">Natural: 20</div>
       <div id="diceDeckActions" class="hidden items-center justify-center gap-1.5 pt-1">
-        <button type="button" id="btnDiceShuffleDeck" class="owl-btn owl-subpanel px-3 py-1 rounded-full text-[10.5px] font-semibold hover:opacity-100" title="Mezclar todas las cartas de la baraja">🔀 Barajar (54/54)</button>
+        <button type="button" id="btnDiceShuffleDeck" class="portal-btn portal-subpanel px-3 py-1 rounded-full text-[10.5px] font-semibold hover:opacity-100" title="Mezclar todas las cartas de la baraja">🔀 Barajar (54/54)</button>
       </div>
       <div id="sequenceBodySlot" class="hidden flex-col gap-1.5 w-full pt-1"></div>
       <div id="diceRollActions" class="hidden items-center justify-center gap-1.5 pt-1.5 mt-0.5 border-t w-full" style="border-color: var(--hairline);">
-        <button type="button" id="btnDiceApplyDmg" class="owl-btn owl-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-rose-400 hover:opacity-100" title="Restar al token seleccionado">− Daño</button>
-        <button type="button" id="btnDiceApplyHalfDmg" class="owl-btn owl-subpanel px-2 py-1 rounded-full text-[10px] font-semibold opacity-80 hover:opacity-100" title="Restar mitad al token seleccionado">½</button>
-        <button type="button" id="btnDiceApplyHeal" class="owl-btn owl-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-emerald-400 hover:opacity-100" title="Curar al token seleccionado">+ Curar</button>
+        <button type="button" id="btnDiceApplyDmg" class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-rose-400 hover:opacity-100" title="Restar al token seleccionado">− Daño</button>
+        <button type="button" id="btnDiceApplyHalfDmg" class="portal-btn portal-subpanel px-2 py-1 rounded-full text-[10px] font-semibold opacity-80 hover:opacity-100" title="Restar mitad al token seleccionado">½</button>
+        <button type="button" id="btnDiceApplyHeal" class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[10px] font-semibold text-emerald-400 hover:opacity-100" title="Curar al token seleccionado">+ Curar</button>
       </div>
       <div id="sequenceStepActions" class="hidden flex-wrap items-center justify-center gap-1.5 pt-1.5 mt-0.5 border-t w-full" style="border-color: var(--hairline);"></div>
     </div>
 
     <!-- Panel Contextual de Secuencias y Solicitudes de Tirada -->
-    <div id="sequenceFloatingPanel" class="hidden owl-panel owl-pop rounded-2xl px-3.5 py-2.5 flex-col gap-2 max-w-[min(92vw,360px)] pointer-events-auto"></div>
+    <div id="sequenceFloatingPanel" class="hidden portal-panel portal-pop rounded-2xl px-3.5 py-2.5 flex-col gap-2 max-w-[min(92vw,360px)] pointer-events-auto"></div>
 
     <!-- Barra Compacta de Dados (Dock estilo Apple) -->
-    <div id="diceTrayBar" class="owl-panel owl-dock rounded-2xl px-2 py-1.5 flex flex-nowrap items-center justify-start md:justify-center gap-1.5 pointer-events-auto max-w-[calc(100vw-16px)] overflow-x-auto">
+    <div id="diceTrayBar" class="portal-panel portal-dock rounded-2xl px-2 py-1.5 flex flex-nowrap items-center justify-start md:justify-center gap-1.5 pointer-events-auto max-w-[calc(100vw-16px)] overflow-x-auto">
       <div class="flex items-center gap-0.5 shrink-0">
-        <button type="button" data-die="4" class="owl-die-btn" title="d4">
+        <button type="button" data-die="4" class="portal-die-btn" title="d4">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 3.5 21 19.5 3 19.5" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d4</span>
         </button>
-        <button type="button" data-die="6" class="owl-die-btn" title="d6">
+        <button type="button" data-die="6" class="portal-die-btn" title="d6">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="3.2" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d6</span>
         </button>
-        <button type="button" data-die="8" class="owl-die-btn" title="d8">
+        <button type="button" data-die="8" class="portal-die-btn" title="d8">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.5 20.5 12 12 21.5 3.5 12" /><path d="M3.5 12h17" opacity="0.45" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d8</span>
         </button>
-        <button type="button" data-die="10" class="owl-die-btn" title="d10">
+        <button type="button" data-die="10" class="portal-die-btn" title="d10">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.5 20 10.5 12 21.5 4 10.5" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d10</span>
         </button>
-        <button type="button" data-die="12" class="owl-die-btn" title="d12">
+        <button type="button" data-die="12" class="portal-die-btn" title="d12">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.8 20.5 9 17.3 19.2 6.7 19.2 3.5 9" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d12</span>
         </button>
-        <button type="button" data-die="20" class="owl-die-btn is-featured" title="d20">
+        <button type="button" data-die="20" class="portal-die-btn is-featured" title="d20">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="12 2.5 20 7 20 17 12 21.5 4 17 4 7" /><polygon points="12 6.5 17 15.5 7 15.5" opacity="0.55" /></svg>
           <span class="font-mono-tech text-[9.5px] font-bold leading-none">d20</span>
         </button>
-        <button type="button" data-die="30" class="owl-die-btn" title="d30">
+        <button type="button" data-die="30" class="portal-die-btn" title="d30">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><polygon points="8.5 3 15.5 3 21 8.5 21 15.5 15.5 21 8.5 21 3 15.5 3 8.5" /><polygon points="12 7 16.5 12 12 17 7.5 12" opacity="0.5" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d30</span>
         </button>
-        <button type="button" data-die="100" class="owl-die-btn" title="d100">
+        <button type="button" data-die="100" class="portal-die-btn" title="d100">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><polygon points="9.5 3.5 15.5 10 9.5 19.5 3.5 10" /><polygon points="15 4.5 20.5 11 15 20.5 11.5 15" opacity="0.6" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">d100</span>
         </button>
-        <button type="button" data-die="fudge" data-tray-extra="fudge" class="owl-die-btn hidden" title="Agregar dF (Fudge / Fate) a la mano">
+        <button type="button" data-die="fudge" data-tray-extra="fudge" class="portal-die-btn hidden" title="Agregar dF (Fudge / Fate) a la mano">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="3.2" /><path d="M9 12h6M12 9v6" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">dF</span>
         </button>
-        <button type="button" data-die="2" data-tray-extra="coin" class="owl-die-btn hidden" title="Agregar Moneda (0 Cruz / 1 Cara) a la mano">
+        <button type="button" data-die="2" data-tray-extra="coin" class="portal-die-btn hidden" title="Agregar Moneda (0 Cruz / 1 Cara) a la mano">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="5" opacity="0.45" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">Moneda</span>
         </button>
-        <button type="button" data-die="card" data-tray-extra="deck" class="owl-die-btn hidden" title="Sacar carta de la Baraja (clic acumula, tablero revela)">
+        <button type="button" data-die="card" data-tray-extra="deck" class="portal-die-btn hidden" title="Sacar carta de la Baraja (clic acumula, tablero revela)">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"><rect x="6" y="3.5" width="12" height="17" rx="2" /><path d="M12 9l2.5 3-2.5 3-2.5-3z" opacity="0.7" /></svg>
           <span class="font-mono-tech text-[9.5px] font-semibold leading-none">Baraja</span>
         </button>
       </div>
 
-      <span class="owl-dock-sep hidden md:block"></span>
+      <span class="portal-dock-sep hidden md:block"></span>
 
       <!-- Stepper iOS para modificador -->
-      <div class="owl-stepper font-mono-tech text-xs shrink-0">
-        <button type="button" id="btnDiceModMinus" class="owl-stepper-btn" title="Restar modificador">−</button>
+      <div class="portal-stepper font-mono-tech text-xs shrink-0">
+        <button type="button" id="btnDiceModMinus" class="portal-stepper-btn" title="Restar modificador">−</button>
         <span id="lblDiceMod" class="px-1.5 min-w-[26px] text-center font-semibold tabular-nums">+0</span>
-        <button type="button" id="btnDiceModPlus" class="owl-stepper-btn" title="Sumar modificador">+</button>
+        <button type="button" id="btnDiceModPlus" class="portal-stepper-btn" title="Sumar modificador">+</button>
       </div>
 
-      <span class="owl-dock-sep hidden md:block"></span>
+      <span class="portal-dock-sep hidden md:block"></span>
 
       <!-- Selector segmentado de lectura de resultado -->
-      <div id="diceResultSeg" class="owl-seg grid-cols-5 shrink-0" title="Cómo mostrar y calcular el resultado">
-        <button type="button" data-result-mode="sum" class="owl-seg-btn is-active !px-1.5" title="Sumar todos los dados + modificador">Total</button>
-        <button type="button" data-result-mode="each" class="owl-seg-btn !px-1.5" title="Cada dado por separado + modificador">c/u</button>
-        <button type="button" data-result-mode="max" class="owl-seg-btn !px-1.5" title="Dado más alto + modificador">Máx</button>
-        <button type="button" data-result-mode="min" class="owl-seg-btn !px-1.5" title="Dado más bajo + modificador">Mín</button>
-        <button type="button" data-result-mode="success" class="owl-seg-btn !px-1.5" title="Contar éxitos (≥ umbral)">Éxit.</button>
+      <div id="diceResultSeg" class="portal-seg grid-cols-5 shrink-0" title="Cómo mostrar y calcular el resultado">
+        <button type="button" data-result-mode="sum" class="portal-seg-btn is-active !px-1.5" title="Sumar todos los dados + modificador">Total</button>
+        <button type="button" data-result-mode="each" class="portal-seg-btn !px-1.5" title="Cada dado por separado + modificador">c/u</button>
+        <button type="button" data-result-mode="max" class="portal-seg-btn !px-1.5" title="Dado más alto + modificador">Máx</button>
+        <button type="button" data-result-mode="min" class="portal-seg-btn !px-1.5" title="Dado más bajo + modificador">Mín</button>
+        <button type="button" data-result-mode="success" class="portal-seg-btn !px-1.5" title="Contar éxitos (≥ umbral)">Éxit.</button>
       </div>
-      <div id="diceThresholdWrap" class="hidden items-center gap-0.5 owl-subpanel rounded-lg px-1.5 py-0.5 text-[10px] font-mono-tech shrink-0" title="Dificultad mínima por dado para éxito">
+      <div id="diceThresholdWrap" class="hidden items-center gap-0.5 portal-subpanel rounded-lg px-1.5 py-0.5 text-[10px] font-mono-tech shrink-0" title="Dificultad mínima por dado para éxito">
         <span class="opacity-65">≥</span>
-        <input type="number" id="inpDiceThreshold" value="6" min="1" max="100" class="owl-num-input w-7 text-center text-[10px] font-semibold bg-transparent outline-none" />
+        <input type="number" id="inpDiceThreshold" value="6" min="1" max="100" class="portal-num-input w-7 text-center text-[10px] font-semibold bg-transparent outline-none" />
       </div>
 
-      <span class="owl-dock-sep hidden md:block"></span>
+      <span class="portal-dock-sep hidden md:block"></span>
 
       <!-- Selector segmentado de visibilidad de tirada (Pública / Privada) -->
-      <div id="diceVisibilitySeg" class="owl-seg grid-cols-2 shrink-0" title="Visibilidad de tirada">
-        <button type="button" data-dice-vis="public" class="owl-seg-btn is-active !px-1.5" title="Pública: la ven todos">Púb</button>
-        <button type="button" data-dice-vis="private" class="owl-seg-btn !px-1.5" title="Privada: jugador → DJ, o solo DJ">Priv</button>
+      <div id="diceVisibilitySeg" class="portal-seg grid-cols-2 shrink-0" title="Visibilidad de tirada">
+        <button type="button" data-dice-vis="public" class="portal-seg-btn is-active !px-1.5" title="Pública: la ven todos">Púb</button>
+        <button type="button" data-dice-vis="private" class="portal-seg-btn !px-1.5" title="Privada: jugador → DJ, o solo DJ">Priv</button>
       </div>
 
-      <span class="owl-dock-sep hidden md:block"></span>
+      <span class="portal-dock-sep hidden md:block"></span>
 
       <!-- Muestra viva del estilo actual de dados -->
-      <button type="button" id="btnDiceCustomize" class="owl-style-chip shrink-0" title="Personalizar dados" style="background:#8b5cf6;border-color:#0f172a;">
+      <button type="button" id="btnDiceCustomize" class="portal-style-chip shrink-0" title="Personalizar dados" style="background:#8b5cf6;border-color:#0f172a;">
         <span id="diceStyleDot" class="w-2 h-2 rounded-full" style="background:#ffffff;"></span>
       </button>
 
       <!-- Botón compacto de historial de tiradas -->
-      <button type="button" id="btnDiceHistory" class="owl-btn owl-subpanel w-7 h-7 p-0 rounded-lg shrink-0 flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity" title="Historial de tiradas" aria-label="Historial de tiradas">
+      <button type="button" id="btnDiceHistory" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-lg shrink-0 flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity" title="Historial de tiradas" aria-label="Historial de tiradas">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
           <path d="M3 3v5h5" />
@@ -822,12 +861,12 @@
   <!-- Popover de Historial de Tiradas -->
   <div
     id="diceHistoryPopover"
-    class="owl-panel owl-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
+    class="portal-panel portal-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
   >
     <div class="flex items-center justify-between">
       <button type="button" id="btnClearDiceHistory" class="text-[11px] opacity-60 hover:opacity-100 transition-opacity">Limpiar</button>
       <span class="font-semibold text-xs tracking-tight">Historial</span>
-      <button type="button" id="btnCloseDiceHistory" class="owl-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
+      <button type="button" id="btnCloseDiceHistory" class="portal-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
     </div>
     <div id="diceHistoryList" class="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto overflow-x-hidden pr-0.5">
       <div class="text-[11px] opacity-55 text-center py-6">Sin tiradas recientes.</div>
@@ -837,16 +876,16 @@
   <!-- Popover de Personalización de Dados (Estilo Curado) -->
   <div
     id="diceStylePopover"
-    class="owl-panel owl-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
+    class="portal-panel portal-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
   >
     <div class="flex items-center justify-between">
       <button type="button" id="btnResetDiceStyle" class="text-[11px] opacity-60 hover:opacity-100 transition-opacity">Restablecer</button>
       <span class="font-semibold text-xs tracking-tight">Dados</span>
-      <button type="button" id="btnCloseDiceStyle" class="owl-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
+      <button type="button" id="btnCloseDiceStyle" class="portal-btn-accent px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Listo</button>
     </div>
 
     <!-- Vista previa 3D viva -->
-    <div class="owl-preview-stage rounded-xl py-1 flex items-center justify-center">
+    <div class="portal-preview-stage rounded-xl py-1 flex items-center justify-center">
       <canvas id="dicePreviewCanvas" width="112" height="112" class="w-[96px] h-[96px] block"></canvas>
     </div>
 
@@ -854,14 +893,14 @@
     <div class="flex flex-col gap-1.5">
       <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Acabado</span>
       <div class="flex items-center justify-between gap-1.5">
-        <button type="button" data-body-swatch="#8b5cf6" class="owl-swatch" style="background:#8b5cf6" title="Arcano"></button>
-        <button type="button" data-body-swatch="#1e293b" class="owl-swatch" style="background:#1e293b" title="Obsidiana"></button>
-        <button type="button" data-body-swatch="#e11d48" class="owl-swatch" style="background:#e11d48" title="Carmesí"></button>
-        <button type="button" data-body-swatch="#059669" class="owl-swatch" style="background:#059669" title="Esmeralda"></button>
-        <button type="button" data-body-swatch="#2563eb" class="owl-swatch" style="background:#2563eb" title="Cobalto"></button>
-        <button type="button" data-body-swatch="#d97706" class="owl-swatch" style="background:#d97706" title="Ámbar"></button>
-        <button type="button" data-body-swatch="#cbd5e1" class="owl-swatch" style="background:#cbd5e1" title="Marfil"></button>
-        <label class="owl-swatch owl-swatch-custom" title="Color personalizado">
+        <button type="button" data-body-swatch="#8b5cf6" class="portal-swatch" style="background:#8b5cf6" title="Arcano"></button>
+        <button type="button" data-body-swatch="#1e293b" class="portal-swatch" style="background:#1e293b" title="Obsidiana"></button>
+        <button type="button" data-body-swatch="#e11d48" class="portal-swatch" style="background:#e11d48" title="Carmesí"></button>
+        <button type="button" data-body-swatch="#059669" class="portal-swatch" style="background:#059669" title="Esmeralda"></button>
+        <button type="button" data-body-swatch="#2563eb" class="portal-swatch" style="background:#2563eb" title="Cobalto"></button>
+        <button type="button" data-body-swatch="#d97706" class="portal-swatch" style="background:#d97706" title="Ámbar"></button>
+        <button type="button" data-body-swatch="#cbd5e1" class="portal-swatch" style="background:#cbd5e1" title="Marfil"></button>
+        <label class="portal-swatch portal-swatch-custom" title="Color personalizado">
           <span>+</span>
           <input type="color" id="inpDiceBodyColor" value="#8b5cf6" class="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
@@ -869,14 +908,14 @@
     </div>
 
     <!-- Bisel y Tinta -->
-    <div class="owl-hairline pt-2.5 grid grid-cols-2 gap-4">
+    <div class="portal-hairline pt-2.5 grid grid-cols-2 gap-4">
       <div class="flex flex-col gap-1.5">
         <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Bisel</span>
         <div class="flex items-center gap-2">
-          <button type="button" data-bevel-swatch="#0f172a" class="owl-swatch" style="background:#0f172a" title="Oscuro"></button>
-          <button type="button" data-bevel-swatch="#f59e0b" class="owl-swatch" style="background:#f59e0b" title="Oro"></button>
-          <button type="button" data-bevel-swatch="#e2e8f0" class="owl-swatch" style="background:#e2e8f0" title="Plata"></button>
-          <label class="owl-swatch owl-swatch-custom" title="Color de bisel">
+          <button type="button" data-bevel-swatch="#0f172a" class="portal-swatch" style="background:#0f172a" title="Oscuro"></button>
+          <button type="button" data-bevel-swatch="#f59e0b" class="portal-swatch" style="background:#f59e0b" title="Oro"></button>
+          <button type="button" data-bevel-swatch="#e2e8f0" class="portal-swatch" style="background:#e2e8f0" title="Plata"></button>
+          <label class="portal-swatch portal-swatch-custom" title="Color de bisel">
             <span>+</span>
             <input type="color" id="inpDiceBevelColor" value="#0f172a" class="absolute inset-0 opacity-0 cursor-pointer" />
           </label>
@@ -886,10 +925,10 @@
       <div class="flex flex-col gap-1.5">
         <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Tinta</span>
         <div class="flex items-center gap-2">
-          <button type="button" data-number-swatch="#ffffff" class="owl-swatch" style="background:#ffffff" title="Blanco"></button>
-          <button type="button" data-number-swatch="#0f172a" class="owl-swatch" style="background:#0f172a" title="Tinta"></button>
-          <button type="button" data-number-swatch="#fde68a" class="owl-swatch" style="background:#fde68a" title="Dorado"></button>
-          <label class="owl-swatch owl-swatch-custom" title="Color de número">
+          <button type="button" data-number-swatch="#ffffff" class="portal-swatch" style="background:#ffffff" title="Blanco"></button>
+          <button type="button" data-number-swatch="#0f172a" class="portal-swatch" style="background:#0f172a" title="Tinta"></button>
+          <button type="button" data-number-swatch="#fde68a" class="portal-swatch" style="background:#fde68a" title="Dorado"></button>
+          <label class="portal-swatch portal-swatch-custom" title="Color de número">
             <span>+</span>
             <input type="color" id="inpDiceNumberColor" value="#ffffff" class="absolute inset-0 opacity-0 cursor-pointer" />
           </label>
@@ -898,50 +937,50 @@
     </div>
 
     <!-- Controles segmentados: Tamaño y Relieve -->
-    <div class="owl-hairline pt-2.5 flex flex-col gap-2">
+    <div class="portal-hairline pt-2.5 flex flex-col gap-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Tamaño</span>
-        <div class="owl-seg grid-cols-3 w-[204px] shrink-0">
-          <button type="button" data-dice-size="0.82" class="owl-seg-btn">Chico</button>
-          <button type="button" data-dice-size="1" class="owl-seg-btn is-active">Normal</button>
-          <button type="button" data-dice-size="1.26" class="owl-seg-btn">Grande</button>
+        <div class="portal-seg grid-cols-3 w-[204px] shrink-0">
+          <button type="button" data-dice-size="0.82" class="portal-seg-btn">Chico</button>
+          <button type="button" data-dice-size="1" class="portal-seg-btn is-active">Normal</button>
+          <button type="button" data-dice-size="1.26" class="portal-seg-btn">Grande</button>
         </div>
       </div>
 
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Relieve</span>
-        <div class="owl-seg grid-cols-3 w-[204px] shrink-0">
-          <button type="button" data-dice-bevel="0" class="owl-seg-btn">Plano</button>
-          <button type="button" data-dice-bevel="0.9" class="owl-seg-btn is-active">Sutil</button>
-          <button type="button" data-dice-bevel="1.65" class="owl-seg-btn">Marcado</button>
+        <div class="portal-seg grid-cols-3 w-[204px] shrink-0">
+          <button type="button" data-dice-bevel="0" class="portal-seg-btn">Plano</button>
+          <button type="button" data-dice-bevel="0.9" class="portal-seg-btn is-active">Sutil</button>
+          <button type="button" data-dice-bevel="1.65" class="portal-seg-btn">Marcado</button>
         </div>
       </div>
     </div>
 
     <!-- Caras especiales: Crítico | Pifia -->
-    <div class="owl-hairline pt-2.5 flex flex-col gap-2">
+    <div class="portal-hairline pt-2.5 flex flex-col gap-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-medium uppercase tracking-wider opacity-55">Cara especial</span>
-        <div class="owl-seg grid-cols-2 w-[204px] shrink-0">
-          <button type="button" data-symbol-tab="maxSymbol" class="owl-seg-btn is-active">Crítico</button>
-          <button type="button" data-symbol-tab="minSymbol" class="owl-seg-btn">Pifia</button>
+        <div class="portal-seg grid-cols-2 w-[204px] shrink-0">
+          <button type="button" data-symbol-tab="maxSymbol" class="portal-seg-btn is-active">Crítico</button>
+          <button type="button" data-symbol-tab="minSymbol" class="portal-seg-btn">Pifia</button>
         </div>
       </div>
 
       <div class="flex items-center justify-between gap-1">
-        <button type="button" data-dice-glyph="" class="owl-seg-btn owl-subpanel h-7 px-2.5 text-[10px] is-active">Número</button>
-        <button type="button" data-dice-glyph="★" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">★</button>
-        <button type="button" data-dice-glyph="♪" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">♪</button>
-        <button type="button" data-dice-glyph="⚔" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">⚔</button>
-        <button type="button" data-dice-glyph="👑" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">👑</button>
-        <button type="button" data-dice-glyph="🔥" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">🔥</button>
-        <button type="button" data-dice-glyph="💀" class="owl-seg-btn owl-subpanel w-7 h-7 p-0 text-xs">💀</button>
+        <button type="button" data-dice-glyph="" class="portal-seg-btn portal-subpanel h-7 px-2.5 text-[10px] is-active">Número</button>
+        <button type="button" data-dice-glyph="★" class="portal-seg-btn portal-subpanel w-7 h-7 p-0 text-xs">★</button>
+        <button type="button" data-dice-glyph="♪" class="portal-seg-btn portal-subpanel w-7 h-7 p-0 text-xs">♪</button>
+        <button type="button" data-dice-glyph="⚔" class="portal-seg-btn portal-subpanel w-7 h-7 p-0 text-xs">⚔</button>
+        <button type="button" data-dice-glyph="👑" class="portal-seg-btn portal-subpanel w-7 h-7 p-0 text-xs">👑</button>
+        <button type="button" data-dice-glyph="🔥" class="portal-seg-btn portal-subpanel w-7 h-7 p-0 text-xs">🔥</button>
+        <button type="button" data-dice-glyph="💀" class="portal-seg-btn portal-subpanel w-7 h-7 p-0 text-xs">💀</button>
         <input
           type="text"
           id="inpDiceCustomSymbol"
           maxlength="3"
           placeholder="Otro"
-          class="owl-input h-7 w-12 px-1 py-0 text-[11px] leading-none text-center font-mono-tech"
+          class="portal-input h-7 w-12 px-1 py-0 text-[11px] leading-none text-center font-mono-tech"
           title="ASCII o emoji personalizado"
         />
       </div>
@@ -953,7 +992,7 @@
        ======================================================================== -->
   <div
     id="contextIconMenu"
-    class="owl-panel owl-pop fixed z-50 rounded-2xl p-2 flex flex-col gap-2 min-w-[264px]"
+    class="portal-panel portal-pop fixed z-50 rounded-2xl p-2 flex flex-col gap-2 min-w-[264px]"
     role="menu"
     aria-label="Paleta rápida de herramientas"
   >
@@ -962,22 +1001,22 @@
 
     <!-- Fila 1: Herramientas del mapa con iconos SVG (solo visible en clic derecho sobre el mapa) -->
     <div id="contextToolsRow" class="grid grid-cols-6 gap-1">
-      <button type="button" data-ctx-tool="select" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Mover / Seleccionar [V]">
+      <button type="button" data-ctx-tool="select" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Mover / Seleccionar [V]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 2-3 7z"/></svg>
       </button>
-      <button type="button" data-ctx-tool="ruler" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Regla Láser [R]">
+      <button type="button" data-ctx-tool="ruler" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Regla Láser [R]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.3 8.7L8.7 21.3c-1 1-2.5 1-3.4 0l-2.6-2.6c-1-1-1-2.5 0-3.4L15.3 2.7c1-1 2.5-1 3.4 0l2.6 2.6c1 1 1 2.5 0 3.4Z"/><path d="m7.5 10.5 2 2M10.5 7.5l2 2M13.5 4.5l2 2"/></svg>
       </button>
-      <button type="button" data-ctx-tool="draw" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Marcador Táctico [P]">
+      <button type="button" data-ctx-tool="draw" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Marcador Táctico [P]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
       </button>
-      <button type="button" data-ctx-tool="fog" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Pincel Niebla Manual [F]">
+      <button type="button" data-ctx-tool="fog" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Pincel Niebla Manual [F]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
       </button>
-      <button type="button" data-ctx-tool="wall" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Muros y Puertas (Luz Dinámica) [W]">
+      <button type="button" data-ctx-tool="wall" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Muros y Puertas (Luz Dinámica) [W]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v6M15 10v5M9 15v5"/></svg>
       </button>
-      <button type="button" data-ctx-tool="ping" class="owl-subpanel owl-btn h-9 flex-col gap-0" title="Ping Radar [G]">
+      <button type="button" data-ctx-tool="ping" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Ping Radar [G]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg>
       </button>
     </div>
@@ -992,14 +1031,14 @@
   <!-- Píldora flotante de Combate / Turnos (solo visible en combate activo) -->
   <div
     id="combatTrackerPill"
-    class="hidden owl-panel rounded-2xl px-2.5 py-1.5 fixed top-16 left-1/2 -translate-x-1/2 z-30 items-center gap-2 max-w-[92vw] pointer-events-auto"
+    class="hidden portal-panel rounded-2xl px-2.5 py-1.5 fixed top-16 left-1/2 -translate-x-1/2 z-30 items-center gap-2 max-w-[92vw] pointer-events-auto"
   >
     <span id="lblCombatRound" class="text-[11px] font-semibold opacity-75 whitespace-nowrap px-1">Ronda 1</span>
     <div id="combatOrderList" class="flex items-center gap-1 overflow-x-auto max-w-[52vw]"></div>
-    <button type="button" id="btnNextTurn" class="owl-btn owl-btn-accent rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">
+    <button type="button" id="btnNextTurn" class="portal-btn portal-btn-accent rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">
       Siguiente
     </button>
-    <button type="button" id="btnEndCombat" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-70" title="Finalizar combate">
+    <button type="button" id="btnEndCombat" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-70" title="Finalizar combate">
       <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
     </button>
   </div>
@@ -1007,37 +1046,37 @@
   <!-- Selector de plantilla de área para Regla (solo visible cuando tool === 'ruler') -->
   <div
     id="rulerShapePill"
-    class="hidden owl-panel rounded-full p-1 fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
+    class="hidden portal-panel rounded-full p-1 fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
   >
-    <div id="rulerShapeSeg" class="owl-seg grid-cols-4 min-w-[240px]">
-      <button type="button" data-ruler-shape="line" class="owl-seg-btn is-active">Línea</button>
-      <button type="button" data-ruler-shape="circle" class="owl-seg-btn">Esfera</button>
-      <button type="button" data-ruler-shape="cone" class="owl-seg-btn">Cono</button>
-      <button type="button" data-ruler-shape="cube" class="owl-seg-btn">Cubo</button>
+    <div id="rulerShapeSeg" class="portal-seg grid-cols-4 min-w-[240px]">
+      <button type="button" data-ruler-shape="line" class="portal-seg-btn is-active">Línea</button>
+      <button type="button" data-ruler-shape="circle" class="portal-seg-btn">Esfera</button>
+      <button type="button" data-ruler-shape="cone" class="portal-seg-btn">Cono</button>
+      <button type="button" data-ruler-shape="cube" class="portal-seg-btn">Cubo</button>
     </div>
   </div>
 
   <!-- Editor compacto de Nota / Pin en el mapa -->
   <div id="noteEditorModal" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4">
-    <form id="noteEditorForm" class="owl-panel w-full max-w-xs rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs">
+    <form id="noteEditorForm" class="portal-panel w-full max-w-xs rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs">
       <div class="flex items-center justify-between">
         <span class="font-semibold text-xs">Nota en el escenario</span>
-        <button type="button" id="btnCloseNoteModal" class="owl-btn owl-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75">
+        <button type="button" id="btnCloseNoteModal" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75">
           <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
         </button>
       </div>
-      <input type="text" id="inpNoteTitle" placeholder="Título de la nota..." required class="owl-input px-2.5 py-1.5 text-xs font-semibold" />
-      <textarea id="inpNoteBody" rows="3" placeholder="Detalles, pista, trampa o descripción..." class="owl-input px-2.5 py-1.5 text-xs resize-none"></textarea>
+      <input type="text" id="inpNoteTitle" placeholder="Título de la nota..." required class="portal-input px-2.5 py-1.5 text-xs font-semibold" />
+      <textarea id="inpNoteBody" rows="3" placeholder="Detalles, pista, trampa o descripción..." class="portal-input px-2.5 py-1.5 text-xs resize-none"></textarea>
       <label class="flex items-center justify-between cursor-pointer">
         <span class="text-[11px] opacity-80">Solo visible para GM</span>
-        <span class="owl-switch">
-          <input type="checkbox" id="chkNoteGmOnly" class="owl-switch-input" />
-          <span class="owl-switch-track"></span>
+        <span class="portal-switch">
+          <input type="checkbox" id="chkNoteGmOnly" class="portal-switch-input" />
+          <span class="portal-switch-track"></span>
         </span>
       </label>
       <div class="flex items-center justify-between gap-2 pt-1">
-        <button type="button" id="btnDeleteNote" class="hidden owl-btn text-red-400 text-[11px] font-semibold px-2 py-1">Eliminar</button>
-        <button type="submit" class="owl-btn owl-btn-accent rounded-full px-3.5 py-1.5 text-[11px] font-semibold ml-auto">Guardar</button>
+        <button type="button" id="btnDeleteNote" class="hidden portal-btn text-red-400 text-[11px] font-semibold px-2 py-1">Eliminar</button>
+        <button type="submit" class="portal-btn portal-btn-accent rounded-full px-3.5 py-1.5 text-[11px] font-semibold ml-auto">Guardar</button>
       </div>
     </form>
   </div>
@@ -1045,167 +1084,213 @@
   <!-- Toast flotante de feedback -->
   <div
     id="vttActionToast"
-    class="owl-panel owl-toast fixed top-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
+    class="portal-panel portal-toast fixed top-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
     style="overflow-wrap: anywhere;"
   ></div>
 
   <!-- ========================================================================
-       7. MODAL SALAS EFÍMERAS, ESTANTERÍA SOLO LECTURA & CARTUCHOS (.OWLTABLE)
+       7. MODAL SALAS EFÍMERAS, ESTANTERÍA SOLO LECTURA & CARTUCHOS (.PORTAL)
        ======================================================================== -->
-  <div id="roomModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="owl-panel w-full max-w-xl rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b pb-2.5" style="border-color: var(--border-subtle);">
-        <div>
-          <h2 class="text-sm font-bold">Salas Efímeras &amp; Cartuchos Portátiles (.owltable)</h2>
-          <p class="text-[11px] opacity-75">Empaqueta tu mesa con imágenes WebP y enlázala desde Dropbox o GitHub en solo lectura.</p>
-        </div>
-        <button type="button" id="btnCloseRoomModal" class="owl-btn p-1.5">✕</button>
-      </div>
-
-      <div id="roomToastBox" class="hidden px-3 py-2 rounded-xl font-mono-tech text-[11px] owl-subpanel" style="border-color: var(--accent-primary);"></div>
-
-      <!-- Instancia Activa -->
-      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <span class="font-mono-tech text-[10px] uppercase opacity-75">Instancia Activa</span>
-          <button type="button" id="btnCreateNewRoom" class="owl-btn owl-btn-accent px-2.5 py-1 text-[11px] font-semibold">
-            + Nueva Sala Aleatoria
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 font-mono-tech text-[11px]">
-          <div>
-            <span class="opacity-70 block text-[10px]">Código de Sala</span>
-            <strong id="lblModalRoomCode" class="text-sm">MESA-01</strong>
+  <div id="roomModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
+      <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
           </div>
-          <div>
-            <span class="opacity-70 block text-[10px]">Rol en Sesión</span>
-            <strong id="lblModalRoomRole" class="text-sm">DIRECTOR (GM)</strong>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold tracking-tight leading-tight">Salas, Escena y Cartuchos</h2>
+            <p class="text-[11px] opacity-65 truncate mt-0.5">Invitaciones, escena activa, handouts y paquetes .portal</p>
           </div>
         </div>
-
-        <div class="flex flex-col gap-1.5 mt-1">
-          <div class="flex items-center gap-1.5">
-            <input type="text" id="inpPlayerInviteUrl" readonly class="owl-input px-2 py-1 font-mono-tech text-[10px]" />
-            <button type="button" id="btnCopyPlayerUrl" class="owl-btn owl-subpanel px-2.5 py-1 font-mono-tech text-[10px] whitespace-nowrap">
-              Copiar Jugador
-            </button>
-          </div>
-          <div id="gmInviteRow" class="flex items-center gap-1.5">
-            <input type="text" id="inpGmInviteUrl" readonly class="owl-input px-2 py-1 font-mono-tech text-[10px]" />
-            <button type="button" id="btnCopyGmUrl" class="owl-btn owl-subpanel px-2.5 py-1 font-mono-tech text-[10px] whitespace-nowrap">
-              Copiar GM
-            </button>
-          </div>
-          <div class="pt-1 border-t flex items-center justify-between gap-2" style="border-color: var(--border-subtle);">
-            <span class="font-mono-tech text-[10px] uppercase opacity-70">Conectados</span>
-            <div id="roomPresenceList" class="flex flex-wrap items-center gap-1 justify-end"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Compartir Handout (Imagen en mesa para todos) -->
-      <div id="handoutShareBox" class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <span class="font-mono-tech text-[10px] uppercase opacity-75">Handout (Mostrar imagen en mesa)</span>
-          <label class="owl-btn owl-subpanel px-2 py-0.5 text-[10px] font-semibold cursor-pointer">
-            Subir
-            <input type="file" id="inpHandoutFile" accept="image/*" class="hidden" />
-          </label>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <input type="text" id="inpHandoutTitle" placeholder="Título (opcional)" class="owl-input px-2 py-1 text-[11px] w-1/3" />
-          <input type="url" id="inpHandoutUrl" placeholder="URL de imagen o Drive..." class="owl-input px-2 py-1 text-[11px] flex-1" />
-          <button type="button" id="btnShowHandout" class="owl-btn owl-btn-accent px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">Mostrar</button>
-        </div>
-      </div>
-
-      <!-- Unirse por código (útil dentro de Google Sites iframes) -->
-      <form id="joinRoomForm" class="owl-subpanel rounded-xl p-3 flex items-center gap-2">
-        <input type="text" id="inpJoinRoomCode" placeholder="Código de sala (ej. MESA-84K)" class="owl-input px-2.5 py-1.5 font-mono-tech text-xs uppercase" />
-        <button type="submit" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
-          Entrar a Sala
+        <button type="button" id="btnCloseRoomModal" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
         </button>
-      </form>
-
-      <!-- Selector de Escena / Paquete SRD o Mesa Enlazada -->
-      <div class="owl-subpanel rounded-xl p-3 flex items-center justify-between gap-2">
-        <div>
-          <span class="font-mono-tech text-[10px] uppercase opacity-75 block">Escena Activa / Paquete SRD</span>
-          <span class="text-[10px] opacity-70">Cambia entre mapas base o tus mesas enlazadas</span>
-        </div>
-        <div class="relative flex items-center">
-          <select
-            id="mapSelector"
-            class="owl-input owl-select rounded-lg pl-2.5 pr-7 py-1.5 text-xs font-medium cursor-pointer outline-none max-w-[220px]"
-            aria-label="Seleccionar mesa, módulo enlazado o paquete SRD"
-          >
-            <optgroup label="Paquetes SRD Base">
-              <option value="bastion">SRD: Bastión Subterráneo</option>
-              <option value="forest">SRD: Claro del Bosque</option>
-              <option value="tavern">SRD: Taberna Engranaje</option>
-            </optgroup>
-            <optgroup id="shelfDropdownGroup" label="Mis Mesas Enlazadas (Dropbox / URL)"></optgroup>
-          </select>
-          <svg class="w-3 h-3 opacity-60 pointer-events-none absolute right-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6l3.5 4 3.5-4" /></svg>
-        </div>
       </div>
 
-      <!-- Taller de Creación: Subir Mapa Local (Auto-WebP) + Empaquetar Cartucho .owltable -->
-      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <span class="font-mono-tech text-[10px] uppercase opacity-75">Taller de Cartucho Binario (.owltable · ZIP + WebP)</span>
-          <label for="inpLocalMapWebp" class="owl-btn owl-panel px-2.5 py-1 text-[11px] font-semibold cursor-pointer" title="Convierte tu mapa PNG/JPG a WebP optimizado dentro de la mesa">
-            🖼️ Subir Mapa Local (Auto-WebP)
-          </label>
-          <input type="file" id="inpLocalMapWebp" accept="image/*" class="hidden" />
-        </div>
+      <div id="roomToastBox" class="hidden px-3 py-2 rounded-xl text-[11px] portal-subpanel shrink-0" style="border-color: var(--accent-primary);"></div>
 
-        <div class="flex items-center gap-2">
-          <input type="text" id="inpModuleTitle" value="Aventura_Bastion" class="owl-input px-2.5 py-1.5 text-xs" />
-          <button type="button" id="btnExportModule" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
-            ⬇ Exportar .owltable
-          </button>
-        </div>
-
-        <div class="flex items-center justify-between gap-2 pt-1">
-          <label for="inpModuleFile" class="owl-btn owl-panel px-3 py-1.5 text-xs font-semibold cursor-pointer">
-            📂 Abrir .owltable / .json local
-          </label>
-          <input type="file" id="inpModuleFile" accept=".owltable,.zip,.json" class="hidden" />
-          <span class="text-[10px] opacity-70">O arrástralo directo sobre el tablero</span>
-        </div>
+      <div class="portal-seg grid-cols-3 gap-1 shrink-0">
+        <button type="button" data-room-nav-tab="session" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold is-active">Sala e Invitación</button>
+        <button type="button" data-room-nav-tab="scene" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold">Escena y Handout</button>
+        <button type="button" data-room-nav-tab="cartridges" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold">Cartuchos (.portal)</button>
       </div>
 
-      <!-- Estantería de Enlaces en Solo Lectura (Dropbox / GitHub / URL directa) -->
-      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <div>
-          <span class="font-mono-tech text-[10px] uppercase opacity-75 block">Estantería de Mesas en Solo Lectura (BYOS)</span>
-          <span class="text-[10px] opacity-75">Sube tu <code>.owltable</code> a Dropbox o GitHub, pega su enlace público y cárgalo desde el menú superior.</span>
-        </div>
-        <form id="addShelfModuleForm" class="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-1.5">
-          <input type="text" id="inpShelfTitle" placeholder="Nombre (ej. Campaña CoS)" required class="owl-input px-2.5 py-1.5 text-xs" />
-          <input type="url" id="inpShelfUrl" placeholder="Enlace Dropbox o GitHub .owltable" required class="owl-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
-          <button type="submit" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
-            + Enlazar
-          </button>
-        </form>
-        <div id="shelfModulesList" class="flex flex-col gap-1.5 max-h-32 overflow-y-auto"></div>
-      </div>
+      <div class="flex-1 overflow-y-auto flex flex-col gap-3 pr-1">
+        <!-- Pestaña 1: Sala e Invitación -->
+        <div data-room-pane="session" class="flex flex-col gap-3">
+          <div class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Instancia activa</span>
+            <div class="portal-settings-group">
+              <div class="portal-settings-row">
+                <div class="flex items-center gap-5 min-w-0">
+                  <div>
+                    <span class="text-[10px] opacity-60 block">Código de sala</span>
+                    <strong id="lblModalRoomCode" class="text-sm font-mono-tech">MESA-01</strong>
+                  </div>
+                  <div>
+                    <span class="text-[10px] opacity-60 block">Rol en sesión</span>
+                    <strong id="lblModalRoomRole" class="text-xs font-semibold">DIRECTOR (GM)</strong>
+                  </div>
+                </div>
+                <button type="button" id="btnCreateNewRoom" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-[11px] font-semibold shrink-0">+ Nueva sala</button>
+              </div>
+              <div class="portal-settings-col gap-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <span class="text-xs font-medium block">Enlaces de invitación (Jugadores)</span>
+                    <span class="text-[10.5px] opacity-60">Asigná Protagonistas a cada enlace o dejalo sin personaje como Espectador.</span>
+                  </div>
+                  <button type="button" id="btnAddPlayerInvite" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0">+ Nuevo enlace</button>
+                </div>
+                <div id="playerInvitesList" class="flex flex-col gap-2"></div>
+                <div class="hidden">
+                  <input type="text" id="inpPlayerInviteUrl" readonly />
+                  <button type="button" id="btnCopyPlayerUrl">Copiar</button>
+                </div>
+                <div id="gmInviteRow" class="flex items-center gap-1.5 pt-1.5 border-t" style="border-color: var(--hairline);">
+                  <input type="text" id="inpGmInviteUrl" readonly class="portal-input px-2.5 py-1.5 font-mono-tech text-[10.5px] flex-1 min-w-0" />
+                  <button type="button" id="btnCopyGmUrl" class="portal-btn portal-panel px-2.5 py-1.5 rounded-lg text-[10.5px] font-semibold whitespace-nowrap shrink-0">Copiar GM</button>
+                </div>
+              </div>
+              <div class="portal-settings-row">
+                <span class="text-xs font-medium">Conectados en mesa</span>
+                <div id="roomPresenceList" class="flex flex-wrap items-center gap-1 justify-end"></div>
+              </div>
+            </div>
+          </div>
 
-      <!-- Memoria Persistente del Navegador (IndexedDB) -->
-      <div class="owl-subpanel rounded-xl p-3 flex items-center justify-between gap-2">
-        <div>
-          <span class="font-bold block">Memoria Local del Navegador (IndexedDB)</span>
-          <span class="text-[10px] opacity-75">Guarda automáticamente tu mesa y tu estantería al recargar.</span>
+          <div class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Cambiar de sala</span>
+            <div class="portal-settings-group">
+              <form id="joinRoomForm" class="portal-settings-row">
+                <input type="text" id="inpJoinRoomCode" placeholder="Código de sala (ej. MESA-84K)" class="portal-input px-2.5 py-1.5 font-mono-tech text-xs uppercase flex-1 min-w-0" />
+                <button type="submit" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0">Entrar a sala</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Memoria persistente</span>
+            <div class="portal-settings-group">
+              <div class="portal-settings-row">
+                <div class="min-w-0">
+                  <span class="text-xs font-medium block">Memoria local del navegador (IndexedDB)</span>
+                  <span class="text-[10.5px] opacity-60">Guarda automáticamente tu mesa y tu estantería al recargar.</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button type="button" id="btnResetVaultStep1" class="portal-btn portal-panel px-2.5 py-1.5 rounded-xl text-[11px] text-rose-400 font-medium">Reiniciar mesa</button>
+                  <button type="button" id="btnResetVaultConfirm" class="portal-btn hidden px-2.5 py-1.5 rounded-xl text-[11px] bg-rose-600 text-white font-semibold">Confirmar borrado</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <button type="button" id="btnResetVaultStep1" class="owl-btn owl-panel px-2.5 py-1.5 text-[11px] text-red-400">
-            Reiniciar Mesa
-          </button>
-          <button type="button" id="btnResetVaultConfirm" class="owl-btn hidden px-2.5 py-1.5 text-[11px] bg-red-600 text-white font-bold">
-            Confirmar Borrado
-          </button>
+
+        <!-- Pestaña 2: Escena y Handout -->
+        <div data-room-pane="scene" class="hidden flex-col gap-3">
+          <div class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Escena activa y mapa local</span>
+            <div class="portal-settings-group">
+              <div class="portal-settings-row">
+                <div class="min-w-0">
+                  <span class="text-xs font-medium block">Escenario o paquete SRD</span>
+                  <span class="text-[10.5px] opacity-60">Cambia entre mapas base o tus mesas enlazadas.</span>
+                </div>
+                <div class="relative flex items-center shrink-0">
+                  <select
+                    id="mapSelector"
+                    class="portal-input portal-select rounded-lg pl-2.5 pr-7 py-1.5 text-xs font-medium cursor-pointer outline-none max-w-[220px]"
+                    aria-label="Seleccionar mesa, módulo enlazado o paquete SRD"
+                  >
+                    <optgroup label="Paquetes SRD Base">
+                      <option value="bastion">SRD: Bastión Subterráneo</option>
+                      <option value="forest">SRD: Claro del Bosque</option>
+                      <option value="tavern">SRD: Taberna Engranaje</option>
+                    </optgroup>
+                    <optgroup id="shelfDropdownGroup" label="Mis Mesas Enlazadas (Dropbox / URL)"></optgroup>
+                  </select>
+                  <svg class="w-3 h-3 opacity-60 pointer-events-none absolute right-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6l3.5 4 3.5-4" /></svg>
+                </div>
+              </div>
+              <div class="portal-settings-row">
+                <div class="min-w-0">
+                  <span class="text-xs font-medium block">Subir mapa personalizado</span>
+                  <span class="text-[10.5px] opacity-60">Convierte PNG/JPG a WebP optimizado dentro de la mesa.</span>
+                </div>
+                <label for="inpLocalMapWebp" class="portal-btn portal-panel px-3 py-1.5 rounded-xl text-[11px] font-semibold cursor-pointer gap-1.5 shrink-0" title="Convierte tu mapa PNG/JPG a WebP optimizado dentro de la mesa">
+                  <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span>Subir mapa</span>
+                </label>
+                <input type="file" id="inpLocalMapWebp" accept="image/*" class="hidden" />
+              </div>
+            </div>
+          </div>
+
+          <div id="handoutShareBox" class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Handout (proyectar imagen en mesa)</span>
+            <div class="portal-settings-group">
+              <div class="portal-settings-col">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-medium">Compartir imagen con todos los jugadores</span>
+                  <label class="portal-btn portal-panel px-2.5 py-1 rounded-lg text-[10.5px] font-semibold cursor-pointer gap-1.5 shrink-0">
+                    <svg class="w-3 h-3 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>Subir imagen</span>
+                    <input type="file" id="inpHandoutFile" accept="image/*" class="hidden" />
+                  </label>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <input type="text" id="inpHandoutTitle" placeholder="Título (opcional)" class="portal-input px-2.5 py-1.5 text-[11px] w-1/3" />
+                  <input type="url" id="inpHandoutUrl" placeholder="URL de imagen o Drive..." class="portal-input px-2.5 py-1.5 text-[11px] flex-1" />
+                  <button type="button" id="btnShowHandout" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0">Mostrar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pestaña 3: Cartuchos (.portal) -->
+        <div data-room-pane="cartridges" class="hidden flex-col gap-3">
+          <div class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Taller de cartucho binario (.portal)</span>
+            <div class="portal-settings-group">
+              <div class="portal-settings-col">
+                <div class="flex items-center gap-2">
+                  <input type="text" id="inpModuleTitle" value="Aventura_Bastion" class="portal-input px-2.5 py-1.5 text-xs flex-1 min-w-0" />
+                  <button type="button" id="btnExportModule" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap gap-1.5 shrink-0">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Exportar .portal</span>
+                  </button>
+                </div>
+              </div>
+              <div class="portal-settings-row">
+                <span class="text-[10.5px] opacity-65">También podés arrastrar un archivo sobre el tablero.</span>
+                <label for="inpModuleFile" class="portal-btn portal-panel px-3 py-1.5 rounded-xl text-[11px] font-semibold cursor-pointer gap-1.5 shrink-0">
+                  <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>Abrir .portal / .json</span>
+                </label>
+                <input type="file" id="inpModuleFile" accept=".portal,.zip,.json" class="hidden" />
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <span class="portal-settings-label">Estantería de mesas en solo lectura (BYOS)</span>
+            <div class="portal-settings-group">
+              <div class="portal-settings-col">
+                <span class="text-[10.5px] opacity-65">Subí tu <code>.portal</code> a Dropbox o GitHub, pegá el enlace público y cargalo desde el menú.</span>
+                <form id="addShelfModuleForm" class="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-1.5">
+                  <input type="text" id="inpShelfTitle" placeholder="Nombre (ej. Campaña CoS)" required class="portal-input px-2.5 py-1.5 text-xs" />
+                  <input type="url" id="inpShelfUrl" placeholder="Enlace Dropbox o GitHub .portal" required class="portal-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
+                  <button type="submit" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap">+ Enlazar</button>
+                </form>
+                <div id="shelfModulesList" class="flex flex-col gap-1.5 max-h-36 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1214,35 +1299,46 @@
   <!-- ========================================================================
        8. MODAL BIBLIOTECA GOOGLE DRIVE (CARPETAS E IMÁGENES)
        ======================================================================== -->
-  <div id="driveModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="owl-panel w-full max-w-2xl rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b pb-2.5" style="border-color: var(--border-subtle);">
-        <div>
-          <h2 class="text-sm font-bold">Biblioteca Google Drive (Mapas y Retratos)</h2>
-          <p class="text-[11px] opacity-75">Pega el enlace compartido de una imagen o carpeta pública de Google Drive.</p>
+  <div id="driveModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
+      <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /></svg>
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold tracking-tight leading-tight">Biblioteca Google Drive</h2>
+            <p class="text-[11px] opacity-65 truncate mt-0.5">Enlazá mapas o carpetas compartidas públicas de Drive</p>
+          </div>
         </div>
-        <button type="button" id="btnCloseDriveModal" class="owl-btn p-1.5">✕</button>
+        <button type="button" id="btnCloseDriveModal" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
       </div>
 
-      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <span class="font-mono-tech text-[10px] uppercase opacity-75">Cargar Mapa Directo desde Enlace de Google Drive</span>
-        <div class="flex items-center gap-2">
-          <input type="url" id="inpDriveMapUrl" placeholder="https://drive.google.com/file/d/ID_ARCHIVO/view" class="owl-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
-          <button type="button" id="btnApplyDriveMap" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
-            Aplicar al Tablero
-          </button>
+      <div class="flex-1 overflow-y-auto flex flex-col gap-3 pr-1">
+        <div class="flex flex-col gap-1.5">
+          <span class="portal-settings-label">Cargar mapa directo desde enlace</span>
+          <div class="portal-settings-group">
+            <div class="portal-settings-row">
+              <input type="url" id="inpDriveMapUrl" placeholder="https://drive.google.com/file/d/ID_ARCHIVO/view" class="portal-input px-2.5 py-1.5 font-mono-tech text-[11px] flex-1 min-w-0" />
+              <button type="button" id="btnApplyDriveMap" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0">Aplicar al tablero</button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <span class="font-mono-tech text-[10px] uppercase opacity-75">Explorador de Carpeta Compartida de Drive</span>
-        <div class="flex items-center gap-2">
-          <input type="url" id="inpDriveFolderUrl" placeholder="https://drive.google.com/drive/folders/ID_CARPETA" class="owl-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
-          <button type="button" id="btnEmbedDriveFolder" class="owl-btn owl-panel px-3 py-1.5 text-xs font-semibold whitespace-nowrap">
-            Abrir Carpeta
-          </button>
+        <div class="flex flex-col gap-1.5">
+          <span class="portal-settings-label">Explorador de carpeta compartida</span>
+          <div class="portal-settings-group">
+            <div class="portal-settings-col">
+              <div class="flex items-center gap-2">
+                <input type="url" id="inpDriveFolderUrl" placeholder="https://drive.google.com/drive/folders/ID_CARPETA" class="portal-input px-2.5 py-1.5 font-mono-tech text-[11px] flex-1 min-w-0" />
+                <button type="button" id="btnEmbedDriveFolder" class="portal-btn portal-panel px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0">Abrir carpeta</button>
+              </div>
+              <iframe id="driveFolderIframe" class="hidden w-full h-64 rounded-xl border mt-1 bg-white" style="border-color: var(--border-subtle);"></iframe>
+            </div>
+          </div>
         </div>
-        <iframe id="driveFolderIframe" class="hidden w-full h-64 rounded-xl border mt-1 bg-white" style="border-color: var(--border-subtle);"></iframe>
       </div>
     </div>
   </div>
@@ -1250,35 +1346,52 @@
   <!-- ========================================================================
        9. MODAL SINCRONIZACIÓN P2P WEBRTC & EVENT-LOG COMPACTION
        ======================================================================== -->
-  <div id="syncModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="owl-panel w-full max-w-xl rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b pb-2.5" style="border-color: var(--border-subtle);">
-        <div>
-          <h2 class="text-sm font-bold">Sincronización Tiempo Real (P2P) &amp; Bitácora</h2>
-          <p class="text-[11px] opacity-75">Conexión directa entre navegadores sin servidor + compactación de eventos.</p>
+  <div id="syncModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
+      <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" /></svg>
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold tracking-tight leading-tight">Sincronización y Bitácora</h2>
+            <p class="text-[11px] opacity-65 truncate mt-0.5">Conexión directa entre navegadores sin servidor</p>
+          </div>
         </div>
-        <button type="button" id="btnCloseSyncModal" class="owl-btn p-1.5">✕</button>
-      </div>
-
-      <div class="owl-subpanel rounded-xl p-3 flex items-center justify-between">
-        <div>
-          <span class="font-bold block">Canal Activo: <span id="lblSyncRoomName" style="color: var(--accent-primary);">MESA-01</span></span>
-          <span id="lblSyncChannelDetail" class="text-[11px] opacity-75">BroadcastChannel + WebRTC P2P listos</span>
-        </div>
-        <button type="button" id="btnBroadcastFullNow" class="owl-btn owl-btn-accent px-3 py-1.5 text-xs font-semibold">
-          Sincronizar Tablero Ahora
+        <button type="button" id="btnCloseSyncModal" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
         </button>
       </div>
 
-      <!-- Compactación de Event Log -->
-      <div class="owl-subpanel rounded-xl p-3 flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <span class="font-mono-tech text-[10px] uppercase opacity-75">Cola de Eventos (<span id="lblEventQueueCount">0</span> filas)</span>
-          <button type="button" id="btnCompactEvents" class="owl-btn owl-panel px-2.5 py-1 text-[11px] font-semibold">
-            ⚡ Compactar Snapshot
-          </button>
+      <div class="flex-1 overflow-y-auto flex flex-col gap-3 pr-1">
+        <div class="flex flex-col gap-1.5">
+          <span class="portal-settings-label">Estado de conexión</span>
+          <div class="portal-settings-group">
+            <div class="portal-settings-row">
+              <div class="min-w-0">
+                <span class="text-xs font-semibold block">Canal activo: <span id="lblSyncRoomName" style="color: var(--accent-primary);">MESA-01</span></span>
+                <span id="lblSyncChannelDetail" class="text-[10.5px] opacity-65">BroadcastChannel + WebRTC P2P listos</span>
+              </div>
+              <button type="button" id="btnBroadcastFullNow" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0">Sincronizar tablero</button>
+            </div>
+          </div>
         </div>
-        <div id="eventLogPreviewList" class="max-h-36 overflow-y-auto font-mono-tech text-[10px] flex flex-col gap-1 opacity-85"></div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="portal-settings-label">Cola de eventos (<span id="lblEventQueueCount">0</span> filas)</span>
+          <div class="portal-settings-group">
+            <div class="portal-settings-row">
+              <span class="text-xs font-medium">Compactación de snapshot</span>
+              <button type="button" id="btnCompactEvents" class="portal-btn portal-panel px-2.5 py-1 rounded-xl text-[11px] font-semibold gap-1.5 shrink-0">
+                <svg class="w-3 h-3 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>
+                <span>Compactar snapshot</span>
+              </button>
+            </div>
+            <div class="portal-settings-col">
+              <div id="eventLogPreviewList" class="max-h-40 overflow-y-auto font-mono-tech text-[10.5px] flex flex-col gap-1 opacity-85"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1286,14 +1399,33 @@
   <!-- ========================================================================
        9.2. MODAL CONFIGURACIÓN DE SISTEMA Y REGLAS DEL PORTAL
        ======================================================================== -->
-  <div id="systemModal" class="fixed inset-0 bg-black/65 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div id="systemModalPanel" class="owl-panel w-full max-w-xl max-h-[86vh] rounded-2xl p-5 flex flex-col gap-4">
-      <div class="flex items-center justify-between pb-2 border-b shrink-0" style="border-color: var(--hairline);">
-        <div class="min-w-0">
-          <h2 class="text-sm font-bold tracking-wide">Sistema y Reglas del Portal</h2>
-          <p id="lblSystemModalTitle" class="text-[11px] opacity-65 truncate">Portal activo</p>
+  <div id="systemModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div id="systemModalPanel" class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" />
+              <line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" />
+              <line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="2" y1="14" x2="6" y2="14" />
+              <line x1="10" y1="8" x2="14" y2="8" />
+              <line x1="18" y1="16" x2="22" y2="16" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold tracking-tight leading-tight">Sistema y Reglas</h2>
+            <p id="lblSystemModalTitle" class="text-[11px] opacity-65 truncate mt-0.5">Portal activo</p>
+          </div>
         </div>
-        <button type="button" id="btnCloseSystemModal" class="owl-btn p-1.5">✕</button>
+        <button type="button" id="btnCloseSystemModal" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 4l8 8M12 4l-8 8" />
+          </svg>
+        </button>
       </div>
       <div id="systemModalBody" class="flex-1 overflow-y-auto flex flex-col gap-3 pr-1"></div>
     </div>
@@ -1305,7 +1437,7 @@
   <!-- Indicador de dados recogidos en mano (sigue al cursor) -->
   <div
     id="diceHandCursor"
-    class="owl-panel fixed top-0 left-0 z-50 pointer-events-none hidden items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono-tech shadow-xl border"
+    class="portal-panel fixed top-0 left-0 z-50 pointer-events-none hidden items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono-tech shadow-xl border"
     style="border-color: var(--accent-primary);"
   >
     <span class="text-xs leading-none">🎲</span>
@@ -1322,7 +1454,7 @@
     aria-modal="true"
     aria-labelledby="portalLobbyTitle"
   >
-    <div class="owl-panel w-full max-w-2xl rounded-3xl p-6 md:p-7 flex flex-col gap-5 shadow-2xl border" style="border-color: var(--border-subtle);">
+    <div class="portal-panel w-full max-w-2xl rounded-3xl p-6 md:p-7 flex flex-col gap-5 shadow-2xl border" style="border-color: var(--border-subtle);">
       <!-- Encabezado de marca -->
       <div class="flex items-center justify-between gap-3 pb-3 border-b" style="border-color: var(--border-subtle);">
         <div class="flex items-center gap-3">
@@ -1332,12 +1464,12 @@
             <p class="text-xs opacity-70">Mesa virtual táctica instantánea · Sin registro ni cuentas</p>
           </div>
         </div>
-        <span class="font-mono-tech text-[10px] px-2.5 py-1 rounded-full owl-subpanel opacity-80">P2P · Local Vault</span>
+        <span class="font-mono-tech text-[10px] px-2.5 py-1 rounded-full portal-subpanel opacity-80">P2P · Local Vault</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
         <!-- Columna Principal: Crear Portal -->
-        <form id="createPortalForm" class="md:col-span-3 owl-subpanel rounded-2xl p-4 flex flex-col gap-3.5 text-xs">
+        <form id="createPortalForm" class="md:col-span-3 portal-subpanel rounded-2xl p-4 flex flex-col gap-3.5 text-xs">
           <div class="flex items-center justify-between">
             <span class="font-bold text-sm">Crear un Portal</span>
             <span class="text-[10px] font-mono-tech opacity-60">Director (GM)</span>
@@ -1349,14 +1481,14 @@
               id="inpPortalName"
               type="text"
               placeholder="Ej. Crónicas del Bastión"
-              class="owl-input w-full px-3 py-2 rounded-xl text-xs"
+              class="portal-input w-full px-3 py-2 rounded-xl text-xs"
             />
           </label>
 
           <div class="grid grid-cols-2 gap-2.5">
             <label class="flex flex-col gap-1">
               <span class="text-[11px] font-medium opacity-80">Módulo de reglas</span>
-              <select id="selPortalRuleset" class="owl-input w-full px-2.5 py-2 rounded-xl text-xs">
+              <select id="selPortalRuleset" class="portal-input w-full px-2.5 py-2 rounded-xl text-xs">
                 <option value="dnd55" selected>D&amp;D 5.5 (1d20 + mod)</option>
                 <option value="pbta">PbtA / Dungeon World (2d6 + stat)</option>
                 <option value="pool">Reserva de Dados (Éxitos d10)</option>
@@ -1367,7 +1499,7 @@
 
             <label class="flex flex-col gap-1">
               <span class="text-[11px] font-medium opacity-80">Escenario inicial</span>
-              <select id="selPortalMap" class="owl-input w-full px-2.5 py-2 rounded-xl text-xs">
+              <select id="selPortalMap" class="portal-input w-full px-2.5 py-2 rounded-xl text-xs">
                 <option value="bastion" selected>Bastión Subterráneo</option>
                 <option value="forest">Claro del Bosque</option>
                 <option value="tavern">Taberna Engranaje</option>
@@ -1379,51 +1511,59 @@
             </label>
           </div>
 
-          <div class="flex flex-wrap items-center gap-4 pt-1">
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input id="chkPortalDynLight" type="checkbox" checked class="accent-violet-500 w-3.5 h-3.5" />
-              <span class="text-[11px] opacity-85">Luz dinámica y niebla</span>
+          <div class="portal-settings-group">
+            <label class="portal-settings-row cursor-pointer select-none">
+              <span class="text-[11px] font-medium">Luz dinámica y niebla</span>
+              <span class="portal-switch">
+                <input id="chkPortalDynLight" type="checkbox" checked class="portal-switch-input" />
+                <span class="portal-switch-track"></span>
+              </span>
             </label>
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input id="chkPortalGrid" type="checkbox" checked class="accent-violet-500 w-3.5 h-3.5" />
-              <span class="text-[11px] opacity-85">Grilla táctica</span>
+            <label class="portal-settings-row cursor-pointer select-none">
+              <span class="text-[11px] font-medium">Grilla táctica</span>
+              <span class="portal-switch">
+                <input id="chkPortalGrid" type="checkbox" checked class="portal-switch-input" />
+                <span class="portal-switch-track"></span>
+              </span>
             </label>
           </div>
 
           <div class="flex items-center gap-2 pt-1">
-            <button type="submit" id="btnCreatePortal" class="owl-btn owl-btn-accent flex-1 py-2.5 rounded-xl font-bold text-xs">
-              ✨ Abrir Portal
+            <button type="submit" id="btnCreatePortal" class="portal-btn portal-btn-accent flex-1 py-2.5 rounded-xl font-bold text-xs gap-1.5">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Abrir Portal</span>
             </button>
-            <label class="owl-btn owl-panel px-3 py-2.5 rounded-xl font-semibold text-[11px] cursor-pointer text-center" title="Abrir portal desde archivo .owltable">
-              📦 Importar
-              <input id="inpLobbyCartridgeFile" type="file" accept=".owltable,.zip,.json" class="hidden" />
+            <label class="portal-btn portal-panel px-3 py-2.5 rounded-xl font-semibold text-[11px] cursor-pointer text-center gap-1.5" title="Abrir portal desde archivo .portal">
+              <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              <span>Importar</span>
+              <input id="inpLobbyCartridgeFile" type="file" accept=".portal,.zip,.json" class="hidden" />
             </label>
           </div>
         </form>
 
         <!-- Columna Lateral: Unirse & Recientes -->
         <div class="md:col-span-2 flex flex-col gap-3 text-xs">
-          <form id="joinPortalForm" class="owl-subpanel rounded-2xl p-3.5 flex flex-col gap-2.5">
+          <form id="joinPortalForm" class="portal-subpanel rounded-2xl p-3.5 flex flex-col gap-2.5">
             <span class="font-bold text-xs">Unirse a un Portal</span>
             <input
               id="inpJoinPortalCode"
               type="text"
               required
               placeholder="Código (PORTAL-XXXX) o enlace"
-              class="owl-input w-full px-2.5 py-1.5 rounded-xl text-xs font-mono-tech"
+              class="portal-input w-full px-2.5 py-1.5 rounded-xl text-xs font-mono-tech"
             />
             <div class="flex items-center gap-2">
-              <select id="selJoinPortalRole" class="owl-input flex-1 px-2 py-1.5 rounded-xl text-[11px]">
+              <select id="selJoinPortalRole" class="portal-input flex-1 px-2 py-1.5 rounded-xl text-[11px]">
                 <option value="player" selected>Jugador</option>
                 <option value="gm">Director (GM)</option>
               </select>
-              <button type="submit" class="owl-btn owl-panel px-3 py-1.5 rounded-xl font-semibold text-[11px]">
+              <button type="submit" class="portal-btn portal-panel px-3 py-1.5 rounded-xl font-semibold text-[11px]">
                 Entrar →
               </button>
             </div>
           </form>
 
-          <div class="owl-subpanel rounded-2xl p-3.5 flex flex-col gap-2 flex-1 min-h-[140px]">
+          <div class="portal-subpanel rounded-2xl p-3.5 flex flex-col gap-2 flex-1 min-h-[140px]">
             <span class="font-bold text-xs">Portales recientes</span>
             <div id="recentPortalsList" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto"></div>
           </div>
@@ -1435,16 +1575,16 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261116z40"></script>
+  <script type="module" src="js/main.js?v=20261117b1"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
-  <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex owl-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="owl-panel max-w-3xl w-full rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs max-h-[90vh]">
+  <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="portal-panel max-w-3xl w-full rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs max-h-[90vh]">
       <div class="flex items-center justify-between gap-2">
         <strong id="handoutModalTitle" class="text-sm font-semibold truncate">Handout</strong>
         <div class="flex items-center gap-1.5 shrink-0">
-          <button type="button" id="btnClearHandoutForAll" class="owl-btn owl-subpanel px-2.5 py-1 text-[11px] font-medium">Quitar para todos</button>
-          <button type="button" id="btnCloseHandout" class="owl-btn owl-btn-accent px-2.5 py-1 text-[11px] font-semibold">Cerrar</button>
+          <button type="button" id="btnClearHandoutForAll" class="portal-btn portal-subpanel px-2.5 py-1 text-[11px] font-medium">Quitar para todos</button>
+          <button type="button" id="btnCloseHandout" class="portal-btn portal-btn-accent px-2.5 py-1 text-[11px] font-semibold">Cerrar</button>
         </div>
       </div>
       <div class="rounded-xl overflow-hidden bg-black/40 flex items-center justify-center max-h-[75vh]">

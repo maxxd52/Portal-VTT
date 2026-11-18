@@ -2,8 +2,8 @@
    SYSTEM SERVICE: PRESETS, REGLAS DEL PORTAL Y CONSTRUCTOR DE PESTAÑAS/ATRIBUTOS
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261116z40';
-import { Selector } from '../core/selector.js?v=20261116z40';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261117b1';
 
 export const SystemServiceMethods = {
   applySystemPreset(presetKey, targetState = this.state) {

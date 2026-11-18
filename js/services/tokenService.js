@@ -2,12 +2,16 @@
    TOKEN SERVICE: FICHAS, INVENTARIO, STATS, HABILIDADES Y VISIBILIDAD
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261116z40';
+import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261117b1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {
+    if (this.state.role === 'player') {
+      const tok = tokenId ? this.state.tokens.find((t) => t.id === tokenId) : null;
+      if (!tok || !this.canControlToken(tok)) return;
+    }
     this.state.selectedTokenId = tokenId;
     if (tokenId && openSheet) {
       this.state.sheetOpen = true;
@@ -83,6 +87,7 @@ export const TokenServiceMethods = {
 
     const token = {
       id: `tok-${Date.now().toString().slice(-6)}`,
+      actorKey: tpl.key || '',
       name: tpl.name,
       role: tpl.role || 'Aventurero',
       color: tpl.color || '#8b5cf6',
@@ -464,7 +469,12 @@ export const TokenServiceMethods = {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok) return true;
     tok.isAlly = tok.isAlly === false;
-    this.recordEvent('BANDO_FICHA', `${tok.name}: ${tok.isAlly ? 'Aliado' : 'Hostil'}`);
+    if (!tok.isAlly && Array.isArray(this.state.playerInvites)) {
+      this.state.playerInvites.forEach((inv) => {
+        if (Array.isArray(inv.tokenIds)) inv.tokenIds = inv.tokenIds.filter((id) => id !== tok.id);
+      });
+    }
+    this.recordEvent('BANDO_FICHA', `${tok.name}: ${tok.isAlly ? 'Protagonista' : 'Secundario'}`);
     this.notify({ redrawFog: true });
     return tok.isAlly;
   },
@@ -512,6 +522,11 @@ export const TokenServiceMethods = {
     if (!tok) return;
     this.pushUndoSnapshot();
     this.state.tokens = this.state.tokens.filter((t) => t.id !== tokenId);
+    if (Array.isArray(this.state.playerInvites)) {
+      this.state.playerInvites.forEach((inv) => {
+        if (Array.isArray(inv.tokenIds)) inv.tokenIds = inv.tokenIds.filter((id) => id !== tokenId);
+      });
+    }
     if (this.state.selectedTokenId === tokenId) {
       this.state.selectedTokenId = this.state.tokens[0] ? this.state.tokens[0].id : null;
     }

@@ -2,9 +2,9 @@
    DICE VIEW: DOCK, HISTORIAL, OVERLAY 3D Y PERSONALIZACIÓN DE DADOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261117b1';
 
 export const DiceViewMethods = {
   bindDiceEvents() {
@@ -312,7 +312,7 @@ export const DiceViewMethods = {
 
     for (const entry of entries) {
       const row = document.createElement('div');
-      row.className = 'owl-subpanel rounded-xl px-2.5 py-2 flex flex-col gap-1.5 cursor-pointer transition-colors hover:bg-white/5';
+      row.className = 'portal-subpanel rounded-xl px-2.5 py-2 flex flex-col gap-1.5 cursor-pointer transition-colors hover:bg-white/5';
 
       const summaryLine = document.createElement('div');
       summaryLine.className = 'flex items-center justify-between gap-2 min-w-0';
@@ -506,8 +506,8 @@ export const DiceViewMethods = {
             ? 'Solicitud'
             : seq.mode === 'apply_hp'
               ? 'Aplicar'
-              : 'Efecto';
-        this.els.lblDiceBadge.className = 'owl-roll-pill shrink-0';
+              : (Array.isArray(seq.steps) && seq.steps.length > 0 ? 'Presentación' : 'Descripción');
+        this.els.lblDiceBadge.className = 'portal-roll-pill shrink-0';
         this.els.lblDiceBadge.textContent = badgeLbl;
       }
       this.els.lblDiceTotal.classList.add('hidden');
@@ -520,12 +520,20 @@ export const DiceViewMethods = {
         this.els.diceRollActions.classList.add('hidden');
         this.els.diceRollActions.classList.remove('flex');
       }
+      const deckActionsEl = this.els.diceDeckActions || document.getElementById('diceDeckActions');
+      if (deckActionsEl) {
+        deckActionsEl.classList.add('hidden');
+        deckActionsEl.classList.remove('flex');
+      }
       if (this.els.lblDiceMessage) {
         const msgText = String(seq.stepMessage || seq.itemMessage || '').trim();
         this.els.lblDiceMessage.textContent = msgText;
         this.els.lblDiceMessage.classList.toggle('hidden', !msgText);
       }
-      this.els.dice3dOverlay.style.setProperty('--roll-glow', 'rgba(139, 92, 246, 0.22)');
+      const glowColor = seq.itemColor
+        ? `color-mix(in srgb, ${seq.itemColor} 30%, transparent)`
+        : 'rgba(139, 92, 246, 0.22)';
+      this.els.dice3dOverlay.style.setProperty('--roll-glow', glowColor);
       this.els.dice3dOverlay.classList.add('is-open');
       return;
     }
@@ -571,20 +579,20 @@ export const DiceViewMethods = {
     if (this.els.lblDiceBadge) {
       const modeNames = { each: 'c/u', max: 'Mayor', min: 'Menor', success: `Éxitos ≥${rollThr}` };
       let badgeText = '';
-      let badgeClass = 'owl-roll-pill';
+      let badgeClass = 'portal-roll-pill';
       if (summary.isCrit) {
         badgeText = summary.critLabel || 'Crítico';
-        badgeClass = 'owl-roll-pill is-crit';
+        badgeClass = 'portal-roll-pill is-crit';
       } else if (summary.isFumble) {
         badgeText = summary.fumbleLabel || 'Pifia';
-        badgeClass = 'owl-roll-pill is-fumble';
+        badgeClass = 'portal-roll-pill is-fumble';
       } else if (summary.outcomeTag) {
         badgeText = summary.outcomeTag;
         badgeClass = summary.outcomeTone === 'success'
-          ? 'owl-roll-pill is-crit'
+          ? 'portal-roll-pill is-crit'
           : summary.outcomeTone === 'fail'
-            ? 'owl-roll-pill is-fumble'
-            : 'owl-roll-pill';
+            ? 'portal-roll-pill is-fumble'
+            : 'portal-roll-pill';
       } else if (modeNames[rollMode]) {
         badgeText = modeNames[rollMode];
       }
@@ -592,20 +600,22 @@ export const DiceViewMethods = {
         const privLabel = roll.rollerRole === 'gm' ? 'Solo DJ' : 'Privada · DJ';
         badgeText = badgeText ? `${badgeText} · ${privLabel}` : privLabel;
       }
-      this.els.lblDiceBadge.className = badgeText ? badgeClass : 'owl-roll-pill hidden';
+      this.els.lblDiceBadge.className = badgeText ? badgeClass : 'portal-roll-pill hidden';
       this.els.lblDiceBadge.textContent = badgeText;
     }
 
     const isPositive = summary.isCrit || summary.outcomeTone === 'success';
     const isNegative = summary.isFumble || summary.outcomeTone === 'fail';
     const isPartial = summary.outcomeTone === 'partial';
-    const glowColor = isPositive
-      ? 'rgba(16, 185, 129, 0.28)'
-      : isNegative
-        ? 'rgba(239, 68, 68, 0.28)'
-        : isPartial
-          ? 'rgba(245, 158, 11, 0.26)'
-          : 'rgba(139, 92, 246, 0.22)';
+    const glowColor = seq?.itemColor
+      ? `color-mix(in srgb, ${seq.itemColor} 30%, transparent)`
+      : isPositive
+        ? 'rgba(16, 185, 129, 0.28)'
+        : isNegative
+          ? 'rgba(239, 68, 68, 0.28)'
+          : isPartial
+            ? 'rgba(245, 158, 11, 0.26)'
+            : 'rgba(139, 92, 246, 0.22)';
     this.els.dice3dOverlay.style.setProperty('--roll-glow', glowColor);
 
     const isEachMulti = rollMode === 'each' && diceList.length > 1;
@@ -626,7 +636,7 @@ export const DiceViewMethods = {
         this.els.diceRollChips.innerHTML = diceList
           .map((d) => {
             const val = d.chosen + roll.mod;
-            return `<span class="owl-roll-chip is-hero" title="d${d.sides}: ${d.chosen}">${val}</span>`;
+            return `<span class="portal-roll-chip is-hero" title="d${d.sides}: ${d.chosen}">${val}</span>`;
           })
           .join('');
       } else {

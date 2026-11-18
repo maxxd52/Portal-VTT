@@ -2,8 +2,8 @@
    SHEET VIEW: FICHA DE PERSONAJE, ATRIBUTOS, HABILIDADES, RASGOS E INVENTARIO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { Service } from '../core/service.js?v=20261116z40';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
@@ -94,7 +94,7 @@ export const SheetViewMethods = {
         const opening = form.classList.contains('hidden');
         form.classList.toggle('hidden', !opening);
         form.classList.toggle('flex', opening);
-        btn.classList.toggle('owl-btn-accent', opening);
+        btn.classList.toggle('portal-btn-accent', opening);
         if (opening && focusEl) focusEl.focus();
       });
     };
@@ -112,7 +112,7 @@ export const SheetViewMethods = {
         this.els.inpSheetSkillMod.value = '0';
         this.els.sheetSkillForm.classList.add('hidden');
         this.els.sheetSkillForm.classList.remove('flex');
-        this.els.btnToggleSkillForm?.classList.remove('owl-btn-accent');
+        this.els.btnToggleSkillForm?.classList.remove('portal-btn-accent');
       });
     }
     if (this.els.sheetTraitForm) {
@@ -125,7 +125,7 @@ export const SheetViewMethods = {
         this.els.inpSheetTraitDesc.value = '';
         this.els.sheetTraitForm.classList.add('hidden');
         this.els.sheetTraitForm.classList.remove('flex');
-        this.els.btnToggleTraitForm?.classList.remove('owl-btn-accent');
+        this.els.btnToggleTraitForm?.classList.remove('portal-btn-accent');
       });
     }
   },
@@ -140,11 +140,11 @@ export const SheetViewMethods = {
         const mod = Number(stats[key]) || 0;
         if (!showScores) {
           return `
-            <div class="owl-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
+            <div class="portal-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
               <button type="button" data-roll-stat="${lbl}:${mod}" class="w-full flex flex-col items-center hover:opacity-85 pt-0.5" title="Tirar ${lbl} (${sysCfg.rollFormula || '1d20+@stat'})">
                 <span class="text-[9.5px] font-semibold opacity-70 tracking-wide truncate max-w-full">${lbl}</span>
               </button>
-              <input type="number" data-stat-key="${key}" value="${mod}" min="-99" max="999" class="owl-num-input w-12 text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" title="Valor de ${lbl}" />
+              <input type="number" data-stat-key="${key}" value="${mod}" min="-99" max="999" class="portal-num-input w-12 text-center text-sm font-bold tabular-nums bg-black/15 rounded-md py-0.5 outline-none" title="Valor de ${lbl}" />
             </div>
           `;
         }
@@ -155,15 +155,15 @@ export const SheetViewMethods = {
         const modTxt = mod >= 0 ? `+${mod}` : String(mod);
         const saveTxt = saveTotal >= 0 ? `+${saveTotal}` : String(saveTotal);
         return `
-          <div class="owl-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
+          <div class="portal-subpanel rounded-xl p-1.5 flex flex-col items-center gap-1">
             <button type="button" data-roll-stat="${lbl}:${mod}" class="w-full flex flex-col items-center hover:opacity-85" title="Tirar prueba de ${lbl}">
               <span class="text-[9.5px] font-semibold opacity-60 tracking-wide">${lbl}</span>
               <strong class="text-sm font-bold tabular-nums leading-tight">${modTxt}</strong>
             </button>
             ${
               isCoreDnd
-                ? `<input type="number" data-score-key="${key}" value="${score}" min="1" max="30" class="owl-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Puntuación de ${lbl}" />`
-                : `<input type="number" data-stat-key="${key}" value="${mod}" min="-99" max="999" class="owl-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Valor de ${lbl}" />`
+                ? `<input type="number" data-score-key="${key}" value="${score}" min="1" max="30" class="portal-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Puntuación de ${lbl}" />`
+                : `<input type="number" data-stat-key="${key}" value="${mod}" min="-99" max="999" class="portal-num-input w-10 text-center text-[10px] font-mono-tech opacity-80 bg-black/15 rounded-md py-0.5 outline-none" title="Valor de ${lbl}" />`
             }
             <div class="flex items-center justify-center gap-0.5 text-[9.5px] w-full pt-0.5 border-t" style="border-color: var(--hairline);">
               <button type="button" data-toggle-save="${key}" class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${saveProf ? 'bg-violet-500/25 text-violet-300' : 'opacity-65 hover:opacity-100 hover:bg-white/10'}" title="Competencia en salvación">
@@ -212,7 +212,7 @@ export const SheetViewMethods = {
     containerEl.innerHTML = rolls
       .map(
         (r) =>
-          `<button type="button" data-fixed-roll="${esc(r.id)}" class="owl-btn owl-subpanel px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 text-[11px]" title="Tirar ${esc(r.formula)}">
+          `<button type="button" data-fixed-roll="${esc(r.id)}" class="portal-btn portal-subpanel px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 text-[11px]" title="Tirar ${esc(r.formula)}">
             <span class="font-semibold truncate">${esc(r.label)}</span>
             <span class="text-[10px] font-mono-tech opacity-70 shrink-0">${esc(r.formula)}</span>
           </button>`
@@ -229,9 +229,39 @@ export const SheetViewMethods = {
 
   renderCharacterSheet(state) {
     const tok = Selector.getSelectedToken(state);
-    if (!tok) {
+    if (!tok || !Service.canControlToken(tok)) {
       this.els.characterSheetDrawer.classList.remove('is-open');
+      if (this.els.sheetAssignedSwitchBar) {
+        this.els.sheetAssignedSwitchBar.classList.add('hidden');
+        this.els.sheetAssignedSwitchBar.classList.remove('flex');
+      }
       return;
+    }
+
+    const switchBar = this.els.sheetAssignedSwitchBar;
+    if (switchBar) {
+      const assignedIds = state.role === 'player' ? Selector.getPlayerAssignedTokenIds(state) : [];
+      if (assignedIds.length > 1) {
+        const esc = (s) => this.escapeHtml(s);
+        const byIdMap = new Map((state.tokens || []).map((t) => [t.id, t]));
+        switchBar.innerHTML = assignedIds
+          .map((id) => {
+            const t = byIdMap.get(id);
+            if (!t) return '';
+            const active = t.id === tok.id;
+            return `<button type="button" data-switch-assigned="${esc(t.id)}" class="portal-btn h-6 px-2 rounded-full text-[10.5px] font-semibold gap-1.5 ${active ? 'portal-btn-accent' : 'portal-subpanel opacity-80 hover:opacity-100'}"><span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(t.color || '#8b5cf6')};"></span><span class="truncate max-w-[110px]">${esc(t.name)}</span></button>`;
+          })
+          .join('');
+        switchBar.classList.remove('hidden');
+        switchBar.classList.add('flex');
+        switchBar.querySelectorAll('[data-switch-assigned]').forEach((btn) => {
+          btn.addEventListener('click', () => Service.selectToken(btn.dataset.switchAssigned, true));
+        });
+      } else {
+        switchBar.classList.add('hidden');
+        switchBar.classList.remove('flex');
+        switchBar.innerHTML = '';
+      }
     }
 
     this.els.sheetPortraitBox.style.backgroundColor = tok.color;
@@ -331,7 +361,7 @@ export const SheetViewMethods = {
       this.els.sheetTopTabs.innerHTML = tabList
         .map(
           (t) =>
-            `<button type="button" data-sheet-tab="${t.id}" class="owl-seg-btn ${t.id === sheetTab ? 'is-active' : ''} truncate">${this.escapeHtml(t.label)}</button>`
+            `<button type="button" data-sheet-tab="${t.id}" class="portal-seg-btn ${t.id === sheetTab ? 'is-active' : ''} truncate">${this.escapeHtml(t.label)}</button>`
         )
         .join('');
     }
@@ -389,7 +419,7 @@ export const SheetViewMethods = {
         extraWrap.innerHTML = `
           ${tabResources.length ? '<div class="sheet-fixed-res grid grid-cols-2 gap-1.5"></div>' : ''}
           ${tabRolls.length ? '<div class="sheet-fixed-rolls grid grid-cols-2 gap-1.5"></div>' : ''}
-          ${targetTabObj.sumTotal ? `<div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px]"><span class="opacity-70 font-medium">Σ Suma total</span><strong class="font-bold tabular-nums text-xs">${tabSum}</strong></div>` : ''}
+          ${targetTabObj.sumTotal ? `<div class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px]"><span class="opacity-70 font-medium">Σ Suma total</span><strong class="font-bold tabular-nums text-xs">${tabSum}</strong></div>` : ''}
         `;
         if (tabResources.length) this.renderResourceCardsInto(extraWrap.querySelector('.sheet-fixed-res'), tabResources, tok, sysResByKey);
         if (tabRolls.length) this.renderFixedRollButtons(extraWrap.querySelector('.sheet-fixed-rolls'), tabRolls, tok);
@@ -405,7 +435,7 @@ export const SheetViewMethods = {
           }
           ${
             targetTabObj.sumTotal
-              ? `<div class="owl-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px] mt-auto">
+              ? `<div class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px] mt-auto">
                   <span class="opacity-70 font-medium">Σ Suma total</span>
                   <strong class="font-bold tabular-nums text-xs">${tabSum}</strong>
                 </div>`
@@ -450,19 +480,19 @@ export const SheetViewMethods = {
                 ? 'bg-amber-500/20 text-amber-300'
                 : prof === 1
                   ? 'bg-violet-500/25 text-violet-300'
-                  : 'owl-subpanel opacity-70 hover:opacity-100';
+                  : 'portal-subpanel opacity-70 hover:opacity-100';
               const profTitle = prof === 2 ? 'Pericia (2×BC)' : prof === 1 ? 'Competente (+BC)' : 'Sin competencia';
               const attrTag = sk.attr ? `<span class="text-[9px] opacity-45 uppercase">${attrLabels[sk.attr] || ''}</span>` : '';
               return `
-                <div data-skill-id="${sk.id}" class="group owl-list-row px-2 py-1 flex items-center justify-between gap-1.5 text-[11px]">
+                <div data-skill-id="${sk.id}" class="group portal-list-row px-2 py-1 flex items-center justify-between gap-1.5 text-[11px]">
                   <button type="button" data-prof-skill="${sk.id}" class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${profCls}" title="${profTitle}">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 16 16">${profSvg}</svg>
                   </button>
                   <button type="button" data-roll-skill="${sk.id}" class="flex-1 min-w-0 flex items-center justify-between gap-1.5 text-left hover:opacity-90" title="Tirar 1d20 ${modTxt}">
                     <span class="font-medium truncate">${esc(sk.name)} ${attrTag}</span>
-                    <span class="font-mono-tech font-semibold px-1.5 py-0.5 rounded-md owl-subpanel text-[10px] shrink-0">${modTxt}</span>
+                    <span class="font-mono-tech font-semibold px-1.5 py-0.5 rounded-md portal-subpanel text-[10px] shrink-0">${modTxt}</span>
                   </button>
-                  <button type="button" data-skill-menu="${sk.id}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0" title="Opciones">
+                  <button type="button" data-skill-menu="${sk.id}" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0" title="Opciones">
                     <span class="text-xs leading-none">⋯</span>
                   </button>
                 </div>
@@ -530,12 +560,12 @@ export const SheetViewMethods = {
         ? traits
             .map(
               (tr) => `
-              <div data-trait-id="${tr.id}" class="group owl-subpanel rounded-xl px-2.5 py-1.5 flex items-start justify-between gap-2 text-[11px]">
+              <div data-trait-id="${tr.id}" class="group portal-subpanel rounded-xl px-2.5 py-1.5 flex items-start justify-between gap-2 text-[11px]">
                 <div class="min-w-0">
                   <div class="font-semibold text-[11px] leading-tight">${esc(tr.title)}</div>
                   ${tr.desc ? `<div class="text-[10px] opacity-70 mt-0.5 leading-snug break-words">${esc(tr.desc)}</div>` : ''}
                 </div>
-                <button type="button" data-trait-menu="${tr.id}" class="owl-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0" title="Opciones">
+                <button type="button" data-trait-menu="${tr.id}" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0" title="Opciones">
                   <span class="text-xs leading-none">⋯</span>
                 </button>
               </div>

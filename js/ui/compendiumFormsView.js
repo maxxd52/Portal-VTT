@@ -56,7 +56,7 @@ export const CompendiumFormsViewMethods = {
     grid.innerHTML = Object.entries(this.itemIconDefs)
       .map(([key, [title]]) => {
         const active = curIcon === key;
-        return `<button type="button" data-item-icon="${key}" title="${title}" class="owl-seg-btn owl-subpanel h-7 p-0 flex items-center justify-center rounded-lg ${active ? 'is-active' : ''}" style="${active ? `color:${activeColor};` : ''}">${this.renderItemIconSvg(key, 'w-4 h-4', 2.1)}</button>`;
+        return `<button type="button" data-item-icon="${key}" title="${title}" class="portal-seg-btn portal-subpanel h-7 p-0 flex items-center justify-center rounded-lg ${active ? 'is-active' : ''}" style="${active ? `color:${activeColor};` : ''}">${this.renderItemIconSvg(key, 'w-4 h-4', 2.1)}</button>`;
       })
       .join('');
     grid.querySelectorAll('[data-item-icon]').forEach((btn) => {
@@ -152,7 +152,7 @@ export const CompendiumFormsViewMethods = {
                 ? `+${t.value}`
                 : `${t.value}`;
         const plusPrefix = idx > 0 && !(t.type === 'flat') ? '<span class="opacity-45 text-[10px]">+</span>' : '';
-        return `${plusPrefix}<button type="button" data-fb-rm="${idx}" class="owl-seg-btn is-active px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech flex items-center gap-1" title="Quitar">${text}<span class="opacity-60">×</span></button>`;
+        return `${plusPrefix}<button type="button" data-fb-rm="${idx}" class="portal-seg-btn is-active px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech flex items-center gap-1" title="Quitar">${text}<span class="opacity-60">×</span></button>`;
       })
       .join('');
     box.querySelectorAll('[data-fb-rm]').forEach((btn) => {

@@ -173,7 +173,7 @@ body {
 /* ==========================================================================
    2. COMPONENTES BASE DE INTERFAZ
    ========================================================================== */
-.owl-panel {
+.portal-panel {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-float), inset 0 1px 0 var(--surface-spec);
@@ -181,12 +181,12 @@ body {
   -webkit-backdrop-filter: blur(10px) saturate(135%);
 }
 
-.owl-subpanel {
+.portal-subpanel {
   background-color: var(--bg-subpanel);
   border: 1px solid var(--border-subtle);
 }
 
-.owl-btn {
+.portal-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -200,17 +200,17 @@ body {
   cursor: pointer;
 }
 
-.owl-btn:hover {
+.portal-btn:hover {
   border-color: var(--accent-primary);
 }
 
-.owl-btn:active {
+.portal-btn:active {
   transform: scale(0.96);
 }
 
 /* Transiciones fluidas estilo macOS (solo transform + opacity en GPU) */
-.owl-drawer-left,
-.owl-drawer-right {
+.portal-drawer-left,
+.portal-drawer-right {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -221,16 +221,16 @@ body {
     visibility 0s linear var(--dur-ui);
 }
 
-.owl-drawer-left {
+.portal-drawer-left {
   transform: translate3d(-16px, 0, 0) scale(0.985);
 }
 
-.owl-drawer-right {
+.portal-drawer-right {
   transform: translate3d(16px, 0, 0) scale(0.985);
 }
 
-.owl-drawer-left.is-open,
-.owl-drawer-right.is-open {
+.portal-drawer-left.is-open,
+.portal-drawer-right.is-open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -241,7 +241,7 @@ body {
     visibility 0s linear 0s;
 }
 
-.owl-pop {
+.portal-pop {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -254,7 +254,7 @@ body {
     visibility 0s linear var(--dur-fast);
 }
 
-.owl-pop.is-open {
+.portal-pop.is-open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -265,7 +265,7 @@ body {
     visibility 0s linear 0s;
 }
 
-.owl-toast {
+.portal-toast {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -277,7 +277,7 @@ body {
     visibility 0s linear var(--dur-ui);
 }
 
-.owl-toast.is-open {
+.portal-toast.is-open {
   opacity: 1;
   visibility: visible;
   transform: translate3d(-50%, 0, 0) scale(1);
@@ -287,7 +287,7 @@ body {
     visibility 0s linear 0s;
 }
 
-.owl-modal-backdrop {
+.portal-modal-backdrop {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -296,7 +296,7 @@ body {
     visibility 0s linear var(--dur-ui);
 }
 
-.owl-modal-backdrop > .owl-panel {
+.portal-modal-backdrop > .portal-panel {
   opacity: 0;
   transform: translate3d(0, 10px, 0) scale(0.96);
   will-change: transform, opacity;
@@ -305,7 +305,7 @@ body {
     opacity var(--dur-ui) var(--ease-mac);
 }
 
-.owl-modal-backdrop.is-open {
+.portal-modal-backdrop.is-open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -314,34 +314,34 @@ body {
     visibility 0s linear 0s;
 }
 
-.owl-modal-backdrop.is-open > .owl-panel {
+.portal-modal-backdrop.is-open > .portal-panel {
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
 }
 
-.owl-comp-card {
+.portal-comp-card {
   transition:
     transform var(--dur-fast) var(--ease-mac),
     border-color var(--dur-fast) var(--ease-mac),
     background-color var(--dur-fast) var(--ease-mac);
 }
 
-.owl-comp-card:hover {
+.portal-comp-card:hover {
   transform: translate3d(0, -1px, 0);
 }
 
 /* Apple-style hairline list rows (Compendium & Sheet) */
-.owl-list-row {
+.portal-list-row {
   position: relative;
   border-radius: 10px;
   transition: background-color var(--dur-fast) var(--ease-mac);
 }
 
-.owl-list-row:hover {
+.portal-list-row:hover {
   background: var(--die-hover-bg);
 }
 
-.owl-list-row + .owl-list-row::before {
+.portal-list-row + .portal-list-row::before {
   content: '';
   position: absolute;
   left: 10px;
@@ -353,12 +353,12 @@ body {
   transition: opacity var(--dur-fast) var(--ease-mac);
 }
 
-.owl-list-row:hover::before,
-.owl-list-row:hover + .owl-list-row::before {
+.portal-list-row:hover::before,
+.portal-list-row:hover + .portal-list-row::before {
   opacity: 0;
 }
 
-.owl-list-action {
+.portal-list-action {
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
   border-radius: 9999px;
@@ -370,17 +370,17 @@ body {
     transform var(--dur-fast) var(--ease-mac);
 }
 
-.owl-list-action:hover {
+.portal-list-action:hover {
   background: var(--seg-active-bg);
   border-color: var(--border-strong);
 }
 
-.owl-list-action:active {
+.portal-list-action:active {
   transform: scale(0.96);
 }
 
 /* iOS-style Toggle Switch */
-.owl-switch {
+.portal-switch {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -388,7 +388,7 @@ body {
   flex-shrink: 0;
 }
 
-.owl-switch-input {
+.portal-switch-input {
   position: absolute;
   opacity: 0;
   width: 0;
@@ -396,7 +396,7 @@ body {
   pointer-events: none;
 }
 
-.owl-switch-track {
+.portal-switch-track {
   position: relative;
   width: 34px;
   height: 20px;
@@ -408,7 +408,7 @@ body {
     border-color var(--dur-fast) var(--ease-mac);
 }
 
-.owl-switch-track::after {
+.portal-switch-track::after {
   content: '';
   position: absolute;
   top: 2px;
@@ -421,39 +421,39 @@ body {
   transition: transform var(--dur-fast) var(--ease-mac);
 }
 
-.owl-switch-input:checked + .owl-switch-track {
+.portal-switch-input:checked + .portal-switch-track {
   background: #34c759;
   border-color: transparent;
 }
 
-.owl-switch-input:checked + .owl-switch-track::after {
+.portal-switch-input:checked + .portal-switch-track::after {
   transform: translateX(14px);
 }
 
-.owl-select {
+.portal-select {
   appearance: none;
   -webkit-appearance: none;
 }
 
-select.owl-subpanel option,
-select.owl-subpanel optgroup,
-select.owl-input option {
+select.portal-subpanel option,
+select.portal-subpanel optgroup,
+select.portal-input option {
   background-color: #1c1c1e;
   color: #f5f5f7;
 }
 
-[data-theme='parchment'] select.owl-subpanel option,
-[data-theme='parchment'] select.owl-subpanel optgroup,
-[data-theme='parchment'] select.owl-input option,
-[data-theme='light'] select.owl-subpanel option,
-[data-theme='light'] select.owl-subpanel optgroup,
-[data-theme='light'] select.owl-input option {
+[data-theme='parchment'] select.portal-subpanel option,
+[data-theme='parchment'] select.portal-subpanel optgroup,
+[data-theme='parchment'] select.portal-input option,
+[data-theme='light'] select.portal-subpanel option,
+[data-theme='light'] select.portal-subpanel optgroup,
+[data-theme='light'] select.portal-input option {
   background-color: #ffffff;
   color: #1d1d1f;
 }
 
 /* macOS Control Center style thin range slider */
-.owl-slider {
+.portal-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -464,7 +464,7 @@ select.owl-input option {
   cursor: pointer;
 }
 
-.owl-slider::-webkit-slider-thumb {
+.portal-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -476,11 +476,11 @@ select.owl-input option {
   transition: transform var(--dur-fast) var(--ease-mac);
 }
 
-.owl-slider::-webkit-slider-thumb:hover {
+.portal-slider::-webkit-slider-thumb:hover {
   transform: scale(1.12);
 }
 
-.owl-slider::-moz-range-thumb {
+.portal-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 9999px;
@@ -490,7 +490,7 @@ select.owl-input option {
 }
 
 /* Compact numeric input inside Apple stepper */
-.owl-num-input {
+.portal-num-input {
   background: transparent;
   border: none;
   outline: none;
@@ -500,13 +500,13 @@ select.owl-input option {
   -moz-appearance: textfield;
 }
 
-.owl-num-input::-webkit-outer-spin-button,
-.owl-num-input::-webkit-inner-spin-button {
+.portal-num-input::-webkit-outer-spin-button,
+.portal-num-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.owl-flying-die {
+.portal-flying-die {
   position: fixed;
   top: 0;
   left: 0;
@@ -517,11 +517,11 @@ select.owl-input option {
 }
 
 /* Controles curados estilo Apple (Segmented controls + swatches + hairlines) */
-.owl-hairline {
+.portal-hairline {
   border-top: 1px solid var(--hairline);
 }
 
-.owl-seg {
+.portal-seg {
   display: grid;
   align-items: stretch;
   overflow: hidden;
@@ -532,7 +532,7 @@ select.owl-input option {
   gap: 3px;
 }
 
-.owl-seg-btn {
+.portal-seg-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -548,17 +548,17 @@ select.owl-input option {
   transition: background-color 140ms var(--ease-mac), color 140ms var(--ease-mac), box-shadow 140ms var(--ease-mac);
 }
 
-.owl-seg-btn:hover {
+.portal-seg-btn:hover {
   color: var(--text-primary);
 }
 
-.owl-seg-btn.is-active {
+.portal-seg-btn.is-active {
   background-color: var(--seg-active-bg);
   color: var(--text-primary);
   box-shadow: var(--seg-active-shadow);
 }
 
-.owl-swatch {
+.portal-swatch {
   position: relative;
   width: 22px;
   height: 22px;
@@ -569,16 +569,16 @@ select.owl-input option {
   transition: transform 140ms var(--ease-mac), box-shadow 140ms var(--ease-mac);
 }
 
-.owl-swatch:hover {
+.portal-swatch:hover {
   transform: scale(1.1);
 }
 
-.owl-swatch.is-active {
+.portal-swatch.is-active {
   box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 3.5px var(--text-primary);
   transform: scale(1.06);
 }
 
-.owl-swatch-custom {
+.portal-swatch-custom {
   background: conic-gradient(#f43f5e, #f59e0b, #10b981, #3b82f6, #a855f7, #f43f5e);
   display: inline-flex;
   align-items: center;
@@ -589,25 +589,25 @@ select.owl-input option {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
 
-.owl-preview-stage {
+.portal-preview-stage {
   background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.16), transparent 68%);
 }
 
 /* Dock inferior de dados estilo macOS */
-.owl-dock {
+.portal-dock {
   background-color: var(--dock-bg);
   border: 1px solid var(--dock-border);
   box-shadow: var(--shadow-float), inset 0 1px 0 var(--surface-spec);
 }
 
-.owl-dock-sep {
+.portal-dock-sep {
   width: 1px;
   height: 22px;
   background-color: var(--hairline);
   flex-shrink: 0;
 }
 
-.owl-die-btn {
+.portal-die-btn {
   position: relative;
   display: inline-flex;
   flex-direction: column;
@@ -623,12 +623,12 @@ select.owl-input option {
   transition: transform 160ms var(--ease-mac), background-color 140ms var(--ease-mac), color 140ms var(--ease-mac), opacity 140ms var(--ease-mac);
 }
 
-.owl-die-btn[data-count] {
+.portal-die-btn[data-count] {
   opacity: 1;
   background-color: var(--die-hover-bg);
 }
 
-.owl-die-btn[data-count]::after {
+.portal-die-btn[data-count]::after {
   content: attr(data-count);
   position: absolute;
   top: -4px;
@@ -647,10 +647,10 @@ select.owl-input option {
   font-variant-numeric: tabular-nums;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1.5px var(--dock-bg);
   pointer-events: none;
-  animation: owl-badge-pop 160ms var(--ease-mac);
+  animation: portal-badge-pop 160ms var(--ease-mac);
 }
 
-@keyframes owl-badge-pop {
+@keyframes portal-badge-pop {
   from {
     transform: scale(0.65);
     opacity: 0;
@@ -661,28 +661,28 @@ select.owl-input option {
   }
 }
 
-.owl-die-btn:hover {
+.portal-die-btn:hover {
   transform: translateY(-2px) scale(1.06);
   background-color: var(--die-hover-bg);
   opacity: 1;
 }
 
-.owl-die-btn:active {
+.portal-die-btn:active {
   transform: scale(0.94);
 }
 
-.owl-die-btn.is-featured {
+.portal-die-btn.is-featured {
   color: var(--accent-primary);
   background-color: var(--accent-soft);
   opacity: 1;
 }
 
-.owl-die-btn.is-featured:hover {
+.portal-die-btn.is-featured:hover {
   background-color: var(--accent-soft);
   color: var(--accent-hover);
 }
 
-.owl-stepper {
+.portal-stepper {
   display: inline-flex;
   align-items: center;
   background-color: var(--seg-bg);
@@ -691,7 +691,7 @@ select.owl-input option {
   padding: 2px;
 }
 
-.owl-stepper-btn {
+.portal-stepper-btn {
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -702,12 +702,12 @@ select.owl-input option {
   transition: background-color 130ms var(--ease-mac), color 130ms var(--ease-mac);
 }
 
-.owl-stepper-btn:hover {
+.portal-stepper-btn:hover {
   background-color: var(--die-hover-bg);
   color: var(--text-primary);
 }
 
-.owl-style-chip {
+.portal-style-chip {
   position: relative;
   width: 26px;
   height: 26px;
@@ -720,13 +720,13 @@ select.owl-input option {
   transition: transform 140ms var(--ease-mac), box-shadow 140ms var(--ease-mac);
 }
 
-.owl-style-chip:hover {
+.portal-style-chip:hover {
   transform: scale(1.1);
   box-shadow: 0 0 0 1.5px var(--text-muted), 0 4px 12px rgba(0, 0, 0, 0.28);
 }
 
 /* Tarjeta flotante de resultado estilo Dynamic HUD */
-.owl-roll-card {
+.portal-roll-card {
   position: relative;
   min-width: 176px;
   max-width: 340px;
@@ -737,7 +737,7 @@ select.owl-input option {
   box-shadow: var(--shadow-float), inset 0 1px 0 var(--surface-spec);
 }
 
-.owl-roll-close {
+.portal-roll-close {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -753,13 +753,13 @@ select.owl-input option {
   transition: background-color 140ms var(--ease-mac), color 140ms var(--ease-mac), transform 140ms var(--ease-mac);
 }
 
-.owl-roll-close:hover {
+.portal-roll-close:hover {
   background-color: var(--die-hover-bg);
   color: var(--text-primary);
   transform: scale(1.08);
 }
 
-.owl-roll-pill {
+.portal-roll-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -773,19 +773,19 @@ select.owl-input option {
   color: var(--text-primary);
 }
 
-.owl-roll-pill.is-crit {
+.portal-roll-pill.is-crit {
   background-color: rgba(16, 185, 129, 0.16);
   border-color: rgba(16, 185, 129, 0.36);
   color: var(--crit-text);
 }
 
-.owl-roll-pill.is-fumble {
+.portal-roll-pill.is-fumble {
   background-color: rgba(239, 68, 68, 0.16);
   border-color: rgba(239, 68, 68, 0.36);
   color: var(--fumble-text);
 }
 
-.owl-roll-chip {
+.portal-roll-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -801,13 +801,13 @@ select.owl-input option {
   color: var(--text-primary);
 }
 
-.owl-roll-chip.is-picked {
+.portal-roll-chip.is-picked {
   background-color: var(--chip-picked-bg);
   border-color: var(--accent-primary);
   color: var(--chip-picked-text);
 }
 
-.owl-roll-chip.is-hero {
+.portal-roll-chip.is-hero {
   min-width: 34px;
   height: 30px;
   padding: 0 10px;
@@ -819,23 +819,23 @@ select.owl-input option {
   box-shadow: var(--seg-active-shadow);
 }
 
-.owl-btn-accent {
+.portal-btn-accent {
   background-color: var(--accent-primary);
   color: #ffffff;
   border: 1px solid transparent;
 }
 
-.owl-btn-accent:hover {
+.portal-btn-accent:hover {
   background-color: var(--accent-hover);
 }
 
-.owl-btn-active {
+.portal-btn-active {
   background-color: var(--accent-soft);
   border-color: var(--accent-primary) !important;
   color: var(--text-primary);
 }
 
-.owl-item-use-btn {
+.portal-item-use-btn {
   background-color: color-mix(in srgb, var(--item-color, #8b5cf6) 18%, transparent);
   color: var(--item-color, #8b5cf6);
   border: 1px solid color-mix(in srgb, var(--item-color, #8b5cf6) 45%, transparent);
@@ -844,7 +844,7 @@ select.owl-input option {
   transition: transform 0.14s ease, background-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 
-.owl-item-use-btn:hover {
+.portal-item-use-btn:hover {
   background-color: var(--item-color, #8b5cf6) !important;
   color: #ffffff !important;
   border-color: var(--item-color, #8b5cf6) !important;
@@ -852,11 +852,11 @@ select.owl-input option {
   box-shadow: 0 3px 10px color-mix(in srgb, var(--item-color, #8b5cf6) 42%, transparent);
 }
 
-.owl-item-use-btn:active {
+.portal-item-use-btn:active {
   transform: scale(0.95);
 }
 
-.owl-input {
+.portal-input {
   width: 100%;
   background-color: var(--bg-subpanel);
   border: 1px solid var(--border-subtle);
@@ -865,8 +865,98 @@ select.owl-input option {
   outline: none;
 }
 
-.owl-input:focus {
+.portal-input:focus {
   border-color: var(--accent-primary);
+}
+
+/* Listas agrupadas y primitivas estilo macOS System Settings */
+.portal-settings-group {
+  background-color: var(--bg-subpanel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.875rem;
+  overflow: hidden;
+}
+
+.portal-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+}
+
+.portal-settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.portal-settings-row + .portal-settings-row,
+.portal-settings-row + .portal-settings-col,
+.portal-settings-col + .portal-settings-row,
+.portal-settings-col + .portal-settings-col {
+  border-top: 1px solid var(--hairline);
+}
+
+.portal-settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  padding: 0 0.25rem;
+}
+
+.portal-formula-bar {
+  background-color: var(--seg-bg);
+  border: 1px solid var(--seg-border);
+  border-radius: 0.65rem;
+  padding: 0.375rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.portal-block-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.32rem 0.6rem;
+  border-radius: 0.6rem;
+  background-color: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-mac),
+    border-color var(--dur-fast) var(--ease-mac),
+    transform var(--dur-fast) var(--ease-mac);
+}
+
+.portal-block-pill:hover {
+  border-color: var(--accent-primary);
+  background-color: var(--die-hover-bg);
+}
+
+.portal-block-pill:active {
+  transform: scale(0.97);
+}
+
+.portal-block-pill.is-active {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.portal-inspector-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--surface-spec);
+  border-radius: 0.875rem;
+  padding: 0.75rem;
 }
 
 /* ==========================================================================

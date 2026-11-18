@@ -2,8 +2,8 @@
    SEQUENCE SERVICE: SECUENCIAS DE ACCIONES, ÁREAS Y SOLICITUDES DE TIRADA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261116z40';
-import { RealtimeBridge } from './realtimeBridge.js';
+import { Selector } from '../core/selector.js?v=20261117b1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261117b1';
 
 export const SequenceServiceMethods = {
   startItemSequence(tokenId, invItem) {
@@ -19,10 +19,13 @@ export const SequenceServiceMethods = {
       tokenId,
       casterName: caster ? caster.name : '',
       itemName: invItem.name || 'Complemento',
+      itemKind: invItem.kind || 'equipment',
+      itemIcon: String(invItem.icon || '').trim(),
+      itemColor: String(invItem.color || '#8b5cf6').trim(),
       itemMessage,
       steps,
-      currentIndex: steps.length > 0 ? 0 : -1,
-      mode: steps.length > 0 ? steps[0].type : 'info',
+      currentIndex: -1,
+      mode: 'info',
       stepMessage: itemMessage,
       areaConfirmed: false,
       targetTokenIds: this.state.selectedTokenId && this.state.selectedTokenId !== tokenId
@@ -34,26 +37,44 @@ export const SequenceServiceMethods = {
       lastDamageTotal: 0
     };
 
-    if (steps.length === 0) {
-      if (itemMessage) {
-        this.recordEvent('USAR_OBJETO', `${caster ? caster.name + ' · ' : ''}${invItem.name}: ${itemMessage}`);
-      }
+    if (itemMessage) {
+      this.recordEvent('USAR_OBJETO', `${caster ? caster.name + ' · ' : ''}${invItem.name}: ${itemMessage}`);
       this.notify({ skipVaultSave: true });
       return true;
     }
 
-    this.executeSequenceStep(0);
+    if (steps.length > 0) {
+      this.executeSequenceStep(0);
+    }
     return true;
   },
 
   executeSequenceStep(stepIndex) {
     const seq = this.state.activeSequence;
-    if (!seq || !Array.isArray(seq.steps) || !seq.steps[stepIndex]) return;
+    if (!seq || !Array.isArray(seq.steps)) return;
+    if (stepIndex === -1 && seq.itemMessage) {
+      if (this.state.tool === 'areaSelect') {
+        this.state.tool = 'select';
+        this.state.areaSelectConfig = null;
+        this.state.ruler = null;
+      }
+      seq.currentIndex = -1;
+      seq.mode = 'info';
+      seq.stepMessage = seq.itemMessage;
+      this.notify({ skipVaultSave: true });
+      return;
+    }
+    if (!seq.steps[stepIndex]) return;
     seq.currentIndex = stepIndex;
     const step = seq.steps[stepIndex];
+    if (this.state.tool === 'areaSelect' && step.type !== 'area') {
+      this.state.tool = 'select';
+      this.state.areaSelectConfig = null;
+      this.state.ruler = null;
+    }
     const caster = (this.state.tokens || []).find((t) => t.id === seq.tokenId) || null;
     const casterPrefix = caster ? `${caster.name} · ` : '';
-    const stepMsg = String(step.message || seq.itemMessage || '').trim();
+    const stepMsg = String(step.message || '').trim();
     seq.stepMessage = stepMsg;
     seq.mode = step.type;
 
@@ -318,11 +339,15 @@ export const SequenceServiceMethods = {
     });
     if (controllableTargets.length === 0) return;
 
-    const queue = Array.isArray(this.state.pendingRollRequests) ? [...this.state.pendingRollRequests] : [];
+    let queue = Array.isArray(this.state.pendingRollRequests) ? [...this.state.pendingRollRequests] : [];
+    if (req.isInitiative) {
+      queue = queue.filter((q) => !q.isInitiative);
+    }
     controllableTargets.forEach((tgt) => {
       if (!queue.some((q) => q.requestId === req.requestId && q.tokenId === tgt.id)) {
         queue.push({
           requestId: req.requestId,
+          isInitiative: Boolean(req.isInitiative),
           tokenId: tgt.id,
           tokenName: tgt.name,
           label: req.label,
@@ -335,26 +360,41 @@ export const SequenceServiceMethods = {
     this.notify({ skipVaultSave: true });
   },
 
-  respondToRollRequest(requestId, tokenId) {
+  respondToRollRequest(requestId, tokenId, opts = {}) {
     const queue = Array.isArray(this.state.pendingRollRequests) ? this.state.pendingRollRequests : [];
     const idx = queue.findIndex((q) => q.requestId === requestId && q.tokenId === tokenId);
     if (idx < 0) return;
     const item = queue[idx];
     const tok = (this.state.tokens || []).find((t) => t.id === tokenId) || null;
     this.state.activeSequence = null;
-    const roll = this.rollFormula(item.formula, tok, `${item.tokenName} · ${item.label}`);
+    const roll = this.rollFormula(item.formula, tok, `${item.tokenName} · ${item.label}`, '', { silent: Boolean(opts.silent) });
     this.state.pendingRollRequests = queue.filter((_, i) => i !== idx);
 
+    const displayLabel = roll?.isDeckRoll ? roll.headline : '';
+    const total = roll ? Number(roll.total) || 0 : 0;
     const resp = {
       requestId,
+      isInitiative: Boolean(item.isInitiative),
       tokenId,
       tokenName: item.tokenName,
-      total: roll ? Number(roll.total) || 0 : 0,
+      total,
+      displayLabel,
       isCrit: roll ? roll.chosen === roll.sides : false,
       isFumble: roll ? roll.chosen === 1 : false
     };
+    if (item.isInitiative) {
+      this.setTokenInitiative(item.tokenId, total, displayLabel, { skipBroadcast: this.state.role === 'player' });
+    }
     RealtimeBridge.send({ kind: 'ROLL_RESPONSE', response: resp });
     this.receiveRollResponse(resp);
+  },
+
+  respondToAllRollRequests() {
+    const queue = Array.isArray(this.state.pendingRollRequests) ? [...this.state.pendingRollRequests] : [];
+    if (queue.length === 0) return;
+    queue.forEach((item, idx) => {
+      this.respondToRollRequest(item.requestId, item.tokenId, { silent: idx < queue.length - 1 });
+    });
   },
 
   dismissRollRequest(requestId, tokenId) {
@@ -371,6 +411,12 @@ export const SequenceServiceMethods = {
 
   receiveRollResponse(resp) {
     if (!resp || !resp.requestId) return;
+    if (resp.isInitiative) {
+      if (this.state.role === 'gm') {
+        this.setTokenInitiative(resp.tokenId, resp.total, resp.displayLabel || '');
+      }
+      return;
+    }
     const active = this.state.activeRollRequest;
     if (!active || active.requestId !== resp.requestId) return;
     active.responses = { ...(active.responses || {}), [resp.tokenId]: resp };

@@ -1,7 +1,7 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261116z40';
-import { CartridgePacker } from '../services/cartridgePacker.js';
-import { RealtimeBridge } from '../services/realtimeBridge.js';
-import { Service } from '../core/service.js?v=20261116z40';
+import { BrowserVault } from '../services/browserVault.js?v=20261117b1';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261117b1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
+import { Service } from '../core/service.js?v=20261117b1';
 
 /**
  * Portal-VTT entry lobby: create a portal with ruleset/options, join by code/URL, or resume recent portals.
@@ -62,7 +62,7 @@ export const PortalLobbyViewMethods = {
       .slice(0, 6)
       .map(
         (r) => `
-        <div class="owl-subpanel rounded-xl px-3 py-2 flex items-center justify-between gap-2 group">
+        <div class="portal-subpanel rounded-xl px-3 py-2 flex items-center justify-between gap-2 group">
           <button type="button" data-open-portal="${r.code}" class="flex-1 min-w-0 text-left">
             <div class="flex items-center gap-2">
               <span class="font-semibold text-xs truncate">${r.title}</span>
@@ -70,7 +70,7 @@ export const PortalLobbyViewMethods = {
             </div>
             <div class="text-[10px] opacity-60 font-mono-tech truncate">${r.code} · ${r.tokenCount} fichas</div>
           </button>
-          <button type="button" data-del-portal="${r.code}" class="owl-btn w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-50 hover:opacity-100 text-rose-400" title="Eliminar portal guardado">✕</button>
+          <button type="button" data-del-portal="${r.code}" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-50 hover:opacity-100 text-rose-400" title="Eliminar portal guardado">✕</button>
         </div>
       `
       )
@@ -80,7 +80,8 @@ export const PortalLobbyViewMethods = {
       btn.addEventListener('click', async () => {
         const code = btn.dataset.openPortal;
         await Service.openPortal(code, 'gm');
-        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg));
+        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+        this.startPresenceHeartbeat();
         this.syncUrlWithPortal(code, 'gm');
         this.hidePortalLobby();
         this.showActionToast(`Portal ${code} abierto.`);
@@ -119,7 +120,8 @@ export const PortalLobbyViewMethods = {
           dynamicLighting,
           showGrid
         });
-        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg));
+        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+        this.startPresenceHeartbeat();
         this.syncUrlWithPortal(code, 'gm');
         this.hidePortalLobby();
         this.showActionToast(`Portal ${code} creado.`);
@@ -133,7 +135,8 @@ export const PortalLobbyViewMethods = {
         if (!code) return;
         const role = this.els.selJoinPortalRole?.value === 'gm' ? 'gm' : 'player';
         await Service.openPortal(code, role);
-        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg));
+        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+        this.startPresenceHeartbeat();
         this.syncUrlWithPortal(code, role);
         this.hidePortalLobby();
         this.showActionToast(`Conectado al portal ${code}.`);
@@ -152,7 +155,8 @@ export const PortalLobbyViewMethods = {
             ruleset: parsed.world?.ruleset || 'dnd55'
           });
           await Service.loadModulePackage(parsed);
-          RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg));
+          RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+          this.startPresenceHeartbeat();
           this.syncUrlWithPortal(code, 'gm');
           this.hidePortalLobby();
           this.showActionToast(`Cartucho "${Service.state.room.moduleTitle}" desplegado.`);
