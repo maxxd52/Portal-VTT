@@ -2,8 +2,8 @@
    SEQUENCE SERVICE: SECUENCIAS DE ACCIONES, ÁREAS Y SOLICITUDES DE TIRADA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
 
 export const SequenceServiceMethods = {
   startItemSequence(tokenId, invItem) {
@@ -67,7 +67,7 @@ export const SequenceServiceMethods = {
     if (!seq.steps[stepIndex]) return;
     seq.currentIndex = stepIndex;
     const step = seq.steps[stepIndex];
-    if (this.state.tool === 'areaSelect' && step.type !== 'area') {
+    if (this.state.tool === 'areaSelect' && step.type !== 'area' && step.type !== 'targets') {
       this.state.tool = 'select';
       this.state.areaSelectConfig = null;
       this.state.ruler = null;
@@ -77,6 +77,37 @@ export const SequenceServiceMethods = {
     const stepMsg = String(step.message || '').trim();
     seq.stepMessage = stepMsg;
     seq.mode = step.type;
+
+    if (step.type === 'save_request' || (step.type === 'roll' && step.rollKind === 'request')) {
+      const fallbackTargets = this.state.selectedTokenId ? [this.state.selectedTokenId] : [];
+      const targetIds = seq.targetTokenIds.length > 0 ? seq.targetTokenIds : fallbackTargets;
+      const rawStatKey = String(step.statKey || '').trim();
+      const statKey = rawStatKey ? Selector.normalizeStatKey(rawStatKey) : '';
+      const statDef = statKey
+        ? Selector.getSheetStatsDef(this.state, caster).find((s) => s.key === statKey || s.alias === statKey)
+        : null;
+      const statLabel = statDef ? statDef.label : (statKey ? statKey.toUpperCase() : '');
+      let formula = String(step.formula || '').trim();
+      if (!formula) {
+        const sysBase = String(this.state.systemConfig?.rollFormula || '1d20+@stat').trim();
+        if (statDef || statKey) {
+          const ref = statDef ? statDef.alias : statKey;
+          formula = sysBase.includes('@stat') ? sysBase.replace(/@stat\b/gi, `@${ref}`) : `${sysBase}+@${ref}`;
+        } else {
+          formula = sysBase.replace(/\+\s*@stat\b|@stat\b/gi, '').trim() || '1d20';
+        }
+      }
+      seq.mode = 'roll_request';
+      this.sendRollRequest({
+        label: step.label || (statLabel ? `Salvación de ${statLabel}` : 'Tirada solicitada'),
+        statKey,
+        formula,
+        dc: Number(step.dc) || 0,
+        targetTokenIds: targetIds,
+        damageTotal: seq.lastDamageTotal || 0
+      });
+      return;
+    }
 
     if (step.type === 'roll') {
       const roll = this.rollFormula(
@@ -109,9 +140,16 @@ export const SequenceServiceMethods = {
       return;
     }
 
-    if (step.type === 'area') {
+    if (step.type === 'targets' || step.type === 'area') {
       const cs = this.state.grid?.cellSize || 80;
       const shape = step.shape || 'circle';
+      seq.mode = 'targets';
+      if (shape === 'self') {
+        seq.targetTokenIds = seq.tokenId ? [seq.tokenId] : [];
+        seq.areaConfirmed = true;
+        this.notify({ skipVaultSave: true });
+        return;
+      }
       seq.areaConfirmed = false;
       this.state.tool = 'areaSelect';
       this.state.rulerShape = shape;
@@ -160,28 +198,8 @@ export const SequenceServiceMethods = {
       return;
     }
 
-    if (step.type === 'save_request') {
-      const fallbackTargets = this.state.selectedTokenId ? [this.state.selectedTokenId] : [];
-      const targetIds = seq.targetTokenIds.length > 0 ? seq.targetTokenIds : fallbackTargets;
-      const statKey = Selector.normalizeStatKey(step.statKey || 'dex') || 'dex';
-      const statDef = Selector.getSheetStatsDef(this.state, caster).find(
-        (s) => s.key === statKey || s.alias === statKey
-      );
-      const statLabel = statDef ? statDef.label : statKey.toUpperCase();
-      const formula = step.formula || `1d20+@${statDef ? statDef.alias : statKey}`;
-      this.sendRollRequest({
-        label: step.label || `Salvación de ${statLabel}`,
-        statKey,
-        formula,
-        dc: Number(step.dc) || 0,
-        targetTokenIds: targetIds,
-        damageTotal: seq.lastDamageTotal || 0
-      });
-      return;
-    }
-
-    if (step.type === 'apply_hp') {
-      seq.mode = 'apply_hp';
+    if (step.type === 'modify' || step.type === 'apply_hp') {
+      seq.mode = 'modify';
       this.notify({ skipVaultSave: true });
       return;
     }
@@ -231,7 +249,7 @@ export const SequenceServiceMethods = {
     if (this.state.activeSequence) {
       this.state.activeSequence.targetTokenIds = hits.map((t) => t.id);
       this.state.activeSequence.areaConfirmed = true;
-      this.state.activeSequence.mode = 'area';
+      this.state.activeSequence.mode = 'targets';
     }
     this.state.tool = 'select';
     this.state.areaSelectConfig = null;
@@ -262,7 +280,7 @@ export const SequenceServiceMethods = {
   finishTargetSelection() {
     if (this.state.activeSequence) {
       this.state.activeSequence.areaConfirmed = true;
-      this.state.activeSequence.mode = 'area';
+      this.state.activeSequence.mode = 'targets';
     }
     this.state.tool = 'select';
     this.state.areaSelectConfig = null;
@@ -302,7 +320,21 @@ export const SequenceServiceMethods = {
     this.notify({ skipVaultSave: true });
   },
 
-  sendRollRequest({ label, statKey, formula, dc = 0, targetTokenIds = [], damageTotal = 0 }) {
+  sendRollRequest({
+    label,
+    statKey,
+    formula,
+    dc = 0,
+    targetTokenIds = [],
+    damageTotal = 0,
+    evalMode = '',
+    secretDc = false,
+    lowScale = 1,
+    difficultyMod = 0,
+    poolThreshold = 0,
+    requiredSuccesses = 0,
+    resultMode = ''
+  }) {
     const targets = targetTokenIds
       .map((id) => (this.state.tokens || []).find((t) => t.id === id))
       .filter(Boolean)
@@ -316,6 +348,13 @@ export const SequenceServiceMethods = {
       formula: String(formula || '1d20'),
       dc: Number(dc) || 0,
       damageTotal: Number(damageTotal) || 0,
+      evalMode: String(evalMode || ''),
+      secretDc: Boolean(secretDc),
+      lowScale: [1, 2, 5].includes(Number(lowScale)) ? Number(lowScale) : 1,
+      difficultyMod: Number(difficultyMod) || 0,
+      successThreshold: Number(poolThreshold) || 0,
+      requiredSuccesses: Number(requiredSuccesses) || 0,
+      resultMode: String(resultMode || ''),
       targets
     };
 
@@ -324,9 +363,12 @@ export const SequenceServiceMethods = {
       responses: {}
     };
 
-    RealtimeBridge.send({ kind: 'ROLL_REQUEST', request: req });
-    this.recordEvent('SOLICITUD_TIRADA', `${req.label}${req.dc ? ` (CD ${req.dc})` : ''} → ${targets.map((t) => t.name).join(', ') || 'Mesa'}`);
+    const wireReq = Selector.buildWireRollRequest(req);
+    RealtimeBridge.send({ kind: 'ROLL_REQUEST', request: wireReq });
+    const logDc = req.secretDc ? ' (Secreta)' : req.dc ? ` (CD ${req.dc})` : '';
+    this.recordEvent('SOLICITUD_TIRADA', `${req.label}${logDc} → ${targets.map((t) => t.name).join(', ') || 'Mesa'}`);
     this.notify({ skipVaultSave: true });
+    return this.state.activeRollRequest;
   },
 
   receiveRollRequest(req) {
@@ -352,7 +394,10 @@ export const SequenceServiceMethods = {
           tokenName: tgt.name,
           label: req.label,
           formula: req.formula,
-          dc: req.dc || 0
+          dc: req.secretDc ? 0 : (req.dc || 0),
+          secretDc: Boolean(req.secretDc),
+          resultMode: req.resultMode || '',
+          successThreshold: Number(req.successThreshold) || 0
         });
       }
     });
@@ -367,7 +412,11 @@ export const SequenceServiceMethods = {
     const item = queue[idx];
     const tok = (this.state.tokens || []).find((t) => t.id === tokenId) || null;
     this.state.activeSequence = null;
-    const roll = this.rollFormula(item.formula, tok, `${item.tokenName} · ${item.label}`, '', { silent: Boolean(opts.silent) });
+    const roll = this.rollFormula(item.formula, tok, `${item.tokenName} · ${item.label}`, '', {
+      silent: Boolean(opts.silent),
+      resultMode: item.resultMode || 'inherit',
+      successThreshold: item.successThreshold || undefined
+    });
     this.state.pendingRollRequests = queue.filter((_, i) => i !== idx);
 
     const displayLabel = roll?.isDeckRoll ? roll.headline : '';
@@ -387,6 +436,30 @@ export const SequenceServiceMethods = {
     }
     RealtimeBridge.send({ kind: 'ROLL_RESPONSE', response: resp });
     this.receiveRollResponse(resp);
+  },
+
+  resolveRollRequestTargetForGm(tokenId) {
+    const active = this.state.activeRollRequest;
+    if (!active || this.state.role !== 'gm') return null;
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok) return null;
+    const roll = this.rollFormula(active.formula, tok, `${tok.name} · ${active.label}`, '', {
+      silent: true,
+      resultMode: active.resultMode || 'inherit',
+      successThreshold: active.successThreshold || undefined
+    });
+    const resp = {
+      requestId: active.requestId,
+      isInitiative: Boolean(active.isInitiative),
+      tokenId: tok.id,
+      tokenName: tok.name,
+      total: roll ? Number(roll.total) || 0 : 0,
+      displayLabel: roll?.isDeckRoll ? roll.headline : '',
+      isCrit: false,
+      isFumble: false
+    };
+    this.receiveRollResponse(resp);
+    return resp;
   },
 
   respondToAllRollRequests() {
@@ -438,6 +511,26 @@ export const SequenceServiceMethods = {
   applySequenceHpToAll(tokenIds, amount, mode = 'full') {
     if (!Array.isArray(tokenIds)) return;
     tokenIds.forEach((tid) => this.applySequenceHpToToken(tid, amount, mode));
+  },
+
+  applySequenceResourceToAll(tokenIds, resourceKey = 'hp', amount, mode = 'full') {
+    if (!Array.isArray(tokenIds)) return;
+    tokenIds.forEach((tid) => this.applySequenceResourceToToken(tid, resourceKey, amount, mode));
+  },
+
+  applySequenceResourceToToken(tokenId, resourceKey = 'hp', amount, mode = 'full') {
+    if (!resourceKey || resourceKey === 'hp') {
+      this.applySequenceHpToToken(tokenId, amount, mode);
+      return;
+    }
+    const raw = Math.abs(Number(amount) || 0);
+    if (raw <= 0 || !tokenId) return;
+    let delta = -raw;
+    if (mode === 'half') delta = -Math.floor(raw / 2);
+    else if (mode === 'heal') delta = raw;
+    if (delta !== 0) {
+      this.adjustTokenResourceByKey(tokenId, resourceKey, delta);
+    }
   },
 
   applySequenceConditionToAll(tokenIds, condKey) {

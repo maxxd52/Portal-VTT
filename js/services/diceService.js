@@ -1,7 +1,7 @@
-import { Dice3DEngine } from './dice3dEngine.js?v=20261117b1';
-import { DiceFormulaServiceMethods } from './diceFormulaService.js?v=20261117b1';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261117b1';
-import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261117b1';
+import { Dice3DEngine } from './dice3dEngine.js?v=20261121a6';
+import { DiceFormulaServiceMethods } from './diceFormulaService.js?v=20261121a6';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
+import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261121a6';
 
 /**
  * Dice hand, style, rolling & private/public visibility methods mixed into Service.
@@ -171,12 +171,16 @@ export const DiceServiceMethods = {
     this.state.dice.hand = [];
 
     const can3D = typeof Dice3DEngine.canRoll3D === 'function' && Dice3DEngine.canRoll3D();
-    if (can3D) Dice3DEngine.prepareFlight();
+    if (can3D) {
+      this.markRollFlying(roll.rollId);
+      Dice3DEngine.prepareFlight();
+    }
     this.broadcastRoll(roll);
     this.recordEvent('TIRADA_DADO', `${label}: ${summary.headline}`, { broadcast: roll.visibility !== 'private' });
     this.notify();
     if (can3D) {
-      Dice3DEngine.rollHand(
+      this.playSeatDiceFlight(
+        roll,
         results.map((r) => ({ kind: r.kind, sides: r.sides, colorHex: r.colorHex, value: r.chosen, card: r.card })),
         { targetX, targetY, style }
       );
@@ -190,15 +194,112 @@ export const DiceServiceMethods = {
     this.notify();
   },
 
+  resolveSeatKeyForRoll(roll) {
+    if (!roll) return '';
+    if (roll.rollerSeatKey) return roll.rollerSeatKey;
+    if (roll.rollerRole === 'gm') return 'gm';
+    if (roll.rollerInviteId) return roll.rollerInviteId;
+    return roll.rollerClientId ? `peer:${roll.rollerClientId}` : 'gm';
+  },
+
+  getSeatOriginX(seatKey) {
+    if (typeof document === 'undefined' || !seatKey) return null;
+    const seatEl = document.querySelector(`[data-seat-key="${CSS.escape(seatKey)}"]`);
+    if (!seatEl) return null;
+    const rect = seatEl.getBoundingClientRect();
+    return rect.width > 0 ? rect.left + rect.width / 2 : null;
+  },
+
+  playSeatDiceFlight(roll, diceItems, opts = {}) {
+    if (typeof Dice3DEngine.canRoll3D !== 'function' || !Dice3DEngine.canRoll3D()) return;
+    if (!Array.isArray(diceItems) || diceItems.length === 0) return;
+    const isRemote = Boolean(roll?.remote);
+    const seatKey = this.resolveSeatKeyForRoll(roll);
+    const originX = isRemote ? this.getSeatOriginX(seatKey) : null;
+    if (roll?.rollId) this.markRollFlying(roll.rollId);
+    Dice3DEngine.rollHand(diceItems, {
+      ...opts,
+      mode: isRemote ? 'remote' : 'local',
+      originX,
+      onComplete: () => {
+        this.clearRollFlying(roll?.rollId);
+        this.notify({ skipVaultSave: true });
+      }
+    });
+  },
+
+  dismissSeatRoll(seatKey, rollId = '', { broadcast = true } = {}) {
+    if (!(this.seatRolls instanceof Map) || !seatKey) return;
+    const cur = this.seatRolls.get(seatKey);
+    if (!cur) return;
+    if (rollId && cur.rollId && cur.rollId !== rollId) return;
+    this.clearSeatRollAutoHide?.(seatKey);
+    this.seatRolls.delete(seatKey);
+    if (this.expandedSeatRollKey === seatKey) {
+      this.expandedSeatRollKey = '';
+    }
+    if (broadcast) {
+      RealtimeBridge.send({
+        kind: 'ROLL_DISMISS',
+        seatKey,
+        rollId: cur.rollId || rollId,
+        senderClientId: this.clientId
+      });
+    }
+    this.notify({ skipVaultSave: true });
+  },
+
+  hasSeenRollId(rollId) {
+    if (!rollId) return false;
+    if (this._seenRollIds instanceof Set && this._seenRollIds.has(rollId)) return true;
+    const history = this.state?.dice?.history;
+    return Array.isArray(history) && history.some((h) => h && h.rollId === rollId);
+  },
+
+  markSeenRollId(rollId) {
+    if (!rollId) return;
+    if (!(this._seenRollIds instanceof Set)) this._seenRollIds = new Set();
+    this._seenRollIds.add(rollId);
+    if (this._seenRollIds.size > 150) {
+      const oldest = this._seenRollIds.values().next().value;
+      if (oldest) this._seenRollIds.delete(oldest);
+    }
+  },
+
   recordRoll(roll) {
     if (!this.state.dice) return roll;
     const visibility = roll.visibility || this.state.dice.visibility || 'public';
     const rollerRole = roll.rollerRole || this.state.role || 'gm';
+    const rollerClientId = roll.rollerClientId || this.clientId;
+    const rollerInviteId = roll.rollerInviteId !== undefined ? roll.rollerInviteId : (this.state.activeInviteId || '');
+    const rollerSeatKey = roll.rollerSeatKey || this.getSelfSeatKey();
+    const rollerName = roll.rollerName || this.getActiveSpeakerInfo().name;
+    const rollId = roll.rollId || `roll-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    this.markSeenRollId(rollId);
     const time = roll.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const stored = { ...roll, visibility, rollerRole, time };
+    const diceStyle = roll.diceStyle && typeof roll.diceStyle === 'object'
+      ? { ...DEFAULT_DICE_STYLE, ...roll.diceStyle }
+      : { ...DEFAULT_DICE_STYLE, ...(this.state.dice?.style || {}) };
+    const stored = {
+      ...roll,
+      rollId,
+      visibility,
+      rollerRole,
+      rollerClientId,
+      rollerInviteId,
+      rollerSeatKey,
+      rollerName,
+      diceStyle,
+      time
+    };
     this.state.dice.lastRoll = stored;
     const history = Array.isArray(this.state.dice.history) ? this.state.dice.history : [];
     this.state.dice.history = [stored, ...history].slice(0, 25);
+    if (!(this.seatRolls instanceof Map)) this.seatRolls = new Map();
+    stored.autoHidden = false;
+    this.seatRolls.set(rollerSeatKey, stored);
+    this.scheduleSeatRollAutoHide?.(rollerSeatKey, rollId);
+    if (this.expandedSeatRollKey === rollerSeatKey) this.expandedSeatRollKey = '';
     return stored;
   },
 
@@ -211,12 +312,39 @@ export const DiceServiceMethods = {
 
   receiveRemoteRoll(roll) {
     if (!roll || !this.state.dice) return;
+    if (roll.rollerClientId && roll.rollerClientId === this.clientId) return;
+    if (roll.rollId && this.hasSeenRollId(roll.rollId)) return;
+    if (roll.rollId) this.markSeenRollId(roll.rollId);
     if (roll.visibility === 'private' && this.state.role !== 'gm') return;
-    const entry = { ...roll, remote: true };
-    this.state.dice.lastRoll = entry;
+    const seatKey = this.resolveSeatKeyForRoll(roll);
+    const entry = { ...roll, rollerSeatKey: seatKey, remote: true, autoHidden: false };
     const history = Array.isArray(this.state.dice.history) ? this.state.dice.history : [];
     this.state.dice.history = [entry, ...history].slice(0, 25);
+    if (!(this.seatRolls instanceof Map)) this.seatRolls = new Map();
+    this.seatRolls.set(seatKey, entry);
+    this.scheduleSeatRollAutoHide?.(seatKey, entry.rollId);
+    if (this.expandedSeatRollKey === seatKey) this.expandedSeatRollKey = '';
+
+    const diceList = Array.isArray(entry.dice) ? entry.dice : [];
+    const can3D = diceList.length > 0 && typeof Dice3DEngine.canRoll3D === 'function' && Dice3DEngine.canRoll3D();
+    if (can3D) {
+      this.markRollFlying(entry.rollId);
+      Dice3DEngine.prepareFlight();
+    }
     this.notify({ skipVaultSave: true });
+    if (can3D) {
+      const remoteStyle = entry.diceStyle && typeof entry.diceStyle === 'object'
+        ? { ...DEFAULT_DICE_STYLE, ...entry.diceStyle }
+        : {
+            ...DEFAULT_DICE_STYLE,
+            bodyColor: diceList[0]?.colorHex || DEFAULT_DICE_STYLE.bodyColor
+          };
+      this.playSeatDiceFlight(
+        entry,
+        diceList.map((d) => ({ kind: d.kind, sides: d.sides, colorHex: d.colorHex, value: d.chosen, card: d.card })),
+        { style: remoteStyle }
+      );
+    }
   },
 
   clearDiceHistory() {
@@ -256,14 +384,18 @@ export const DiceServiceMethods = {
     });
 
     const can3D = typeof Dice3DEngine.canRoll3D === 'function' && Dice3DEngine.canRoll3D();
-    if (can3D) Dice3DEngine.prepareFlight();
+    if (can3D) {
+      this.markRollFlying(roll.rollId);
+      Dice3DEngine.prepareFlight();
+    }
     this.broadcastRoll(roll);
     this.recordEvent('TIRADA_DADO', `${fullLabel || '1d' + sides}: ${summary.headline} (nat ${chosen})`, {
       broadcast: roll.visibility !== 'private'
     });
     this.notify();
     if (can3D) {
-      Dice3DEngine.rollHand(
+      this.playSeatDiceFlight(
+        roll,
         results.map((r) => ({ sides: r.sides, colorHex: r.colorHex, value: r.chosen })),
         { style }
       );
@@ -289,12 +421,16 @@ export const DiceServiceMethods = {
       dice: [{ kind: 'coin', sides: 2, chosen: val, colorHex: style.bodyColor }]
     });
     const can3D = typeof Dice3DEngine.canRoll3D === 'function' && Dice3DEngine.canRoll3D();
-    if (can3D) Dice3DEngine.prepareFlight();
+    if (can3D) {
+      this.markRollFlying(roll.rollId);
+      Dice3DEngine.prepareFlight();
+    }
     this.broadcastRoll(roll);
     this.recordEvent('TIRADA_DADO', `🪙 Moneda: ${val} · ${face}`, { broadcast: roll.visibility !== 'private' });
     this.notify();
     if (can3D) {
-      Dice3DEngine.rollHand(
+      this.playSeatDiceFlight(
+        roll,
         [{ kind: 'coin', sides: 2, colorHex: style.bodyColor || '#f59e0b', value: val }],
         { style }
       );

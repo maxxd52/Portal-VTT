@@ -2,8 +2,10 @@
    SYSTEM SERVICE: PRESETS, REGLAS DEL PORTAL Y CONSTRUCTOR DE PESTAÑAS/ATRIBUTOS
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261121a6';
+import { DEFAULT_VISION_CONFIG, normalizeVisionConfig } from '../utils/lightingModel.js?v=20261121a6';
 
 export const SystemServiceMethods = {
   applySystemPreset(presetKey, targetState = this.state) {
@@ -23,6 +25,7 @@ export const SystemServiceMethods = {
       showLevelPb: preset.showLevelPb !== false,
       showScores: preset.showScores !== false,
       autoInitiative: preset.autoInitiative !== false,
+      combatTrackerPublic: preset.combatTrackerPublic !== false,
       enabledTabs: {
         skills: preset.enabledTabs?.skills !== false,
         traits: preset.enabledTabs?.traits !== false,
@@ -34,7 +37,8 @@ export const SystemServiceMethods = {
       headerColumns: Math.max(1, Math.min(3, Number(preset.headerColumns) || 2)),
       fixedRolls: Array.isArray(preset.fixedRolls) ? preset.fixedRolls.map((r) => ({ ...r })) : [],
       resourceSchema: Array.isArray(preset.resourceSchema) ? preset.resourceSchema.map((r) => ({ ...r })) : [],
-      statusesSchema: Array.isArray(preset.statusesSchema) ? preset.statusesSchema.map((s) => ({ ...s })) : null
+      statusesSchema: Array.isArray(preset.statusesSchema) ? preset.statusesSchema.map((s) => ({ ...s })) : null,
+      vision: normalizeVisionConfig(targetState.systemConfig?.vision || DEFAULT_VISION_CONFIG)
     };
     if (Array.isArray(preset.schema) && preset.schema.length > 0) {
       targetState.sheetSchema = preset.schema.map((s) => ({ tabId: 'attrs', ...s }));
@@ -43,6 +47,8 @@ export const SystemServiceMethods = {
       targetState.dice.resultMode = targetState.systemConfig.resultMode;
       targetState.dice.successThreshold = targetState.systemConfig.successThreshold;
     }
+    targetState.gmScreen = createDefaultGmScreen(key);
+    targetState.publicClocks = Selector.getPublicClocks(targetState);
     if (targetState === this.state) {
       this.recordEvent('SISTEMA', `Sistema de juego: ${preset.label}`);
       this.notify();
@@ -75,7 +81,8 @@ export const SystemServiceMethods = {
         ? null
         : Array.isArray(patch.statusesSchema)
           ? patch.statusesSchema
-          : (Array.isArray(cur.statusesSchema) ? cur.statusesSchema : null)
+          : (Array.isArray(cur.statusesSchema) ? cur.statusesSchema : null),
+      vision: patch.vision ? normalizeVisionConfig(patch.vision) : normalizeVisionConfig(cur.vision || {})
     };
     if (patch.resultMode && this.state.dice) {
       this.state.dice.resultMode = patch.resultMode;
@@ -83,7 +90,19 @@ export const SystemServiceMethods = {
     if (patch.successThreshold !== undefined && this.state.dice) {
       this.state.dice.successThreshold = Math.max(1, Number(patch.successThreshold) || 6);
     }
-    this.notify();
+    this.syncWorldToPeers();
+    this.notify(patch.vision ? { redrawFog: true } : {});
+  },
+
+  updateSystemVisionConfig(patch = {}) {
+    const cur = Selector.getSystemVisionConfig(this.state);
+    const next = normalizeVisionConfig({ ...cur, ...patch });
+    const activeKey = this.getActiveSceneKey();
+    if (patch.rememberExplored !== undefined && !this.state.sceneLighting?.[activeKey]) {
+      this.state.rememberExplored = next.rememberExplored;
+    }
+    this.updateSystemConfig({ vision: next });
+    return next;
   },
 
   ensureGenericBlocksInitialized(silent = false) {
@@ -96,7 +115,9 @@ export const SystemServiceMethods = {
           { id: 'equipment', label: 'Equipo', mode: 'items' },
           { id: 'ability', label: 'Capacidades', mode: 'items' }
         ];
-    let sheetBlocks = Array.isArray(cur.sheetBlocks) ? cur.sheetBlocks.map((b) => ({ ...b })) : null;
+    let sheetBlocks = Array.isArray(cur.sheetBlocks)
+      ? cur.sheetBlocks.map((b) => Selector.normalizeSheetBlock(b)).filter(Boolean)
+      : null;
     if (!sheetBlocks) {
       sheetBlocks = [];
       if (cur.showHp !== false) {
@@ -106,7 +127,7 @@ export const SystemServiceMethods = {
         sheetBlocks.push({ id: 'blk_def', kind: 'number', key: 'ac', label: cur.defenseLabel || 'Defensa', rollMode: 'none', formula: '', tabId: 'header', size: '1/2' });
       }
       if (cur.showInit !== false) {
-        sheetBlocks.push({ id: 'blk_init', kind: 'roll', key: 'init', label: 'Iniciativa', formula: cur.rollFormula || '1d20+@stat', tabId: 'header', size: '1/3' });
+        sheetBlocks.push({ id: 'blk_init', kind: 'text', textMode: 'fixed', fixedText: '', clickAction: 'roll', isInitiative: true, key: 'init', label: 'Iniciativa', formula: cur.rollFormula || '1d20+@stat', tabId: 'header', size: '1/3' });
       }
       Selector.getSheetStatsDef(this.state).forEach((s) => {
         sheetBlocks.push({ id: `blk_${s.key}`, kind: 'number', key: s.key, label: s.label, rollMode: 'base', formula: '', tabId: s.tabId || 'attrs', size: '1/3' });
@@ -127,7 +148,11 @@ export const SystemServiceMethods = {
       (cur.fixedRolls || []).forEach((rl) => {
         sheetBlocks.push({
           id: rl.id,
-          kind: 'roll',
+          kind: 'text',
+          textMode: 'fixed',
+          fixedText: '',
+          clickAction: 'roll',
+          isInitiative: false,
           key: Selector.normalizeStatKey(rl.label) || rl.id,
           label: rl.label,
           formula: rl.formula || '1d20',
@@ -151,6 +176,7 @@ export const SystemServiceMethods = {
   convertPortalToGeneric() {
     this.state.ruleset = 'free';
     this.ensureGenericBlocksInitialized(true);
+    this.ensureGmScreenInitialized?.(true);
     this.recordEvent('SISTEMA', 'Portal convertido a Sistema Genérico personalizable');
     this.notify();
   },
@@ -255,10 +281,19 @@ export const SystemServiceMethods = {
     }
     const cur = this.state.systemConfig || {};
     const blocks = Array.isArray(cur.sheetBlocks) ? [...cur.sheetBlocks] : [];
-    const cleanKind = ['number', 'resource', 'roll', 'text'].includes(kind) ? kind : 'number';
-    const tabId = String(opts.tabId || 'attrs');
-    const defaultLabel = cleanKind === 'resource' ? 'Recurso' : cleanKind === 'roll' ? 'Tirada' : cleanKind === 'text' ? 'Nota' : 'Atributo';
-    const label = String(opts.label || defaultLabel).trim() || defaultLabel;
+    const effOpts = kind === 'roll' ? { textMode: 'fixed', clickAction: 'roll', ...opts } : opts;
+    const cleanKind = kind === 'roll'
+      ? 'text'
+      : ['number', 'resource', 'text'].includes(kind)
+        ? kind
+        : 'number';
+    const tabId = String(effOpts.tabId || 'attrs');
+    const defaultLabel = cleanKind === 'resource'
+      ? 'Recurso'
+      : cleanKind === 'text'
+        ? (effOpts.clickAction === 'roll' ? 'Tirada' : 'Nota')
+        : 'Atributo';
+    const label = String(effOpts.label || defaultLabel).trim() || defaultLabel;
     const baseKey = Selector.normalizeStatKey(label) || cleanKind;
     const usedKeys = new Set(blocks.map((b) => b.key));
     let key = baseKey;
@@ -268,9 +303,13 @@ export const SystemServiceMethods = {
       idx += 1;
     }
     const id = `blk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
-    const defaultSize = cleanKind === 'text' ? '1/1' : cleanKind === 'resource' ? '1/2' : '1/3';
+    const defaultSize = cleanKind === 'text'
+      ? (effOpts.textMode === 'fixed' ? '1/3' : '1/1')
+      : cleanKind === 'resource'
+        ? '1/2'
+        : '1/3';
     const validSizes = new Set(['1/3', '1/2', '2/3', '1/1']);
-    const size = validSizes.has(opts.size) ? opts.size : defaultSize;
+    const size = validSizes.has(effOpts.size) ? effOpts.size : defaultSize;
     const block = {
       id,
       kind: cleanKind,
@@ -280,31 +319,57 @@ export const SystemServiceMethods = {
       size
     };
     if (cleanKind === 'number') {
-      block.rollMode = opts.rollMode || 'base';
-      block.formula = String(opts.formula || '');
+      block.valueMode = ['manual', 'calc', 'die'].includes(effOpts.valueMode) ? effOpts.valueMode : 'manual';
+      block.rollMode = ['none', 'base', 'custom'].includes(effOpts.rollMode) ? effOpts.rollMode : 'base';
+      block.formula = String(effOpts.formula || '');
+      block.hideValue = Boolean(effOpts.hideValue);
+      block.showSign = Boolean(effOpts.showSign);
+      block.suffix = String(effOpts.suffix || '');
+      block.hasCheck = Boolean(effOpts.hasCheck);
+      block.checkBonus = Number(effOpts.checkBonus) || 0;
+      block.resultMode = effOpts.resultMode || 'inherit';
+      block.successThreshold = Number(effOpts.successThreshold) || 6;
+      block.isInitiative = Boolean(effOpts.isInitiative);
     } else if (cleanKind === 'resource') {
-      block.max = Math.max(0, Math.min(999, Math.trunc(Number(opts.max ?? 4) || 0)));
-      block.color = String(opts.color || '#8b5cf6');
-      block.resStyle = opts.resStyle || 'auto';
+      block.maxMode = ['fixed', 'free', 'calc'].includes(effOpts.maxMode)
+        ? effOpts.maxMode
+        : (effOpts.max === 0 ? 'free' : 'fixed');
+      block.max = block.maxMode === 'free' ? 0 : Math.max(1, Math.min(999, Math.trunc(Number(effOpts.max ?? 4) || 4)));
+      block.maxFormula = String(effOpts.maxFormula || '');
+      block.editableMax = Boolean(effOpts.editableMax);
+      block.color = String(effOpts.color || '#8b5cf6');
+      block.resStyle = effOpts.resStyle || 'auto';
+      block.rollMode = effOpts.rollMode === 'custom' ? 'custom' : 'none';
+      block.formula = String(effOpts.formula || '');
+      block.resultMode = effOpts.resultMode || 'inherit';
+      block.successThreshold = Number(effOpts.successThreshold) || 6;
+      block.consumeOnRoll = Boolean(effOpts.consumeOnRoll);
       if (block.key !== 'hp') {
         (this.state.tokens || []).forEach((tok) => {
           if (!Array.isArray(tok.resources)) tok.resources = [];
           if (!tok.resources.some((r) => r.id === id)) {
+            const effMax = Selector.resolveResourceMax(this.state, tok, block);
             tok.resources.push({
               id,
               name: label,
-              cur: block.max > 0 ? block.max : 0,
-              max: block.max,
+              cur: effMax > 0 ? effMax : 0,
+              max: effMax,
               color: block.color,
-              kind: block.resStyle === 'pips' || block.resStyle === 'bar' ? block.resStyle : block.max > 0 && block.max <= 6 ? 'pips' : 'bar'
+              kind: block.resStyle === 'pips' || block.resStyle === 'bar' ? block.resStyle : effMax > 0 && effMax <= 6 ? 'pips' : 'bar'
             });
           }
         });
       }
-    } else if (cleanKind === 'roll') {
-      block.formula = String(opts.formula || cur.rollFormula || '1d20');
     } else {
-      block.placeholder = String(opts.placeholder || 'Escribir...');
+      block.textMode = ['input', 'fixed', 'select', 'tags'].includes(effOpts.textMode) ? effOpts.textMode : 'input';
+      block.fixedText = String(effOpts.fixedText || '');
+      block.options = Array.isArray(effOpts.options) ? effOpts.options : [];
+      block.clickAction = ['none', 'roll', 'announce'].includes(effOpts.clickAction) ? effOpts.clickAction : 'none';
+      block.formula = String(effOpts.formula || (block.clickAction === 'roll' ? (cur.rollFormula || '1d20') : ''));
+      block.resultMode = effOpts.resultMode || 'inherit';
+      block.successThreshold = Number(effOpts.successThreshold) || 6;
+      block.isInitiative = Boolean(effOpts.isInitiative);
+      block.placeholder = String(effOpts.placeholder || 'Escribir...');
     }
     blocks.push(block);
     this.updateSystemConfig({ sheetBlocks: blocks });
@@ -314,8 +379,9 @@ export const SystemServiceMethods = {
   updateSystemBlock(blockId, patch = {}) {
     const cur = this.state.systemConfig || {};
     const blocks = Array.isArray(cur.sheetBlocks) ? [...cur.sheetBlocks] : [];
-    const target = blocks.find((b) => b.id === blockId);
-    if (!target) return null;
+    const rawTarget = blocks.find((b) => b.id === blockId);
+    if (!rawTarget) return null;
+    const target = Selector.normalizeSheetBlock(rawTarget) || rawTarget;
 
     const oldKey = target.key;
     let nextKey = oldKey;
@@ -340,33 +406,79 @@ export const SystemServiceMethods = {
       delete updated.span;
     }
     if (updated.kind === 'text') {
+      updated.textMode = ['input', 'fixed', 'select', 'tags'].includes(updated.textMode) ? updated.textMode : 'input';
+      updated.fixedText = String(updated.fixedText || '');
+      if (typeof patch.optionsText === 'string') {
+        updated.options = patch.optionsText.split(',').map((s) => s.trim()).filter(Boolean);
+        delete updated.optionsText;
+      } else {
+        updated.options = Array.isArray(updated.options)
+          ? updated.options.map((s) => String(s).trim()).filter(Boolean)
+          : [];
+      }
+      updated.clickAction = ['none', 'roll', 'announce'].includes(updated.clickAction) ? updated.clickAction : 'none';
+      updated.formula = String(updated.formula || '');
+      updated.resultMode = updated.resultMode || 'inherit';
+      updated.successThreshold = Math.max(1, Math.min(100, Math.round(Number(updated.successThreshold) || 6)));
+      updated.isInitiative = Boolean(updated.isInitiative);
       const parsedRows = Number(updated.textRows);
       updated.textRows = [1, 3, 5].includes(parsedRows) ? parsedRows : 1;
     }
     if (updated.kind === 'number') {
-      updated.valueMode = updated.valueMode === 'calc' ? 'calc' : 'manual';
+      updated.valueMode = ['manual', 'calc', 'die'].includes(updated.valueMode) ? updated.valueMode : 'manual';
       if (updated.calcFormula !== undefined) updated.calcFormula = String(updated.calcFormula);
+      updated.rollMode = ['none', 'base', 'custom'].includes(updated.rollMode) ? updated.rollMode : 'base';
+      updated.hideValue = Boolean(updated.hideValue);
+      updated.showSign = Boolean(updated.showSign);
+      updated.suffix = String(updated.suffix || '').trim().slice(0, 6);
+      updated.hasCheck = Boolean(updated.hasCheck);
+      updated.checkBonus = Math.max(-99, Math.min(99, Math.trunc(Number(updated.checkBonus) || 0)));
+      updated.resultMode = updated.resultMode || 'inherit';
+      updated.successThreshold = Math.max(1, Math.min(100, Math.round(Number(updated.successThreshold) || 6)));
+      updated.isInitiative = Boolean(updated.isInitiative);
     }
     if (updated.kind === 'resource') {
-      updated.max = Math.max(0, Math.min(999, Math.trunc(Number(updated.max) || 0)));
+      if (patch.max !== undefined && patch.maxMode === undefined) {
+        updated.maxMode = (Number(patch.max) || 0) <= 0 ? 'free' : 'fixed';
+      } else {
+        updated.maxMode = ['fixed', 'free', 'calc'].includes(updated.maxMode) ? updated.maxMode : 'fixed';
+      }
+      if (updated.maxMode === 'free') {
+        updated.max = 0;
+      } else if (updated.maxMode === 'fixed') {
+        const rawMax = Math.trunc(Number(updated.max) || 0);
+        updated.max = Math.max(1, Math.min(999, rawMax > 0 ? rawMax : 4));
+      } else {
+        updated.maxFormula = String(updated.maxFormula || '');
+        const rawMax = Math.trunc(Number(updated.max) || 0);
+        updated.max = Math.max(1, Math.min(999, rawMax > 0 ? rawMax : 4));
+      }
+      updated.editableMax = Boolean(updated.editableMax);
+      updated.resStyle = ['auto', 'bar', 'pips', 'counter'].includes(updated.resStyle) ? updated.resStyle : 'auto';
       updated.pipShape = ['circle', 'square', 'diamond'].includes(updated.pipShape) ? updated.pipShape : 'circle';
       updated.pipStates = [1, 2, 3].includes(Number(updated.pipStates)) ? Number(updated.pipStates) : 1;
+      updated.rollMode = updated.rollMode === 'custom' ? 'custom' : 'none';
+      updated.formula = String(updated.formula || '');
+      updated.resultMode = updated.resultMode || 'inherit';
+      updated.successThreshold = Math.max(1, Math.min(100, Math.round(Number(updated.successThreshold) || 6)));
+      updated.consumeOnRoll = Boolean(updated.consumeOnRoll);
       if (updated.key !== 'hp') {
-        const visualKind = updated.resStyle === 'pips' || updated.resStyle === 'bar'
-          ? updated.resStyle
-          : updated.max > 0 && updated.max <= 6 ? 'pips' : 'bar';
         (this.state.tokens || []).forEach((tok) => {
           const res = tok.resources?.find((r) => r.id === blockId || Selector.normalizeStatKey(r.name) === oldKey);
           if (res) {
+            const effMax = Selector.resolveResourceMax(this.state, tok, updated, res);
+            const visualKind = updated.resStyle === 'pips' || updated.resStyle === 'bar'
+              ? updated.resStyle
+              : effMax > 0 && effMax <= 6 ? 'pips' : 'bar';
             res.id = blockId;
             res.name = updated.label;
-            res.max = updated.max;
+            res.max = effMax;
             if (Array.isArray(res.pips)) {
-              const lim = updated.max > 0 ? updated.max : res.pips.length;
+              const lim = effMax > 0 ? effMax : res.pips.length;
               res.pips = Array.from({ length: lim }, (_, i) => Math.max(0, Math.min(updated.pipStates, Number(res.pips[i]) || 0)));
               res.cur = res.pips.filter((v) => v > 0).length;
-            } else if (updated.max > 0) {
-              res.cur = Math.min(res.cur, updated.max);
+            } else if (effMax > 0) {
+              res.cur = Math.min(res.cur, effMax);
             }
             res.color = updated.color || '#8b5cf6';
             res.kind = visualKind;
@@ -382,6 +494,10 @@ export const SystemServiceMethods = {
         if (tok.texts && Object.prototype.hasOwnProperty.call(tok.texts, oldKey)) {
           tok.texts[nextKey] = tok.texts[oldKey];
           delete tok.texts[oldKey];
+        }
+        if (tok.blockChecks && Object.prototype.hasOwnProperty.call(tok.blockChecks, oldKey)) {
+          tok.blockChecks[nextKey] = tok.blockChecks[oldKey];
+          delete tok.blockChecks[oldKey];
         }
       });
     }
@@ -611,20 +727,58 @@ export const SystemServiceMethods = {
     this.updateSystemConfig(next);
   },
 
-  rollSheetCheck(tok, label, statBonus = 0, customFormula = '') {
+  rollSheetCheck(tok, label, statBonus = 0, customFormula = '', rollOpts = {}) {
     const cfg = this.state.systemConfig || SYSTEM_PRESETS.dnd55;
-    const raw = String(customFormula || cfg.rollFormula || '1d20+@stat');
     const val = Math.trunc(Number(statBonus) || 0);
+    const dieSides = Number(rollOpts?.dieSides) || 0;
+    const raw = customFormula
+      ? String(customFormula)
+      : dieSides > 0
+        ? (val !== 0 ? `1d${dieSides}${val >= 0 ? `+${val}` : val}` : `1d${dieSides}`)
+        : String(cfg.rollFormula || '1d20+@stat');
     const outcome = Selector.getSystemOutcomeConfig(this.state);
-    const usesRollUnderTarget = outcome.outcomeRule === 'low' && !/@stat\b/i.test(raw);
+    const usesRollUnderTarget = outcome.outcomeRule === 'low' && !/@stat\b/i.test(raw) && dieSides <= 0;
     const resolved = raw
       .replace(/\+\s*@stat(?![a-z0-9_])/gi, val >= 0 ? `+${val}` : String(val))
       .replace(/@stat(?=d\d+)|@stat(?![a-z0-9_])/gi, String(val))
       .replace(/\+\-/g, '-');
+    const effMode = rollOpts?.resultMode && rollOpts.resultMode !== 'inherit'
+      ? rollOpts.resultMode
+      : (cfg.resultMode || 'inherit');
+    const effThr = Number(rollOpts?.successThreshold) || cfg.successThreshold || 6;
     return this.rollFormula(resolved, tok, label, '', {
-      resultMode: cfg.resultMode || 'inherit',
-      successThreshold: cfg.successThreshold || 6,
+      resultMode: effMode,
+      successThreshold: effThr,
       target: usesRollUnderTarget ? val : undefined
     });
+  },
+
+  announceSheetBlock(tok, title, body = '') {
+    const cleanTitle = String(title || 'Rasgo').trim() || 'Rasgo';
+    const cleanBody = String(body || '').trim();
+    const casterName = tok ? tok.name : '';
+    this.state.activeRollRequest = null;
+    this.state.activeSequence = {
+      id: `ann-${Date.now().toString(36)}`,
+      tokenId: tok ? tok.id : '',
+      casterName,
+      itemName: cleanTitle,
+      itemKind: 'ability',
+      itemIcon: 'sparkle',
+      itemColor: tok ? (tok.color || '#8b5cf6') : '#8b5cf6',
+      itemMessage: cleanBody || cleanTitle,
+      steps: [],
+      currentIndex: -1,
+      mode: 'info',
+      stepMessage: cleanBody || cleanTitle,
+      areaConfirmed: false,
+      targetTokenIds: [],
+      stepResults: {},
+      saveResults: {},
+      selectedDamageStep: null,
+      lastDamageTotal: 0
+    };
+    this.recordEvent('FICHA', `${casterName ? `${casterName} · ` : ''}${cleanTitle}${cleanBody ? `: ${cleanBody}` : ''}`);
+    this.notify({ skipVaultSave: true });
   }
 };

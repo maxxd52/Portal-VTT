@@ -1,9 +1,11 @@
-import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { BrowserVault } from './browserVault.js?v=20261117b1';
-import { CartridgePacker } from './cartridgePacker.js?v=20261117b1';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261117b1';
+import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { BrowserVault } from './browserVault.js?v=20261121a6';
+import { CartridgePacker } from './cartridgePacker.js?v=20261121a6';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
+import { normalizeSceneLighting } from '../utils/lightingModel.js?v=20261121a6';
 
 /**
  * Custom compendium CRUD, folder management & .portal cartridge/shelf methods mixed into Service.
@@ -12,16 +14,24 @@ export const CompendiumServiceMethods = {
   saveCustomActor(tpl) {
     const isAlly = tpl.isAlly !== false;
     const folder = String(tpl.folder || '').trim();
+    const cleanImg = DriveUrlHelper.toDirectImageUrl(tpl.imageUrl || '') || String(tpl.imageUrl || '').trim();
+    const cleanName = String(tpl.name || 'Personaje').trim();
+    const mediaId = cleanImg ? (this.registerMediaAsset?.(cleanImg, { label: cleanName, kind: 'token' }) || '') : '';
     const entry = {
       key: tpl.key || `custom-${Date.now().toString(36)}`,
       isCustom: true,
       folder,
-      name: String(tpl.name || 'Personaje').trim(),
+      name: cleanName,
       role: String(tpl.role || (isAlly ? 'Protagonista' : 'Secundario')).trim(),
       color: tpl.color || (isAlly ? '#8b5cf6' : '#ef4444'),
       isAlly,
-      visionRadius: isAlly ? 520 : 280,
-      imageUrl: String(tpl.imageUrl || '').trim(),
+      visionMeters:
+        tpl.visionMeters !== null && tpl.visionMeters !== undefined && tpl.visionMeters !== '' && Number.isFinite(Number(tpl.visionMeters))
+          ? Math.max(0, Math.min(60, Number(tpl.visionMeters)))
+          : null,
+      imageUrl: cleanImg,
+      mediaId,
+      publicDescription: String(tpl.publicDescription || '').trim(),
       size: Number(tpl.size) || 1,
       hp: Math.max(1, Number(tpl.hp) || 16),
       ac: Math.max(1, Number(tpl.ac) || 12),
@@ -52,6 +62,7 @@ export const CompendiumServiceMethods = {
   deleteCustomActor(key) {
     if (!Array.isArray(this.state.customActors)) return;
     this.state.customActors = this.state.customActors.filter((a) => a.key !== key);
+    this.pruneUnusedMediaAssets?.();
     this.notify();
   },
 
@@ -62,7 +73,8 @@ export const CompendiumServiceMethods = {
     const bonusMod = Number(tpl.bonusMod) || 0;
     const acBonus = Number(tpl.acBonus) || 0;
     const heal = Number(tpl.heal) || 0;
-    const lightRadius = Number(tpl.lightRadius) || 0;
+    const lightMeters = kind === 'light' ? (Number(tpl.lightMeters) || (Number(tpl.lightRadius) >= 300 ? 12 : 6)) : 0;
+    const lightRadius = 0;
     const passives = Array.isArray(tpl.passives)
       ? tpl.passives.filter((p) => p && p.target && (Number(p.value) || 0) !== 0).map((p) => ({
           target: String(p.target),
@@ -77,7 +89,7 @@ export const CompendiumServiceMethods = {
     let badge = String(tpl.badge || '').trim();
     if (!badge) {
       if (steps.length > 1) badge = `${steps.length} pasos`;
-      else if (steps.length === 1 && steps[0].type === 'roll' && steps[0].formula) badge = steps[0].formula;
+      else if (steps.length === 1 && steps[0].type === 'roll' && steps[0].rollKind !== 'request' && steps[0].formula) badge = steps[0].formula;
       else if (tpl.formula) badge = String(tpl.formula).trim();
       else if (passives.length > 0) {
         const lbl = targetLabels[firstPassive.target] || firstPassive.target.toUpperCase();
@@ -85,7 +97,7 @@ export const CompendiumServiceMethods = {
       } else if ((kind === 'armor' || kind === 'equipment') && statBonus !== 0) {
         badge = `${statBonus >= 0 ? '+' : ''}${statBonus} ${targetLabels[statTarget] || 'CA'}`;
       } else if (kind === 'consumable' && heal > 0) badge = `Cura +${heal} HP`;
-      else if (kind === 'light') badge = `Luz +${Math.max(1, Math.round((lightRadius || 320) / 80))} cas`;
+      else if (kind === 'light') badge = `Luz ${lightMeters} m`;
       else if (kind === 'ability') badge = 'Capacidad';
       else if (kind === 'consumable') badge = 'Consumible';
       else badge = 'Equipo';
@@ -105,7 +117,8 @@ export const CompendiumServiceMethods = {
       statBonus: kind === 'armor' || kind === 'equipment' || passives.length > 0 ? statBonus : 0,
       acBonus: (kind === 'armor' || kind === 'equipment') && statTarget === 'ac' ? statBonus : 0,
       heal: kind === 'consumable' ? heal : 0,
-      lightRadius: kind === 'light' ? lightRadius || 320 : 0,
+      lightMeters,
+      lightRadius: 0,
       passives: passives.length > 0 ? passives : undefined,
       steps: steps.length > 0 ? steps : undefined,
       icon: String(tpl.icon || '').trim(),
@@ -130,28 +143,73 @@ export const CompendiumServiceMethods = {
 
   saveCustomMap(tpl) {
     const folder = String(tpl.folder || '').trim();
+    const list = Array.isArray(this.state.customMaps) ? this.state.customMaps : [];
+    const existing = tpl.key ? list.find((m) => m.key === tpl.key) : null;
+    const rawGrid = tpl.grid || existing?.grid || (tpl.key ? this.state.mapGrids?.[tpl.key] : null);
+    const rawLighting = tpl.lighting || existing?.lighting || (tpl.key ? this.state.sceneLighting?.[tpl.key] : null);
+    const normLighting = rawLighting
+      ? normalizeSceneLighting(rawLighting, {
+          dynamicLighting: true,
+          rememberExplored: Selector.getSystemVisionConfig(this.state).rememberExplored
+        })
+      : null;
     const entry = {
       key: tpl.key || `cmap-${Date.now().toString(36)}`,
       isCustom: true,
       folder,
       name: String(tpl.name || 'Escenario').trim(),
       desc: String(tpl.desc || 'Escenario personalizado').trim(),
-      imageUrl: String(tpl.imageUrl || '').trim()
+      imageUrl: String(tpl.imageUrl || '').trim(),
+      ...(rawGrid ? { grid: normalizeGridConfig(rawGrid) } : {}),
+      ...(normLighting
+        ? {
+            lighting: {
+              dynamicLighting: normLighting.dynamicLighting,
+              rememberExplored: normLighting.rememberExplored
+            }
+          }
+        : {})
     };
-    const list = Array.isArray(this.state.customMaps) ? this.state.customMaps : [];
     const idx = list.findIndex((m) => m.key === entry.key);
     if (idx >= 0) list[idx] = entry;
     else list.unshift(entry);
     this.state.customMaps = list;
+    const isActive = this.getActiveSceneKey() === entry.key;
+    if (entry.grid) {
+      if (!this.state.mapGrids || typeof this.state.mapGrids !== 'object') {
+        this.state.mapGrids = {};
+      }
+      this.state.mapGrids[entry.key] = { ...entry.grid };
+      if (isActive) {
+        this.state.grid = { ...entry.grid };
+      }
+    }
+    if (normLighting) {
+      if (!this.state.sceneLighting || typeof this.state.sceneLighting !== 'object') {
+        this.state.sceneLighting = {};
+      }
+      const prevLight = this.state.sceneLighting[entry.key] || {};
+      const mergedLight = normalizeSceneLighting({
+        ...prevLight,
+        dynamicLighting: normLighting.dynamicLighting,
+        rememberExplored: normLighting.rememberExplored
+      });
+      this.state.sceneLighting[entry.key] = mergedLight;
+      if (isActive) {
+        this.state.dynamicLighting = mergedLight.dynamicLighting;
+        this.state.rememberExplored = mergedLight.rememberExplored;
+      }
+    }
     if (folder) this.ensureCompendiumFolder('maps', folder, true);
     this.recordEvent('COMPENDIO', `Escenario guardado: ${entry.name}`);
-    this.notify();
+    this.notify({ redrawGrid: isActive, redrawFog: isActive });
     return entry;
   },
 
   deleteCustomMap(key) {
     if (!Array.isArray(this.state.customMaps)) return;
     this.state.customMaps = this.state.customMaps.filter((m) => m.key !== key);
+    this.pruneUnusedMediaAssets?.();
     this.notify();
   },
 
@@ -195,6 +253,9 @@ export const CompendiumServiceMethods = {
 
   async loadModulePackage(pkg) {
     if (!pkg || !pkg.world) throw new Error('Archivo de cartucho inválido.');
+    if (this.state.role === 'gm') {
+      this.state.gmScreen = null;
+    }
     this.applyFullWorldState(pkg.world, false);
     this.recordEvent('CARGAR_CARTUCHO', pkg.world.moduleTitle || 'Cartucho');
   },
@@ -239,7 +300,7 @@ export const CompendiumServiceMethods = {
   },
 
   syncInvitesChange() {
-    RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(this.state) });
+    this.syncWorldToPeers();
     this.notify();
   },
 
@@ -317,6 +378,7 @@ export const CompendiumServiceMethods = {
   },
 
   syncPlayerRoleState() {
+    this.state.gmScreenOpen = false;
     const list = this.ensurePlayerInvites();
     if (!this.state.activeInviteId || !list.some((i) => i.id === this.state.activeInviteId)) {
       this.state.activeInviteId = list[0]?.id || 'inv-1';
@@ -330,7 +392,6 @@ export const CompendiumServiceMethods = {
     } else {
       if (!assigned.includes(this.state.selectedTokenId)) {
         this.state.selectedTokenId = assigned[0];
-        this.state.sheetOpen = true;
       }
       this.state.drawerOpen = false;
     }

@@ -9,10 +9,36 @@ export const RealtimeBridge = {
   getRoleFn: () => 'gm',
   peer: null,
   hostConns: new Set(),
+  seatConns: new Map(),
   clientConn: null,
   pendingQueue: [],
   reconnectTimer: null,
   _connectSeq: 0,
+  _seenMsgIds: new Set(),
+
+  registerPeerMeta(conn, meta = {}) {
+    if (!conn) return;
+    if (!(this.seatConns instanceof Map)) this.seatConns = new Map();
+    const prev = this.seatConns.get(conn) || {};
+    const inviteId = meta.inviteId !== undefined ? String(meta.inviteId || '') : (prev.inviteId || '');
+    const clientId = meta.clientId !== undefined ? String(meta.clientId || '') : (prev.clientId || '');
+    const role = meta.role !== undefined ? String(meta.role || 'player') : (prev.role || 'player');
+    const explicitSeat = meta.seatKey !== undefined ? String(meta.seatKey || '') : '';
+    const seatKey = explicitSeat || inviteId || (clientId ? `peer:${clientId}` : prev.seatKey || '');
+    this.seatConns.set(conn, { seatKey, inviteId, clientId, role });
+  },
+
+  _checkAndMarkMsgId(msgId) {
+    if (!msgId) return false;
+    if (!(this._seenMsgIds instanceof Set)) this._seenMsgIds = new Set();
+    if (this._seenMsgIds.has(msgId)) return true;
+    this._seenMsgIds.add(msgId);
+    if (this._seenMsgIds.size > 240) {
+      const oldest = this._seenMsgIds.values().next().value;
+      if (oldest) this._seenMsgIds.delete(oldest);
+    }
+    return false;
+  },
 
   getHostPeerId(roomCode) {
     const clean = String(roomCode || 'MESA01').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -33,6 +59,7 @@ export const RealtimeBridge = {
       try { c.close(); } catch (_) {}
     });
     this.hostConns.clear();
+    if (this.seatConns instanceof Map) this.seatConns.clear();
     if (this.clientConn) {
       try { this.clientConn.close(); } catch (_) {}
       this.clientConn = null;
@@ -54,7 +81,10 @@ export const RealtimeBridge = {
     if (typeof BroadcastChannel !== 'undefined') {
       this.channel = new BroadcastChannel(`portal_${roomCode}`);
       this.channel.onmessage = (ev) => {
-        if (ev.data && this.onMessageCb) this.onMessageCb(ev.data);
+        const data = ev.data;
+        if (!data || !this.onMessageCb) return;
+        if (data._msgId && this._checkAndMarkMsgId(data._msgId)) return;
+        this.onMessageCb(data);
       };
     }
 
@@ -78,15 +108,46 @@ export const RealtimeBridge = {
           this.hostConns.add(conn);
           conn.on('data', (data) => {
             if (!data || seq !== this._connectSeq) return;
+            if (data._msgId && this._checkAndMarkMsgId(data._msgId)) return;
+            if (typeof data === 'object' && (data.seatKey || data.inviteId || data.clientId || data.role)) {
+              this.registerPeerMeta(conn, {
+                seatKey: data.seatKey,
+                inviteId: data.inviteId,
+                clientId: data.clientId,
+                role: data.role
+              });
+            }
             if (this.onMessageCb) this.onMessageCb(data);
+            if (data.hostOnly || data.targetSeatKey) return;
+            if (data.kind === 'CHAT_MESSAGE' && data.message?.channel === 'whisper') {
+              const wTarget =
+                data.message.targetSeatKey ||
+                data.message.targetInviteId ||
+                (data.message.targetClientId ? `peer:${data.message.targetClientId}` : '');
+              if (wTarget === 'gm') return;
+              this.hostConns.forEach((other) => {
+                if (other === conn || !other.open) return;
+                const meta = this.seatConns instanceof Map ? this.seatConns.get(other) : null;
+                if (!wTarget || (meta && (meta.seatKey === wTarget || meta.inviteId === wTarget))) {
+                  try { other.send(data); } catch (_) {}
+                }
+              });
+              return;
+            }
             this.hostConns.forEach((other) => {
               if (other !== conn && other.open) {
                 try { other.send(data); } catch (_) {}
               }
             });
           });
-          conn.on('close', () => this.hostConns.delete(conn));
-          conn.on('error', () => this.hostConns.delete(conn));
+          conn.on('close', () => {
+            this.hostConns.delete(conn);
+            if (this.seatConns instanceof Map) this.seatConns.delete(conn);
+          });
+          conn.on('error', () => {
+            this.hostConns.delete(conn);
+            if (this.seatConns instanceof Map) this.seatConns.delete(conn);
+          });
         });
 
         peer.on('error', (err) => {
@@ -117,9 +178,9 @@ export const RealtimeBridge = {
             }
           });
           conn.on('data', (data) => {
-            if (data && seq === this._connectSeq && this.onMessageCb) {
-              this.onMessageCb(data);
-            }
+            if (!data || seq !== this._connectSeq || !this.onMessageCb) return;
+            if (data._msgId && this._checkAndMarkMsgId(data._msgId)) return;
+            this.onMessageCb(data);
           });
           const scheduleRetry = () => {
             if (seq !== this._connectSeq) return;
@@ -143,27 +204,51 @@ export const RealtimeBridge = {
 
   send(payload) {
     if (!payload) return;
+    let wirePayload = payload;
+    if (typeof payload === 'object') {
+      const msgId = payload._msgId || `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      this._checkAndMarkMsgId(msgId);
+      wirePayload = payload._msgId ? payload : { ...payload, _msgId: msgId };
+    }
     if (this.channel) {
       try {
-        this.channel.postMessage(payload);
+        this.channel.postMessage(wirePayload);
       } catch (_) {}
     }
-    if (this.hostConns.size > 0) {
+    const targetSeat = typeof wirePayload === 'object' ? String(wirePayload.targetSeatKey || '') : '';
+    const hostOnly = typeof wirePayload === 'object' ? Boolean(wirePayload.hostOnly) : false;
+    const spectatorOnly = typeof wirePayload === 'object' ? Boolean(wirePayload.spectatorOnly) : false;
+    if (this.hostConns.size > 0 && !hostOnly) {
       this.hostConns.forEach((conn) => {
-        if (conn.open) {
-          try { conn.send(payload); } catch (_) {}
+        if (!conn.open) return;
+        const meta = this.seatConns instanceof Map ? this.seatConns.get(conn) : null;
+        if (targetSeat) {
+          if (!meta || (meta.seatKey !== targetSeat && meta.inviteId !== targetSeat)) return;
+        } else if (spectatorOnly && meta && meta.seatKey) {
+          return;
         }
+        try { conn.send(wirePayload); } catch (_) {}
       });
     }
     if (this.clientConn) {
       if (this.clientConn.open) {
         try {
-          this.clientConn.send(payload);
+          this.clientConn.send(wirePayload);
         } catch (_) {}
       } else {
         if (this.pendingQueue.length > 25) this.pendingQueue.shift();
-        this.pendingQueue.push(payload);
+        this.pendingQueue.push(wirePayload);
       }
     }
+  },
+
+  sendToSeat(seatKey, payload) {
+    if (!seatKey || !payload || typeof payload !== 'object') return;
+    this.send({ ...payload, targetSeatKey: seatKey });
+  },
+
+  sendToHost(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    this.send({ ...payload, hostOnly: true });
   }
 };

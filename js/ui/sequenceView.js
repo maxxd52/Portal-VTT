@@ -2,16 +2,25 @@
    SEQUENCE VIEW: TARJETA ÚNICA PROGRESIVA Y BANNER DE SOLICITUD ENTRANTE
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
 
 const SEQ_STEP_SVGS = {
   info: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
   roll: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg>',
+  targets: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>',
   area: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  roll_request: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>',
   save_request: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>',
+  modify: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>',
   apply_hp: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>',
   play: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>'
+};
+
+const getStepSvg = (step) => {
+  if (!step) return SEQ_STEP_SVGS.play;
+  if (step.type === 'roll' && step.rollKind === 'request') return SEQ_STEP_SVGS.roll_request;
+  return SEQ_STEP_SVGS[step.type] || SEQ_STEP_SVGS.play;
 };
 
 export const SequenceViewMethods = {
@@ -73,7 +82,7 @@ export const SequenceViewMethods = {
     seq.steps.forEach((s, idx) => {
       const isCurrent = idx === seq.currentIndex;
       const isDone = seq.currentIndex >= 0 && idx < seq.currentIndex;
-      const stepIcon = SEQ_STEP_SVGS[s.type] || SEQ_STEP_SVGS.play;
+      const stepIcon = getStepSvg(s);
       const stateCls = isCurrent
         ? ''
         : isDone
@@ -112,15 +121,17 @@ export const SequenceViewMethods = {
     const activeReq = state.activeRollRequest;
     const esc = (v) => this.escapeHtml(v || '');
 
-    if (seq && seq.mode === 'area') {
+    if (seq && (seq.mode === 'targets' || seq.mode === 'area')) {
       const cfg = state.areaSelectConfig;
+      const curStep = Array.isArray(seq.steps) && seq.currentIndex >= 0 ? seq.steps[seq.currentIndex] : null;
+      const isSelfShape = curStep?.shape === 'self';
       const targets = (seq.targetTokenIds || [])
         .map((id) => (state.tokens || []).find((t) => t.id === id))
         .filter(Boolean);
       const selTok = state.selectedTokenId
         ? (state.tokens || []).find((t) => t.id === state.selectedTokenId)
         : null;
-      const canAddSel = selTok && !seq.targetTokenIds.includes(selTok.id);
+      const canAddSel = !isSelfShape && selTok && !seq.targetTokenIds.includes(selTok.id);
 
       let controlsHtml = '';
       if (!seq.areaConfirmed && cfg) {
@@ -136,14 +147,14 @@ export const SequenceViewMethods = {
               </div>
               ${targets.length > 0 ? '<button type="button" data-targets-done="1" class="portal-btn portal-btn-accent px-2.5 py-0.5 rounded-full text-[10px] font-semibold">✓ Listo</button>' : ''}
             </div>
-            <div class="text-[10px] opacity-65">Tocá los tokens en el mapa</div>`;
+            <div class="text-[10px] opacity-65">Toca los tokens en el mapa</div>`;
         } else {
           const isDir = curShape === 'cone' || curShape === 'line';
           const rotateBtn = isDir
             ? `<button type="button" data-area-rot="45" class="portal-btn portal-subpanel px-2 py-0.5 rounded-full text-[10px] font-semibold" title="Rotar 45° (también Q/E o Shift+Rueda)">↻ 45°</button>`
             : '';
           const hintText = isDir
-            ? 'Clic marca · Arrastrá para apuntar'
+            ? 'Clic marca · Arrastra para apuntar'
             : 'Clic para marcar';
           controlsHtml = `
             <div class="flex items-center justify-center gap-1.5 flex-wrap">
@@ -162,7 +173,7 @@ export const SequenceViewMethods = {
         ? `<div class="flex flex-wrap items-center justify-center gap-1">${targets
             .map(
               (t) =>
-                `<span class="portal-roll-pill flex items-center gap-1 text-[10px]">${esc(t.name)}<button type="button" data-seq-rm-tgt="${esc(t.id)}" class="opacity-65 hover:opacity-100 leading-none" title="Quitar">×</button></span>`
+                `<span class="portal-roll-pill flex items-center gap-1 text-[10px]">${esc(t.name)}${isSelfShape ? '' : `<button type="button" data-seq-rm-tgt="${esc(t.id)}" class="opacity-65 hover:opacity-100 leading-none" title="Quitar">×</button>`}</span>`
             )
             .join('')}</div>`
         : seq.areaConfirmed
@@ -175,7 +186,7 @@ export const SequenceViewMethods = {
           `<button type="button" data-seq-add-tgt="${esc(selTok.id)}" class="portal-btn portal-subpanel px-2 py-0.5 rounded-full text-[10px] font-medium">+ ${esc(selTok.name)}</button>`
         );
       }
-      if (seq.areaConfirmed) {
+      if (seq.areaConfirmed && !isSelfShape) {
         footerBtns.push(
           `<button type="button" data-area-retry="1" class="portal-btn portal-subpanel px-2 py-0.5 rounded-full text-[10px] opacity-80 hover:opacity-100">↺ Remarcar</button>`
         );
@@ -218,20 +229,31 @@ export const SequenceViewMethods = {
       return;
     }
 
-    if (seq && seq.mode === 'apply_hp') {
+    if (seq && (seq.mode === 'modify' || seq.mode === 'apply_hp')) {
       const curStep = Array.isArray(seq.steps) && seq.currentIndex >= 0 ? seq.steps[seq.currentIndex] : null;
       const effectMode = curStep?.effectMode || (curStep?.isHeal ? 'heal' : 'damage');
       const condKey = curStep?.conditionKey || 'confused';
-      const rawTargets = (seq.targetTokenIds && seq.targetTokenIds.length > 0)
-        ? seq.targetTokenIds
-        : (state.selectedTokenId ? [state.selectedTokenId] : []);
+      const scopeSelf = curStep?.targetScope === 'self';
+      const resourceKey = String(curStep?.resourceKey || 'hp');
+      const resDef = resourceKey !== 'hp'
+        ? Selector.getSystemSheetBlocks(state).find((b) => b.kind === 'resource' && b.key === resourceKey)
+        : null;
+      const resBadge = resDef
+        ? `<div class="text-[9.5px] opacity-70 text-center">Recurso: <strong>${esc(resDef.label)}</strong></div>`
+        : '';
+      const rawTargets = scopeSelf
+        ? (seq.tokenId ? [seq.tokenId] : [])
+        : ((seq.targetTokenIds && seq.targetTokenIds.length > 0)
+            ? seq.targetTokenIds
+            : (state.selectedTokenId ? [state.selectedTokenId] : []));
       const targets = rawTargets
         .map((id) => (state.tokens || []).find((t) => t.id === id))
         .filter(Boolean);
 
       const rollEntries = seq.stepResults ? Object.values(seq.stepResults) : [];
-      const amt = Math.max(0, Number(curStep?.amount) || Number(seq.lastDamageTotal) || 0);
-      const dmgPickerHtml = (effectMode === 'damage' || effectMode === 'heal' || effectMode === 'bonus') && rollEntries.length > 1
+      const fixedAmt = Number(curStep?.amount) || 0;
+      const amt = fixedAmt > 0 ? fixedAmt : Math.max(0, Number(seq.lastDamageTotal) || 0);
+      const dmgPickerHtml = fixedAmt <= 0 && (effectMode === 'damage' || effectMode === 'heal' || effectMode === 'bonus') && rollEntries.length > 1
         ? `<div class="flex items-center justify-center gap-1 flex-wrap pb-0.5">${rollEntries
             .map((e) => {
               const active = seq.selectedDamageStep === e.stepIndex;
@@ -320,6 +342,7 @@ export const SequenceViewMethods = {
 
       slot.innerHTML = `
         <div class="flex flex-col gap-1 w-full text-left">
+          ${resBadge}
           ${dmgPickerHtml}
           ${bulkHtml}
           ${rows || '<div class="text-[10.5px] opacity-65 text-center">Ningún objetivo seleccionado.</div>'}
@@ -331,7 +354,7 @@ export const SequenceViewMethods = {
       slot.querySelectorAll('[data-seq-all-dmg]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const [val, mode] = btn.dataset.seqAllDmg.split(':');
-          Service.applySequenceHpToAll(targetIdList, Number(val) || 0, mode);
+          Service.applySequenceResourceToAll(targetIdList, resourceKey, Number(val) || 0, mode);
         });
       });
       slot.querySelector('[data-seq-all-cond]')?.addEventListener('click', (e) => {
@@ -344,7 +367,7 @@ export const SequenceViewMethods = {
       slot.querySelectorAll('[data-req-dmg]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const [tokId, val, mode] = btn.dataset.reqDmg.split(':');
-          Service.applySequenceHpToToken(tokId, Number(val) || 0, mode);
+          Service.applySequenceResourceToToken(tokId, resourceKey, Number(val) || 0, mode);
         });
       });
       slot.querySelectorAll('[data-seq-cond]').forEach((btn) => {
@@ -357,15 +380,26 @@ export const SequenceViewMethods = {
     }
 
     if (activeReq) {
+      const isGm = state.role === 'gm';
       const rows = (activeReq.targets || [])
         .map((tgt) => {
           const resp = activeReq.responses ? activeReq.responses[tgt.id] : null;
-          let statusHtml = '<span class="text-[10px] opacity-55 italic">⏳</span>';
+          const tok = (state.tokens || []).find((t) => t.id === tgt.id) || null;
+          let statusHtml = isGm
+            ? `<button type="button" data-gm-req-roll="${esc(tgt.id)}" class="portal-btn portal-subpanel px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold" title="Tirar por ${esc(tgt.name)}">🎲</button>`
+            : '<span class="text-[10px] opacity-55 italic">⏳</span>';
           if (resp) {
-            const passed = activeReq.dc > 0 ? resp.total >= activeReq.dc : null;
-            const tone = passed === true ? 'text-emerald-400' : passed === false ? 'text-rose-400' : '';
-            const mark = passed === true ? ' ✓' : passed === false ? ' ✗' : '';
-            statusHtml = `<strong class="text-xs tabular-nums ${tone}">${resp.total}${mark}</strong>`;
+            const ev = Selector.evaluateRollAgainstRequest(activeReq, resp, tok, state);
+            const tone =
+              ev.status === 'pass'
+                ? 'text-emerald-400'
+                : ev.status === 'fail'
+                  ? 'text-rose-400'
+                  : ev.status === 'partial'
+                    ? 'text-amber-300'
+                    : '';
+            const mark = ev.badge ? ` ${ev.badge}` : '';
+            statusHtml = `<strong class="text-xs tabular-nums ${tone}" title="${esc(ev.detail)}">${resp.total}${mark}</strong>`;
           }
           return `
             <div class="flex items-center justify-between gap-2 text-[11px] py-0.5 px-1.5 rounded-lg bg-white/5">
@@ -375,16 +409,30 @@ export const SequenceViewMethods = {
         })
         .join('');
 
+      const reqDiffLabel = activeReq.evalMode === 'pool' && activeReq.requiredSuccesses
+        ? `${activeReq.requiredSuccesses} éx. (≥${activeReq.successThreshold || 6})`
+        : activeReq.evalMode === 'low'
+          ? (activeReq.lowScale === 5 ? 'Extremo ÷5' : activeReq.lowScale === 2 ? 'Difícil ÷2' : 'Normal')
+          : activeReq.dc
+            ? `CD ${activeReq.dc}`
+            : '';
+      const diffBadge = reqDiffLabel
+        ? `<span>${activeReq.secretDc ? '🔒 ' : ''}${esc(reqDiffLabel)}</span>`
+        : '';
+
       slot.innerHTML = `
         <div class="flex flex-col gap-1 w-full text-left">
           <div class="flex items-center justify-between text-[10px] opacity-70 px-1">
             <span class="inline-flex items-center gap-1">${SEQ_STEP_SVGS.save_request}<span>${esc(activeReq.label)}</span></span>
-            ${activeReq.dc ? `<span>CD ${activeReq.dc}</span>` : ''}
+            ${diffBadge}
           </div>
           ${rows || '<div class="text-[10.5px] opacity-60 text-center">Sin objetivos seleccionados.</div>'}
         </div>`;
       slot.classList.remove('hidden');
       slot.classList.add('flex');
+      slot.querySelectorAll('[data-gm-req-roll]').forEach((btn) => {
+        btn.addEventListener('click', () => Service.resolveRollRequestTargetForGm(btn.dataset.gmReqRoll));
+      });
       return;
     }
 
@@ -414,7 +462,7 @@ export const SequenceViewMethods = {
     }
 
     const esc = (v) => this.escapeHtml(v || '');
-    const icon = SEQ_STEP_SVGS[nextStep.type] || SEQ_STEP_SVGS.play;
+    const icon = getStepSvg(nextStep);
     const label = esc(nextStep.label || 'Ejecutar paso');
     const itemColor = seq.itemColor || '#8b5cf6';
     const btnStyle = `background: ${esc(itemColor)}; color: #ffffff; border-color: transparent; box-shadow: 0 4px 12px color-mix(in srgb, ${esc(itemColor)} 38%, transparent);`;
@@ -439,16 +487,19 @@ export const SequenceViewMethods = {
     const pending = Array.isArray(state.pendingRollRequests) ? state.pendingRollRequests : [];
 
     if (pending.length === 0) {
+      panel.classList.remove('is-open');
       panel.classList.add('hidden');
       panel.classList.remove('flex');
       panel.innerHTML = '';
       return;
     }
 
-    const headerRow = pending.length > 1
+    const hasInit = pending.some((q) => q.isInitiative);
+    const headerTitle = hasInit ? '⚔️ Tirada de Iniciativa' : `Tiradas pendientes (${pending.length})`;
+    const headerRow = (pending.length > 1 || hasInit)
       ? `<div class="flex items-center justify-between gap-2 pb-1 border-b text-[10px]" style="border-color: var(--hairline);">
-          <span class="font-semibold opacity-70 uppercase tracking-wider">Tiradas pendientes (${pending.length})</span>
-          <button type="button" data-req-roll-all="1" class="portal-btn portal-btn-accent px-2.5 py-0.5 rounded-full text-[10px] font-semibold gap-1">${SEQ_STEP_SVGS.roll}<span>Tirar todos</span></button>
+          <span class="font-semibold opacity-85 uppercase tracking-wider">${headerTitle}</span>
+          ${pending.length > 1 ? `<button type="button" data-req-roll-all="1" class="portal-btn portal-btn-accent px-2.5 py-0.5 rounded-full text-[10px] font-semibold gap-1">${SEQ_STEP_SVGS.roll}<span>Tirar todos</span></button>` : ''}
         </div>`
       : '';
 
@@ -469,7 +520,7 @@ export const SequenceViewMethods = {
       .join('');
 
     panel.classList.remove('hidden');
-    panel.classList.add('flex');
+    panel.classList.add('flex', 'is-open');
 
     panel.querySelector('[data-req-roll-all]')?.addEventListener('click', () => {
       Service.respondToAllRollRequests();
@@ -485,62 +536,6 @@ export const SequenceViewMethods = {
       btn.addEventListener('click', () => {
         const [reqId, tokId] = btn.dataset.reqDismiss.split(':');
         Service.dismissRollRequest(reqId, tokId);
-      });
-    });
-  },
-
-  renderCombatTracker(state) {
-    const pill = this.els.combatTrackerPill;
-    if (!pill) return;
-    const c = state.combat;
-    if (!c || !c.active) {
-      pill.classList.add('hidden');
-      pill.classList.remove('flex');
-      return;
-    }
-    pill.classList.remove('hidden');
-    pill.classList.add('flex');
-    const isPlayer = state.role === 'player';
-    this.els.btnNextTurn?.classList.toggle('hidden', isPlayer);
-    this.els.btnEndCombat?.classList.toggle('hidden', isPlayer);
-    this.els.lblCombatRound.textContent = `Ronda ${c.round || 1}`;
-    const esc = (v) => this.escapeHtml(v || '');
-    const tokensById = new Map((state.tokens || []).map((t) => [t.id, t]));
-    const activeEntry = c.order[c.turnIndex];
-    this.els.combatOrderList.innerHTML = c.order
-      .map((entry) => {
-        const repTok = tokensById.get(entry.tokenId)
-          || (Array.isArray(entry.tokenIds) ? entry.tokenIds.map((id) => tokensById.get(id)).find(Boolean) : null);
-        if (!repTok) return '';
-        if (isPlayer && (Array.isArray(entry.tokenIds) ? entry.tokenIds.every((id) => tokensById.get(id)?.hidden) : repTok.hidden)) return '';
-        const displayName = entry.groupName || repTok.name;
-        const initBadge = entry.pending ? '⏳' : (entry.label || entry.init);
-        const isTurn = activeEntry && activeEntry.tokenId === entry.tokenId;
-        return `
-          <button
-            type="button"
-            data-combat-tok="${repTok.id}"
-            class="portal-seg-btn px-2 py-1 rounded-full flex items-center gap-1.5 text-[11px] whitespace-nowrap ${isTurn ? 'is-active' : ''}"
-            title="${esc(displayName)} · Iniciativa ${entry.pending ? 'pendiente' : esc(initBadge)}"
-          >
-            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${repTok.color};"></span>
-            <span class="font-semibold max-w-[96px] truncate">${esc(displayName)}</span>
-            <span class="opacity-65 tabular-nums">${esc(String(initBadge))}</span>
-          </button>
-        `;
-      })
-      .join('');
-    this.els.combatOrderList.querySelectorAll('[data-combat-tok]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tok = tokensById.get(btn.dataset.combatTok);
-        if (!tok || !Service.canControlToken(tok)) return;
-        const entry = c.order.find((o) => o.tokenId === tok.id || (Array.isArray(o.tokenIds) && o.tokenIds.includes(tok.id)));
-        const pendingInit = entry?.pending
-          ? (Service.state.pendingRollRequests || []).find((q) => q.isInitiative && (q.tokenId === tok.id || q.tokenId === entry.tokenId))
-          : null;
-        if (pendingInit) Service.respondToRollRequest(pendingInit.requestId, pendingInit.tokenId);
-        else if (entry?.pending) Service.rollTokenInitiative(tok);
-        else Service.selectToken(tok.id, true);
       });
     });
   }

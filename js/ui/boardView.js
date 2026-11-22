@@ -1,17 +1,27 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261117b1';
-import { CartridgePacker } from '../services/cartridgePacker.js?v=20261117b1';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261121a6';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261121a6';
+import { TabletopAudio } from '../services/tabletopAudio.js?v=20261121a6';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261121a6';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
+import { metersToPixels, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261121a6';
+import { computeTokenRimSpec, shouldApplyRuntimeCoinRim } from '../utils/tokenComposer.js?v=20261121a6';
+import { collectVisibleLightSources } from '../utils/tokenShadowModel.js?v=20261121a6';
+import { resolveTokenDoubleClickAction } from '../utils/worldRedaction.js?v=20261121a6';
+import { findWallNearPoint, resolveWallDrawPoint } from '../utils/wallGeometry.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
 
 /**
  * Board pointer interactions, global drag-and-drop, keyboard shortcuts, context menu & tokens layer.
  */
 export const BoardViewMethods = {
   bindBoardEvents() {
-    // 1. Interacciones de puntero en el escenario (Arrastre fichas, cámara, regla, dibujo, niebla, clic derecho)
-    let activePointerMode = null; // 'token' | 'pan' | 'rightPan' | 'ruler' | 'areaSelect' | 'draw' | 'fog'
+    // 1. Interacciones de puntero en el escenario (Arrastre fichas, cámara, regla, dibujo, clic derecho)
+    let activePointerMode = null; // 'token' | 'pan' | 'rightPan' | 'ruler' | 'areaSelect' | 'draw'
     let draggingTokenId = null;
+    let dragPath = [];
+    let dragLastCellKey = '';
+    let dragPickupPlayed = false;
     let startClient = { x: 0, y: 0 };
     let startCam = { x: 0, y: 0 };
     let areaOrigin = { x: 0, y: 0 };
@@ -37,12 +47,13 @@ export const BoardViewMethods = {
       );
       this.els.tokensLayer?.querySelectorAll('[data-token-id]').forEach((el) => {
         const hit = hitIds.has(el.dataset.tokenId);
-        el.style.boxShadow = hit ? '0 0 0 4px rgba(245, 158, 11, 0.55)' : '';
+        el.classList.toggle('is-area-hit', hit);
       });
     };
 
     this.els.stage.addEventListener('pointerdown', (e) => {
       this.hideContextMenu();
+      this.stopCameraMotion?.();
       if (e.target.closest('.portal-panel')) return;
 
       if (Selector.isSpectator(Service.state)) {
@@ -63,8 +74,14 @@ export const BoardViewMethods = {
       startCam = { x: Service.state.camera.x, y: Service.state.camera.y };
       movedDistance = 0;
 
-      // Clic derecho -> preparar paneo o menú contextual
+      // Clic derecho -> soltar cadena de muros activa o preparar paneo / menú contextual
       if (e.button === 2) {
+        if (Service.state.tool === 'wall' && Service.state.wallAnchor) {
+          Service.state.wallAnchor = null;
+          this._suppressNextContextMenu = true;
+          Service.notify({ skipVaultSave: true, skipPeerSync: true });
+          return;
+        }
         activePointerMode = 'rightPan';
         if (e.target.closest('[data-map-note]')) return;
         const tokEl = e.target.closest('[data-token-id]');
@@ -101,10 +118,16 @@ export const BoardViewMethods = {
           this.showActionToast('Solo el DJ o su dueño puede mover esta ficha.');
           return;
         }
+        Service.cancelTokenGlide?.(tok.id);
         Service.pushUndoSnapshot();
         activePointerMode = 'token';
         draggingTokenId = tokEl.dataset.tokenId;
         this.draggingTokenId = draggingTokenId;
+        dragPath = [{ x: Math.round(tok.x), y: Math.round(tok.y) }];
+        const initCs = Math.max(20, Number(Service.state.grid?.cellSize) || 80);
+        dragLastCellKey = `${Math.floor(tok.x / initCs)},${Math.floor(tok.y / initCs)}`;
+        dragPickupPlayed = false;
+        this.beginTokenDragPhysics?.(draggingTokenId, e.clientX, e.clientY);
         try {
           if (this.els.stage.isConnected) this.els.stage.setPointerCapture(e.pointerId);
         } catch (_) {}
@@ -112,22 +135,31 @@ export const BoardViewMethods = {
       }
 
       if (tool === 'wall') {
-        const cs = Service.state.grid.cellSize / 2;
-        const sx = Math.round(worldPt.x / cs) * cs;
-        const sy = Math.round(worldPt.y / cs) * cs;
+        if (Service.state.wallType === 'erase') {
+          const hitWall = findWallNearPoint(Service.state.walls, worldPt.x, worldPt.y, 16);
+          if (hitWall) {
+            Service.removeWallById(hitWall.id);
+            this.showActionToast('🗑 Muro eliminado');
+          }
+          return;
+        }
+        this.wallFreehand = Boolean(e.altKey);
+        const pt = resolveWallDrawPoint(worldPt.x, worldPt.y, {
+          grid: Service.state.grid,
+          walls: Service.state.walls,
+          freehand: this.wallFreehand
+        });
         if (!Service.state.wallAnchor) {
-          Service.state.wallAnchor = { x: sx, y: sy };
-          Service.notify();
+          Service.state.wallAnchor = { x: pt.x, y: pt.y };
+          Service.notify({ skipVaultSave: true, skipPeerSync: true });
         } else {
-          Service.addWallSegment(
-            Service.state.wallAnchor.x,
-            Service.state.wallAnchor.y,
-            sx,
-            sy,
-            Service.state.wallType
-          );
-          Service.state.wallAnchor = null;
-          Service.notify();
+          const anchor = Service.state.wallAnchor;
+          const wt = Service.state.wallType || 'wall';
+          const chainable = wt === 'wall' || wt === 'terrain';
+          Service.addWallSegment(anchor.x, anchor.y, pt.x, pt.y, wt);
+          // Continue polyline chain unless closing onto an existing vertex or placing a single door
+          Service.state.wallAnchor = chainable && pt.snappedTo !== 'vertex' ? { x: pt.x, y: pt.y } : null;
+          Service.notify({ skipVaultSave: true, skipPeerSync: true });
         }
         return;
       }
@@ -171,14 +203,6 @@ export const BoardViewMethods = {
         return;
       }
 
-      if (tool === 'fog') {
-        Service.pushUndoSnapshot();
-        activePointerMode = 'fog';
-        Service.state.fogRects.push({ x: worldPt.x, y: worldPt.y, r: 90, mode: Service.state.fogMode });
-        Service.notify({ redrawFog: true, skipVaultSave: true });
-        return;
-      }
-
       if (tool === 'ping') {
         Service.triggerPing(worldPt.x, worldPt.y);
         return;
@@ -192,7 +216,8 @@ export const BoardViewMethods = {
       const worldPt = Selector.screenToWorld(Service.state, e.clientX, e.clientY);
       this.hoverWorldPos = worldPt;
 
-      if (Service.state.tool === 'wall' && Service.state.wallAnchor) {
+      if (Service.state.tool === 'wall') {
+        this.wallFreehand = Boolean(e.altKey);
         this.renderVectorOverlay(Service.state);
       }
 
@@ -212,12 +237,32 @@ export const BoardViewMethods = {
       if (activePointerMode === 'pan' || (activePointerMode === 'rightPan' && movedDistance > 6)) {
         Service.state.camera.x = startCam.x + dx;
         Service.state.camera.y = startCam.y + dy;
-        Service.notify({ skipVaultSave: true });
+        this.recordCameraPanSample?.(e.clientX, e.clientY);
+        Service.notify({ cameraOnly: true, skipVaultSave: true });
         return;
       }
 
       if (activePointerMode === 'token' && draggingTokenId) {
+        this.updateTokenDragPhysics?.(draggingTokenId, e.clientX, e.clientY);
         Service.moveToken(draggingTokenId, worldPt.x, worldPt.y, false);
+        const movedTok = Service.state.tokens.find((t) => t.id === draggingTokenId);
+        if (movedTok) {
+          if (!dragPickupPlayed && movedDistance >= 4) {
+            dragPickupPlayed = true;
+            TabletopAudio.playTokenPickup(movedTok.size || 1);
+          }
+          const cellSize = Math.max(20, Number(Service.state.grid?.cellSize) || 80);
+          const cellKey = `${Math.floor(movedTok.x / cellSize)},${Math.floor(movedTok.y / cellSize)}`;
+          if (dragPickupPlayed && cellKey !== dragLastCellKey) {
+            dragLastCellKey = cellKey;
+            TabletopAudio.playTokenSlideTick(movedTok.size || 1);
+          }
+          const minStep = Math.max(28, cellSize * 0.45);
+          const lastPt = dragPath[dragPath.length - 1];
+          if (!lastPt || Math.hypot(movedTok.x - lastPt.x, movedTok.y - lastPt.y) >= minStep) {
+            dragPath.push({ x: Math.round(movedTok.x), y: Math.round(movedTok.y) });
+          }
+        }
         this.drawFogCanvas(Service.state);
       } else if (activePointerMode === 'areaSelect' && Service.state.areaSelectConfig) {
         const cfg = Service.state.areaSelectConfig;
@@ -236,9 +281,6 @@ export const BoardViewMethods = {
       } else if (activePointerMode === 'draw' && currentStroke) {
         currentStroke.points.push(worldPt);
         Service.notify({ redrawDraw: true, skipVaultSave: true });
-      } else if (activePointerMode === 'fog') {
-        Service.state.fogRects.push({ x: worldPt.x, y: worldPt.y, r: 90, mode: Service.state.fogMode });
-        Service.notify({ redrawFog: true, skipVaultSave: true });
       }
     });
 
@@ -251,10 +293,21 @@ export const BoardViewMethods = {
       } catch (_) {}
 
       if (activePointerMode === 'token' && draggingTokenId) {
+        const droppedId = draggingTokenId;
+        const droppedTok = Service.state.tokens.find((t) => t.id === droppedId);
         const worldPt = Selector.screenToWorld(Service.state, e.clientX, e.clientY);
+        const wasDragged = movedDistance >= 4;
         this.draggingTokenId = null;
-        Service.moveToken(draggingTokenId, worldPt.x, worldPt.y, true);
+        Service.moveToken(droppedId, worldPt.x, worldPt.y, true, dragPath);
+        this.finishTokenDragPhysics?.(droppedId, wasDragged ? (droppedTok?.size || 1) : 1, {
+          wasDragged
+        });
+        if (wasDragged) {
+          TabletopAudio.playTokenDrop(droppedTok?.size || 1);
+        }
         this.drawFogCanvas(Service.state);
+      } else if (activePointerMode === 'pan' || (activePointerMode === 'rightPan' && movedDistance > 6)) {
+        this.releaseCameraPanInertia?.();
       } else if (activePointerMode === 'areaSelect' && Service.state.ruler && Service.state.areaSelectConfig) {
         const cfg = Service.state.areaSelectConfig;
         Service.confirmAreaSelection({
@@ -268,13 +321,11 @@ export const BoardViewMethods = {
       } else if (activePointerMode === 'draw') {
         Service.recordEvent('TRAZO', 'Marcador táctico');
         Service.notify({ redrawDraw: true });
-      } else if (activePointerMode === 'fog') {
-        Service.recordEvent('NIEBLA', Service.state.fogMode);
-        Service.notify({ redrawFog: true });
       }
 
       activePointerMode = null;
       draggingTokenId = null;
+      dragPath = [];
       currentStroke = null;
     });
 
@@ -293,13 +344,21 @@ export const BoardViewMethods = {
       }
       if (!tokenId) return;
       const hitTok = Service.state.tokens.find((t) => t.id === tokenId);
-      if (!hitTok || !Service.canControlToken(hitTok)) return;
-      Service.selectToken(tokenId, true);
+      const action = resolveTokenDoubleClickAction(Service.state, hitTok, Service.canControlToken(hitTok));
+      if (action === 'sheet') {
+        Service.selectToken(tokenId, true);
+      } else if (action === 'inspect') {
+        Service.openTokenInspection(tokenId);
+      }
     });
 
     // Menú Contextual de Iconos al Clic Derecho (si no hubo arrastre de cámara)
     this.els.stage.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (this._suppressNextContextMenu) {
+        this._suppressNextContextMenu = false;
+        return;
+      }
       if (movedDistance > 6) return;
       if (Selector.isSpectator(Service.state)) return;
       if (Service.state.role === 'player') {
@@ -323,7 +382,11 @@ export const BoardViewMethods = {
           return;
         }
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        Service.setZoom(Service.state.camera.zoom * factor, e.clientX, e.clientY);
+        if (typeof this.nudgeCameraZoom === 'function') {
+          this.nudgeCameraZoom(factor, e.clientX, e.clientY);
+        } else {
+          Service.setZoom(Service.state.camera.zoom * factor, e.clientX, e.clientY);
+        }
       },
       { passive: false }
     );
@@ -331,6 +394,7 @@ export const BoardViewMethods = {
     // 2. Drag & Drop Global sobre el tablero (Cartuchos .portal, Imágenes WebP y Elementos del Compendio)
     window.addEventListener('dragover', (e) => {
       e.preventDefault();
+      if (this.els.tokenEditorModal?.classList.contains('is-open') || this.els.mapGridModal?.classList.contains('is-open')) return;
       if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
         this.els.dropModuleOverlay.classList.remove('hidden');
       }
@@ -345,6 +409,7 @@ export const BoardViewMethods = {
     window.addEventListener('drop', async (e) => {
       e.preventDefault();
       this.els.dropModuleOverlay.classList.add('hidden');
+      if (this.els.tokenEditorModal?.classList.contains('is-open') || this.els.mapGridModal?.classList.contains('is-open')) return;
 
       const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (file && /\.(portal|zip|json)$/i.test(file.name)) {
@@ -443,22 +508,36 @@ export const BoardViewMethods = {
     });
 
     // 11. Atajos de Teclado
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'Alt' && Service.state.tool === 'wall') {
+        this.wallFreehand = false;
+        this.renderVectorOverlay(Service.state);
+      }
+    });
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Alt' && Service.state.tool === 'wall') {
+        this.wallFreehand = true;
+        this.renderVectorOverlay(Service.state);
+      }
       const k = e.key.toLowerCase();
       if (k === 'escape') {
-        if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
-          document.activeElement.blur();
-        }
-        Service.state.wallAnchor = null;
-        Service.state.sheetOpen = false;
-        Service.state.drawerOpen = false;
-        Service.clearDiceHand();
-        if (this.setDicePopoverOpen) this.setDicePopoverOpen(false);
-        this.hideContextMenu();
-        Service.notify();
+        if (this.handleEscapeKey?.()) e.preventDefault();
         return;
       }
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName) || activeEl.isContentEditable)
+      ) {
+        return;
+      }
+      if ((e.code === 'Space' || e.key === ' ') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (!this._getModalClosers?.().some(([isOpen]) => isOpen()) && !Service.chatOpen && !this.els.chatDrawer?.classList.contains('is-open')) {
+          e.preventDefault();
+          this.handleSpaceKey?.();
+        }
+        return;
+      }
       if (Selector.isSpectator(Service.state)) return;
       const isPlayer = Service.state.role === 'player';
       if (!isPlayer && (e.ctrlKey || e.metaKey) && k === 'z') {
@@ -490,34 +569,22 @@ export const BoardViewMethods = {
       if (k === 'v' || k === 'h') Service.setTool('select');
       else if (k === 'r') Service.setTool('ruler');
       else if (!isPlayer && k === 'p') Service.setTool('draw');
-      else if (!isPlayer && k === 'f') Service.setTool('fog');
       else if (!isPlayer && k === 'w') Service.setTool('wall');
       else if (k === 'g') Service.setTool('ping');
       else if (k === 'c') {
         Service.state.sheetOpen = !Service.state.sheetOpen;
+        if (Service.state.sheetOpen) Service.state.gmScreenOpen = false;
         Service.notify();
+      } else if (k === 'j') {
+        Service.toggleJournal();
       }
     });
   },
 
   renderTokensLayer(state) {
     const cs = state.grid.cellSize;
-    const visSources =
-      state.role === 'player' && state.dynamicLighting ? Selector.getAlliedVisibilityPolygons(state) : null;
-
-    const visibleTokens = state.tokens.filter((t) => {
-      if (state.role === 'gm') return true;
-      if (t.hidden) return false;
-      if (visSources && t.isAlly === false) {
-        // En vista Jugador, los hostiles solo se muestran si están dentro de la línea de visión de algún aliado
-        return visSources.some(
-          (src) =>
-            Math.hypot(t.x - src.token.x, t.y - src.token.y) <= src.radius &&
-            Selector.isPointInPolygon({ x: t.x, y: t.y }, src.poly)
-        );
-      }
-      return true;
-    });
+    const visibleTokens = Selector.getVisibleTokensForSeat(state);
+    const visibleLightSources = collectVisibleLightSources(visibleTokens, state.grid);
 
     const existingNodes = new Map();
     this.els.tokensLayer.querySelectorAll('[data-token-id]').forEach((node) => {
@@ -531,19 +598,27 @@ export const BoardViewMethods = {
 
     for (const tok of visibleTokens) {
       const diameter = Math.round(cs * (tok.size || 1) * 0.84);
-      const left = Math.round(tok.x - diameter / 2);
-      const top = Math.round(tok.y - diameter / 2);
       const isSel = tok.id === state.selectedTokenId;
       const isDrag = tok.id === this.draggingTokenId;
+      const glideVis = Service.getTokenGlideVisual?.(tok.id) || null;
+      const isGlide = Boolean(glideVis);
+      const left = isGlide ? Number((tok.x - diameter / 2).toFixed(2)) : Math.round(tok.x - diameter / 2);
+      const top = isGlide ? Number((tok.y - diameter / 2).toFixed(2)) : Math.round(tok.y - diameter / 2);
       const initials = tok.name.slice(0, 2).toUpperCase();
-      const hpPct = tok.maxHp > 0 ? Math.max(0, Math.min(100, Math.round((tok.hp / tok.maxHp) * 100))) : 0;
+      const hpPct = tok._redacted
+        ? Math.max(0, Math.min(100, Number(tok.hpPct) || 0))
+        : (tok.maxHp > 0 ? Math.max(0, Math.min(100, Math.round((tok.hp / tok.maxHp) * 100))) : 0);
 
       let el = existingNodes.get(tok.id);
       if (!el) {
         el = document.createElement('div');
         el.dataset.tokenId = tok.id;
         el.innerHTML = `
-          <div class="vtt-token-avatar w-full h-full flex items-center justify-center rounded-full overflow-hidden pointer-events-none"></div>
+          <div class="vtt-token-cast-shadow pointer-events-none"></div>
+          <div class="vtt-token-shadow pointer-events-none"></div>
+          <div class="vtt-token-piece w-full h-full flex items-center justify-center rounded-full pointer-events-none">
+            <div class="vtt-token-avatar w-full h-full flex items-center justify-center rounded-full overflow-hidden pointer-events-none"></div>
+          </div>
           <div class="vtt-token-name absolute -bottom-3.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-slate-950/90 text-white text-[10px] font-mono-tech whitespace-nowrap pointer-events-none"></div>
           <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4/5 h-1.5 rounded-full bg-black/70 overflow-hidden pointer-events-none">
             <div class="vtt-token-hp-fill h-full bg-emerald-400 transition-all duration-150"></div>
@@ -564,20 +639,54 @@ export const BoardViewMethods = {
         Array.isArray(state.activeSequence.targetTokenIds) &&
         state.activeSequence.targetTokenIds.includes(tok.id)
       );
+      const hasImage = Boolean(tok.imageUrl);
+      const useCoinRim = shouldApplyRuntimeCoinRim(tok);
       el.classList.add('vtt-token');
+      el.classList.toggle('has-image', hasImage);
+      el.classList.toggle('has-coin-rim', useCoinRim);
       el.classList.toggle('is-selected', isSel);
+      el.classList.toggle('is-turn', isTurn);
+      el.classList.toggle('is-area-target', isAreaTarget);
+      if (state.tool !== 'areaSelect') el.classList.remove('is-area-hit');
       el.classList.toggle('is-dragging', isDrag);
+      el.classList.toggle('is-gliding', isGlide);
       const conds = Array.isArray(tok.conditions) ? tok.conditions : [];
       el.classList.toggle('opacity-55', Boolean(tok.hidden || conds.includes('hidden') || conds.includes('invisible')));
       el.style.setProperty('--tx', `${left}px`);
       el.style.setProperty('--ty', `${top}px`);
       el.style.width = `${diameter}px`;
       el.style.height = `${diameter}px`;
-      el.style.backgroundColor = tok.color;
-      el.style.border = isTurn || isAreaTarget ? '3px solid #f59e0b' : '2px solid #ffffff';
-      el.style.boxShadow = isTurn || isAreaTarget ? '0 0 0 4px rgba(245, 158, 11, 0.36)' : '';
+      if (useCoinRim) {
+        const rim = computeTokenRimSpec(tok.color || '#8b5cf6', diameter);
+        el.style.setProperty('--rim-depth', `${rim.depthPx}px`);
+        el.style.setProperty('--rim-color', rim.rimColor);
+        el.style.setProperty('--rim-deep', rim.rimDeepColor);
+      } else {
+        el.style.removeProperty('--rim-depth');
+        el.style.removeProperty('--rim-color');
+        el.style.removeProperty('--rim-deep');
+      }
+      const pieceBox = el.querySelector('.vtt-token-piece');
+      if (pieceBox) {
+        if (hasImage) {
+          pieceBox.style.backgroundColor = 'transparent';
+          pieceBox.style.border = 'none';
+          pieceBox.style.boxShadow = 'none';
+        } else {
+          pieceBox.style.backgroundColor = tok.color;
+          pieceBox.style.border = isTurn || isAreaTarget ? '3px solid #f59e0b' : '2px solid rgba(255, 255, 255, 0.92)';
+          pieceBox.style.boxShadow = '';
+        }
+      }
       el.style.isolation = 'isolate';
-      el.title = `${tok.name} (${tok.hp}/${tok.maxHp} HP)`;
+      el.title = tok._redacted ? tok.name : `${tok.name} (${tok.hp}/${tok.maxHp} HP)`;
+      this.applyTokenPhysicsToElement?.(el, tok.id, glideVis);
+      this.applyTokenDualShadows?.(el, tok, {
+        diameterPx: diameter,
+        lightSources: visibleLightSources,
+        walls: state.walls,
+        ambientDir: this._currentAtmosphere?.boardShadowDir
+      });
 
       let condRow = el.querySelector('.vtt-token-conds');
       if (!condRow) {
@@ -604,9 +713,9 @@ export const BoardViewMethods = {
         auraEl.remove();
       }
 
-      const lightPx = Number(tok.lightRadius) || 0;
+      const lightPx = metersToPixels(resolveTokenLightMeters(tok), state.grid);
       let lightEl = el.querySelector('.vtt-token-light');
-      if (lightPx > 0) {
+      if (lightPx > 0 && !state.dynamicLighting) {
         if (!lightEl) {
           lightEl = document.createElement('div');
           lightEl.className = 'vtt-token-light absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none';
@@ -616,24 +725,30 @@ export const BoardViewMethods = {
         const lightDiam = lightPx * 2;
         lightEl.style.width = `${lightDiam}px`;
         lightEl.style.height = `${lightDiam}px`;
-        lightEl.style.background = 'radial-gradient(circle, rgba(251,191,36,0.22) 0%, rgba(251,191,36,0.06) 55%, rgba(251,191,36,0) 75%)';
+        lightEl.style.background = 'radial-gradient(circle, rgba(255,228,164,0.22) 0%, rgba(251,176,59,0.08) 52%, rgba(234,118,32,0) 75%)';
       } else if (lightEl) {
         lightEl.remove();
       }
-      condRow.innerHTML = conds
-        .map((c) => {
-          const def = Selector.getStatusDef(state, c);
-          return `<span class="w-4 h-4 rounded-full border border-white/85 text-white flex items-center justify-center shadow-sm" style="background:${def.color};" title="${this.escapeHtml(def.label)}">${this.renderStatusSymbolSvg(def.icon, 'w-2.5 h-2.5', state)}</span>`;
-        })
-        .join('');
+      const condKey = conds.join(',');
+      if (condRow.dataset.condKey !== condKey) {
+        condRow.dataset.condKey = condKey;
+        condRow.innerHTML = conds
+          .map((c) => {
+            const def = Selector.getStatusDef(state, c);
+            return `<span class="w-4 h-4 rounded-full border border-white/85 text-white flex items-center justify-center shadow-sm" style="background:${def.color};" title="${this.escapeHtml(def.label)}">${this.renderStatusSymbolSvg(def.icon, 'w-2.5 h-2.5', state)}</span>`;
+          })
+          .join('');
+      }
 
       const avatarBox = el.querySelector('.vtt-token-avatar');
+      avatarBox.classList.toggle('rounded-full', !hasImage);
+      avatarBox.classList.toggle('overflow-hidden', !hasImage);
       const avatarKey = tok.imageUrl ? `img:${tok.imageUrl}` : `txt:${initials}`;
       if (avatarBox.dataset.avatarKey !== avatarKey) {
         avatarBox.dataset.avatarKey = avatarKey;
         avatarBox.innerHTML = tok.imageUrl
-          ? `<img src="${tok.imageUrl}" alt="${tok.name}" class="w-full h-full object-cover rounded-full pointer-events-none" />`
-          : `<span class="font-bold text-white text-sm pointer-events-none">${initials}</span>`;
+          ? `<img src="${this.escapeHtml(tok.imageUrl)}" alt="${this.escapeHtml(tok.name)}" class="w-full h-full object-contain pointer-events-none select-none" draggable="false" />`
+          : `<span class="font-bold text-white text-sm pointer-events-none">${this.escapeHtml(initials)}</span>`;
       }
 
       const nameBox = el.querySelector('.vtt-token-name');

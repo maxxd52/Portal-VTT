@@ -2,7 +2,8 @@
    MODEL: ESTADO INICIAL Y GENERADOR DE CÓDIGOS DE SALA
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261117b1';
+import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261121a6';
+import { DEFAULT_VISION_CONFIG } from '../utils/lightingModel.js?v=20261121a6';
 
 export const DEFAULT_DICE_STYLE = {
   bodyColor: '#8b5cf6',
@@ -39,7 +40,7 @@ export const DEFAULT_STATUS_DEFS = [
 export const GENERIC_STARTER_BLOCKS = [
   { id: 'blk_hp', kind: 'resource', key: 'hp', label: 'Salud', max: 18, color: '#10b981', resStyle: 'bar', tabId: 'header', size: '1/2' },
   { id: 'blk_def', kind: 'number', key: 'ac', label: 'Defensa', rollMode: 'none', formula: '', tabId: 'header', size: '1/2' },
-  { id: 'blk_init', kind: 'roll', key: 'init', label: 'Iniciativa', formula: '1d20+@agi', tabId: 'header', size: '1/3' },
+  { id: 'blk_init', kind: 'text', textMode: 'fixed', fixedText: '', clickAction: 'roll', isInitiative: true, key: 'init', label: 'Iniciativa', formula: '1d20+@agi', tabId: 'header', size: '1/3' },
   { id: 'blk_vig', kind: 'number', key: 'vig', label: 'Vigor', rollMode: 'base', formula: '', tabId: 'attrs', size: '1/3' },
   { id: 'blk_agi', kind: 'number', key: 'agi', label: 'Agilidad', rollMode: 'base', formula: '', tabId: 'attrs', size: '1/3' },
   { id: 'blk_men', kind: 'number', key: 'men', label: 'Mente', rollMode: 'base', formula: '', tabId: 'attrs', size: '1/3' }
@@ -114,6 +115,44 @@ export const SYSTEM_PRESETS = {
       { key: 'des', label: 'Destreza', alias: 'des', tabId: 'attrs' },
       { key: 'pod', label: 'Poder', alias: 'pod', tabId: 'attrs' },
       { key: 'int', label: 'Intelecto', alias: 'int', tabId: 'attrs' }
+    ]
+  },
+  vieja_escuela: {
+    label: 'Vieja Escuela (OSR 1d20)',
+    ruleset: 'free',
+    rollFormula: '1d20+@stat',
+    resultMode: 'sum',
+    successThreshold: 11,
+    showDefense: true,
+    showHp: true,
+    showInit: true,
+    hpLabel: 'PV',
+    defenseLabel: 'DEF',
+    showLevelPb: false,
+    showScores: false,
+    autoInitiative: true,
+    enabledTabs: { skills: true, traits: true, inventory: true },
+    customTabs: [],
+    fixedRolls: [
+      { id: 've_roll_ins', label: 'Tirada Instintos', formula: '1d20+@ins', tabId: 'header' },
+      { id: 've_roll_cac', label: 'Ataque CaC', formula: '1d20+@atq+@fue', tabId: 'attrs' },
+      { id: 've_roll_proy', label: 'Ataque Proyectil', formula: '1d20+@atq+@des', tabId: 'attrs' },
+      { id: 've_roll_sab', label: 'Salud Mental (SAB)', formula: '1d20+@sab', tabId: 'attrs' }
+    ],
+    resourceSchema: [
+      { id: 'res_pod', name: 'POD (Poder)', max: 1, color: '#8b5cf6', kind: 'bar', tabId: 'header' },
+      { id: 'res_px', name: 'PX', max: 10, color: '#f59e0b', kind: 'bar', tabId: 'header' }
+    ],
+    schema: [
+      { key: 'fue', label: 'FUE', alias: 'fue', tabId: 'attrs' },
+      { key: 'des', label: 'DES', alias: 'des', tabId: 'attrs' },
+      { key: 'con', label: 'CON', alias: 'con', tabId: 'attrs' },
+      { key: 'int', label: 'INT', alias: 'int', tabId: 'attrs' },
+      { key: 'sab', label: 'SAB', alias: 'sab', tabId: 'attrs' },
+      { key: 'car', label: 'CAR', alias: 'car', tabId: 'attrs' },
+      { key: 'atq', label: 'ATQ', alias: 'atq', tabId: 'attrs' },
+      { key: 'ins', label: 'INS', alias: 'ins', tabId: 'attrs' },
+      { key: 'mov', label: 'MOV', alias: 'mov', tabId: 'attrs' }
     ]
   },
   free: {
@@ -193,15 +232,19 @@ export function createInitialState() {
       sheetBlocks: null,
       fixedRolls: [],
       resourceSchema: [],
-      statusesSchema: null
+      statusesSchema: null,
+      vision: { ...DEFAULT_VISION_CONFIG }
     },
     sheetSchema: DEFAULT_SHEET_SCHEMA.map((s) => ({ ...s })),
     role: roleParam,
-    tool: 'select', // 'select' | 'pan' | 'ruler' | 'draw' | 'fog' | 'wall' | 'ping'
+    isHostGm: roleParam !== 'player',
+    tool: 'select', // 'select' | 'pan' | 'ruler' | 'draw' | 'wall' | 'ping'
     rulerShape: 'line', // 'line' | 'circle' | 'cone' | 'cube'
     drawColor: '#ef4444',
-    fogMode: 'reveal', // 'reveal' | 'hide'
     dynamicLighting: true,
+    rememberExplored: true,
+    exploredMask: '',
+    exploredRev: 0,
     wallType: 'wall', // 'wall' | 'door'
     wallAnchor: null, // { x, y }
     walls: isGuestPlayer ? [] : buildPresetWallsForMap('bastion'),
@@ -209,6 +252,8 @@ export function createInitialState() {
     activeMapKey: isGuestPlayer ? 'empty' : 'bastion',
     customMapUrl: '',
     mapGrids: {},
+    sceneLighting: {},
+    sceneLayers: {},
     notes: [],
     combat: { active: false, round: 1, turnIndex: 0, order: [] },
     compendiumTab: 'actors', // 'actors' | 'items' | 'maps'
@@ -217,8 +262,21 @@ export function createInitialState() {
     customItems: [],
     customMaps: [],
     compendiumFolders: { actors: [], items: [], maps: [] },
-    sheetOpen: roleParam !== 'player',
-    drawerOpen: roleParam !== 'player',
+    sheetOpen: false,
+    drawerOpen: false,
+    gmScreenOpen: false,
+    journalOpen: false,
+    gmScreen: null,
+    publicClocks: [],
+    mediaAssets: {},
+    journal: {
+      gmFolders: [],
+      gmNotes: [],
+      playerJournals: {},
+      receivedReveals: []
+    },
+    activeJournalPresentation: null,
+    inspectTokenId: null,
     activeInviteId: inviteParam || '',
     playerInvites: [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }],
     room: {
@@ -226,11 +284,14 @@ export function createInitialState() {
       moduleTitle: 'Aventura_Bastion'
     },
     grid: {
+      type: 'square',
       cellSize: 80,
+      metersPerUnit: 1.5,
       offsetX: 0,
       offsetY: 0,
       opacity: 0.28,
-      snap: true
+      snap: true,
+      color: 'auto'
     },
     camera: {
       x: 80,
@@ -245,8 +306,12 @@ export function createInitialState() {
         role: 'Vanguardia SRD',
         color: '#3b82f6',
         isAlly: true,
-        visionRadius: 520,
+        visionMeters: null,
+        lightMeters: 0,
         imageUrl: '',
+        mediaId: '',
+        publicDescription: '',
+        privateNotes: '',
         size: 1,
         x: 440,
         y: 440,
@@ -263,8 +328,12 @@ export function createInitialState() {
         role: 'Conjuradora SRD',
         color: '#8b5cf6',
         isAlly: true,
-        visionRadius: 560,
+        visionMeters: null,
+        lightMeters: 0,
         imageUrl: '',
+        mediaId: '',
+        publicDescription: '',
+        privateNotes: '',
         size: 1,
         x: 360,
         y: 600,
@@ -281,8 +350,12 @@ export function createInitialState() {
         role: 'Explorador SRD',
         color: '#10b981',
         isAlly: true,
-        visionRadius: 600,
+        visionMeters: null,
+        lightMeters: 0,
         imageUrl: '',
+        mediaId: '',
+        publicDescription: '',
+        privateNotes: '',
         size: 1,
         x: 520,
         y: 600,
@@ -299,8 +372,12 @@ export function createInitialState() {
         role: 'Secundario SRD',
         color: '#ef4444',
         isAlly: false,
-        visionRadius: 420,
+        visionMeters: null,
+        lightMeters: 0,
         imageUrl: '',
+        mediaId: '',
+        publicDescription: '',
+        privateNotes: '',
         size: 1,
         x: 1080,
         y: 480,
@@ -313,7 +390,6 @@ export function createInitialState() {
       }
     ],
     strokes: [],
-    fogRects: [], // { x, y, r, mode: 'reveal' | 'hide' }
     ruler: null, // { x1, y1, x2, y2 }
     areaSelectConfig: null, // { radiusPx, label, stepIndex }
     activeSequence: null,

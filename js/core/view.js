@@ -2,26 +2,38 @@
    VIEW: RENDERIZADO DE LIENZOS, COMPENDIO, FICHA IZQUIERDA Y MENÚ CONTEXTUAL
    ========================================================================== */
 
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261117b1';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
-import { Selector } from './selector.js?v=20261117b1';
-import { Service } from './service.js?v=20261117b1';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261117b1';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261117b1';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261117b1';
-import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261117b1';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261117b1';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261117b1';
-import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261117b1';
-import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261117b1';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261117b1';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261117b1';
-import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261117b1';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261117b1';
-import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261117b1';
-import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261117b1';
-import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261117b1';
-import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261117b1';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261121a6';
+import { TabletopAudio } from '../services/tabletopAudio.js?v=20261121a6';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261121a6';
+import { Selector } from './selector.js?v=20261121a6';
+import { Service } from './service.js?v=20261121a6';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261121a6';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261121a6';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261121a6';
+import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261121a6';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261121a6';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261121a6';
+import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261121a6';
+import { GmScreenViewMethods } from '../ui/gmScreenView.js?v=20261121a6';
+import { GmScreenWidgetsViewMethods } from '../ui/gmScreenWidgetsView.js?v=20261121a6';
+import { GmScreenConfigViewMethods } from '../ui/gmScreenConfigView.js?v=20261121a6';
+import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261121a6';
+import { JournalPresentationViewMethods } from '../ui/journalPresentationView.js?v=20261121a6';
+import { JournalShareViewMethods } from '../ui/journalShareView.js?v=20261121a6';
+import { JournalViewMethods } from '../ui/journalView.js?v=20261121a6';
+import { MapGridEditorViewMethods } from '../ui/mapGridEditorView.js?v=20261121a6';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261121a6';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261121a6';
+import { PresenceViewMethods } from '../ui/presenceView.js?v=20261121a6';
+import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261121a6';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261121a6';
+import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261121a6';
+import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261121a6';
+import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261121a6';
+import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261121a6';
+import { TokenEditorViewMethods } from '../ui/tokenEditorView.js?v=20261121a6';
+import { TokenInspectViewMethods } from '../ui/tokenInspectView.js?v=20261121a6';
+import { TokenPhysicsViewMethods } from '../ui/tokenPhysicsView.js?v=20261121a6';
 
 export const View = {
   els: {},
@@ -56,15 +68,26 @@ export const View = {
   ...CompendiumViewMethods,
   ...CompendiumFormsViewMethods,
   ...DiceViewMethods,
+  ...GmScreenViewMethods,
+  ...GmScreenWidgetsViewMethods,
+  ...GmScreenConfigViewMethods,
   ...ItemCreatorViewMethods,
+  ...JournalPresentationViewMethods,
+  ...JournalShareViewMethods,
+  ...JournalViewMethods,
+  ...MapGridEditorViewMethods,
   ...ModalsViewMethods,
   ...PortalLobbyViewMethods,
+  ...PresenceViewMethods,
   ...SequenceViewMethods,
   ...SheetViewMethods,
   ...SheetBlocksViewMethods,
   ...SheetInventoryViewMethods,
   ...SheetResourcesViewMethods,
   ...SystemOptionsViewMethods,
+  ...TokenEditorViewMethods,
+  ...TokenInspectViewMethods,
+  ...TokenPhysicsViewMethods,
 
   getItemCategory(kind) {
     return Selector.resolveItemTabId(Service.state, kind);
@@ -99,8 +122,10 @@ export const View = {
 
   bindDrawerResize(drawerEl, side, storageKey) {
     if (!drawerEl) return;
+    const getEffectiveSide = () => (Service.railsSwapped ? (side === 'left' ? 'right' : 'left') : side);
+    const getScale = () => (typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1);
     const minW = 320;
-    const maxW = () => Math.max(minW, Math.min(520, Math.floor(window.innerWidth * 0.44)));
+    const maxW = () => Math.max(minW, Math.min(520, Math.floor((window.innerWidth / getScale()) * 0.44)));
     const clampW = (w) => Math.max(minW, Math.min(maxW(), Math.round(w)));
 
     const saved = Number(localStorage.getItem(storageKey));
@@ -114,19 +139,22 @@ export const View = {
       const dRect = drawerEl.getBoundingClientRect();
       const tRect = tray.getBoundingClientRect();
       if (dRect.width === 0 || tRect.width === 0) return;
-      const overlaps = side === 'left'
+      const overlaps = getEffectiveSide() === 'left'
         ? dRect.right + 12 > tRect.left
         : dRect.left - 12 < tRect.right;
+      const scale = getScale();
       drawerEl.style.bottom = overlaps
-        ? `${Math.max(16, Math.round(window.innerHeight - tRect.top + 12))}px`
+        ? `${Math.max(16, Math.round((window.innerHeight - tRect.top + 12) / scale))}px`
         : '';
     };
+    if (!Array.isArray(this._drawerClearanceUpdaters)) this._drawerClearanceUpdaters = [];
+    this._drawerClearanceUpdaters.push(updateBottomClearance);
     requestAnimationFrame(updateBottomClearance);
     window.addEventListener('resize', updateBottomClearance);
 
     const isOnInnerEdge = (clientX) => {
       const rect = drawerEl.getBoundingClientRect();
-      return side === 'left'
+      return getEffectiveSide() === 'left'
         ? rect.right - clientX <= 8 && rect.right - clientX >= -2
         : clientX - rect.left <= 8 && clientX - rect.left >= -2;
     };
@@ -154,14 +182,14 @@ export const View = {
       e.stopPropagation();
       resizing = true;
       startX = e.clientX;
-      startW = drawerEl.getBoundingClientRect().width;
+      startW = drawerEl.getBoundingClientRect().width / getScale();
       document.body.style.cursor = 'ew-resize';
       document.body.style.userSelect = 'none';
     });
 
     window.addEventListener('pointermove', (e) => {
       if (!resizing) return;
-      const delta = side === 'left' ? e.clientX - startX : startX - e.clientX;
+      const delta = (getEffectiveSide() === 'left' ? e.clientX - startX : startX - e.clientX) / getScale();
       drawerEl.style.width = `${clampW(startW + delta)}px`;
       updateBottomClearance();
     });
@@ -171,13 +199,57 @@ export const View = {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       drawerEl.style.cursor = '';
-      localStorage.setItem(storageKey, String(Math.round(drawerEl.getBoundingClientRect().width)));
+      localStorage.setItem(storageKey, String(Math.round(drawerEl.getBoundingClientRect().width / getScale())));
     });
+  },
+
+  applyUiScaleToDom() {
+    const uiScaleKey = Service.uiScale || 'normal';
+    const uiScaleFactor = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
+    document.documentElement.setAttribute('data-ui-scale', uiScaleKey);
+    document.documentElement.style.setProperty('--ui-scale', String(uiScaleFactor));
+  },
+
+  applyRailsSwappedToDom() {
+    document.documentElement.setAttribute('data-rails-swapped', Service.railsSwapped ? 'true' : 'false');
+  },
+
+  syncAudioControlsUi() {
+    const prefs = TabletopAudio.getPrefs();
+    const effectivePct = Math.round((prefs.muted ? 0 : prefs.volume) * 100);
+    if (this.els.rngAudioVolume) {
+      this.els.rngAudioVolume.value = String(Math.round(prefs.volume * 100));
+    }
+    if (this.els.lblAudioVolumePct) {
+      this.els.lblAudioVolumePct.textContent = prefs.muted ? 'Mute' : `${effectivePct}%`;
+    }
+    if (this.els.btnToggleAudioMute) {
+      this.els.btnToggleAudioMute.textContent = prefs.muted ? 'Silenciado' : 'Activo';
+      this.els.btnToggleAudioMute.classList.toggle('portal-btn-active', prefs.muted);
+    }
+  },
+
+  syncShadowModeUi() {
+    const mode = this.shadowMode || 'auto';
+    this.els.shadowModeSeg?.querySelectorAll('[data-shadow-mode]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.shadowMode === mode);
+    });
+    if (typeof document !== 'undefined') {
+      const fx = this.isDynamicShadowsEnabled?.() === false ? 'basic' : 'rich';
+      document.documentElement.setAttribute('data-tabletop-fx', fx);
+    }
   },
 
   async init() {
     this.clearExploredMemory();
+    Service.setExploredMaskCapture(() => this.exportExploredMaskDataUrl());
     this.cacheElements();
+    Service.loadUiScale();
+    this.applyUiScaleToDom();
+    Service.loadRailsSwapped();
+    this.applyRailsSwappedToDom();
+    TabletopAudio.loadPrefs();
+    this.loadShadowMode?.();
     Dice3DEngine.init(this.els.dice3dCanvas, {
       overlayEl: this.els.dice3dOverlay,
       trayEl: this.els.diceTrayBar
@@ -203,19 +275,38 @@ export const View = {
 
   startPresenceHeartbeat() {
     const sendPing = () => {
+      const inviteId = Service.state.activeInviteId || '';
+      const primaryTokenId = inviteId && Service.playerPrimaryTokens instanceof Map
+        ? (Service.playerPrimaryTokens.get(inviteId) || '')
+        : '';
       RealtimeBridge.send({
         kind: 'PRESENCE_PING',
         clientId: Service.clientId,
-        role: Service.state.role || 'gm'
+        role: Service.state.role || 'gm',
+        inviteId,
+        seatKey: Service.getSelfSeatKey(),
+        primaryTokenId,
+        profile: Service.state.role === 'gm' ? Service.getLocalProfile() : null
       });
     };
     sendPing();
     if (Service.state.role === 'player') {
-      RealtimeBridge.send({ kind: 'SYNC_REQUEST', clientId: Service.clientId, role: 'player' });
+      const reqPayload = {
+        kind: 'SYNC_REQUEST',
+        clientId: Service.clientId,
+        role: 'player',
+        inviteId: Service.state.activeInviteId || '',
+        seatKey: Service.getSelfSeatKey()
+      };
+      RealtimeBridge.send(reqPayload);
       clearTimeout(this._syncReqTimer);
       this._syncReqTimer = setTimeout(() => {
         if (Service.state.role === 'player') {
-          RealtimeBridge.send({ kind: 'SYNC_REQUEST', clientId: Service.clientId, role: 'player' });
+          RealtimeBridge.send({
+            ...reqPayload,
+            inviteId: Service.state.activeInviteId || '',
+            seatKey: Service.getSelfSeatKey()
+          });
         }
       }, 1200);
     }
@@ -231,8 +322,15 @@ export const View = {
 
   handleRealtimeMessage(msg) {
     if (!msg) return;
+    const selfSeat = Service.getSelfSeatKey();
+    if (msg.targetSeatKey && msg.targetSeatKey !== selfSeat) return;
+    if (msg.spectatorOnly && Service.state.role === 'player' && Service.state.activeInviteId) return;
+    if (msg.hostOnly && Service.state.role !== 'gm') return;
+
     if (msg.kind === 'WORLD_SYNC' && msg.world) {
       Service.applyFullWorldState(msg.world, true);
+    } else if (msg.kind === 'PLAYER_TOKENS_SYNC') {
+      Service.applyPlayerTokensSync(msg);
     } else if (msg.kind === 'DICE_ROLL' && msg.roll) {
       Service.receiveRemoteRoll(msg.roll);
     } else if (msg.kind === 'HANDOUT_SHOW' && msg.handout) {
@@ -243,7 +341,8 @@ export const View = {
       Service.notify({ skipVaultSave: true });
     } else if (msg.kind === 'SYNC_REQUEST') {
       if (Service.state.role === 'gm') {
-        RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(Service.state) });
+        const reqSeat = msg.seatKey || msg.inviteId || (msg.clientId ? `peer:${msg.clientId}` : null);
+        Service.syncWorldToPeers(reqSeat);
       }
     } else if (msg.kind === 'PRESENCE_PING') {
       const isNewPeer = msg.clientId && msg.clientId !== Service.clientId && !Service.peers.has(msg.clientId);
@@ -251,7 +350,8 @@ export const View = {
       const now = Date.now();
       if (isNewPeer && Service.state.role === 'gm' && now - (this._lastWorldSyncAt || 0) > 400) {
         this._lastWorldSyncAt = now;
-        RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(Service.state) });
+        const pingSeat = msg.seatKey || msg.inviteId || (msg.clientId ? `peer:${msg.clientId}` : null);
+        Service.syncWorldToPeers(pingSeat);
       }
     } else if (msg.kind === 'PRESENCE_BYE') {
       Service.updatePeerPresence({ ...msg, leaving: true });
@@ -259,6 +359,25 @@ export const View = {
       Service.receiveRollRequest(msg.request);
     } else if (msg.kind === 'ROLL_RESPONSE' && msg.response) {
       Service.receiveRollResponse(msg.response);
+    } else if (msg.kind === 'ROLL_DISMISS' && msg.seatKey) {
+      Service.dismissSeatRoll(msg.seatKey, msg.rollId || '', { broadcast: false });
+    } else if (msg.kind === 'CHAT_MESSAGE' && msg.message) {
+      Service.receiveChatMessage(msg.message);
+    } else if (msg.kind === 'PUBLIC_CLOCKS_SYNC' && Array.isArray(msg.publicClocks)) {
+      if (Service.state.role !== 'gm') {
+        Service.state.publicClocks = msg.publicClocks;
+        Service.notify({ skipVaultSave: true });
+      }
+    } else if (msg.kind === 'TOKEN_MOVE' && msg.tokenId) {
+      Service.applyRemoteTokenMove(msg);
+    } else if (msg.kind === 'JOURNAL_PRESENT' && msg.note) {
+      Service.receiveJournalPresentation(msg);
+    } else if (msg.kind === 'JOURNAL_PRESENT_CLOSE') {
+      Service.closeJournalPresentation(false);
+    } else if (msg.kind === 'JOURNAL_REVEALS_SYNC' && msg.noteId) {
+      Service.receiveJournalRevealsSync(msg);
+    } else if (msg.kind === 'JOURNAL_PLAYER_SYNC') {
+      Service.applyPlayerJournalSync(msg);
     }
   },
 
@@ -304,89 +423,20 @@ export const View = {
       Service.changeMap(val);
     });
 
-    this.els.btnToggleGridPopover.addEventListener('click', () => {
-      this.els.gridPopover.classList.toggle('is-open');
-    });
-    const applyGridSize = (val) => {
-      const next = Math.round(Math.max(16, Math.min(300, Number(val) || 80)) * 100) / 100;
-      Service.updateGrid({ cellSize: next });
-    };
-    const applyGridOffset = (axis, val) => {
-      const next = Math.round(Math.max(-300, Math.min(300, Number(val) || 0)) * 100) / 100;
-      Service.updateGrid({ [axis]: next });
-    };
-
-    if (this.els.btnFitGridToMap) {
-      this.els.btnFitGridToMap.addEventListener('click', () => {
-        const cols = Number(this.els.inpGridCols?.value) || 0;
-        const rows = Number(this.els.inpGridRows?.value) || 0;
-        if (cols < 2 && rows < 2) return;
-        const img = Service.state.mapId === 'custom' ? this.els.customMapImg : null;
-        let dx = 0;
-        let dy = 0;
-        let dw = 2400;
-        let dh = 1600;
-        if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-          const scale = Math.min(2400 / img.naturalWidth, 1600 / img.naturalHeight);
-          dw = img.naturalWidth * scale;
-          dh = img.naturalHeight * scale;
-          dx = (2400 - dw) / 2;
-          dy = (1600 - dh) / 2;
-        }
-        const rawCell = cols >= 2 ? dw / cols : dh / rows;
-        const cellSize = Math.round(Math.max(16, Math.min(300, rawCell)) * 100) / 100;
-        Service.updateGrid({
-          cellSize,
-          offsetX: Math.round(dx * 100) / 100,
-          offsetY: Math.round(dy * 100) / 100
-        });
-        this.showActionToast(`Grilla ajustada (${cellSize}px).`);
-      });
-    }
-
-    this.els.btnGridSizeMinus.addEventListener('click', (e) => {
-      applyGridSize(Service.state.grid.cellSize - (e.shiftKey ? 5 : 1));
-    });
-    this.els.btnGridSizePlus.addEventListener('click', (e) => {
-      applyGridSize(Service.state.grid.cellSize + (e.shiftKey ? 5 : 1));
-    });
-    this.els.inpGridSize.addEventListener('change', (e) => applyGridSize(e.target.value));
-
-    this.els.btnGridOffXMinus.addEventListener('click', (e) => {
-      applyGridOffset('offsetX', (Service.state.grid.offsetX || 0) - (e.shiftKey ? 5 : 1));
-    });
-    this.els.btnGridOffXPlus.addEventListener('click', (e) => {
-      applyGridOffset('offsetX', (Service.state.grid.offsetX || 0) + (e.shiftKey ? 5 : 1));
-    });
-    this.els.inpGridOffX.addEventListener('change', (e) => applyGridOffset('offsetX', e.target.value));
-
-    this.els.btnGridOffYMinus.addEventListener('click', (e) => {
-      applyGridOffset('offsetY', (Service.state.grid.offsetY || 0) - (e.shiftKey ? 5 : 1));
-    });
-    this.els.btnGridOffYPlus.addEventListener('click', (e) => {
-      applyGridOffset('offsetY', (Service.state.grid.offsetY || 0) + (e.shiftKey ? 5 : 1));
-    });
-    this.els.inpGridOffY.addEventListener('change', (e) => applyGridOffset('offsetY', e.target.value));
-
-    this.els.btnGridResetOffset.addEventListener('click', () => {
-      Service.updateGrid({ offsetX: 0, offsetY: 0 });
-    });
-
-    this.els.rngGridOpacity.addEventListener('input', (e) => {
-      Service.updateGrid({ opacity: Number(e.target.value) / 100 });
-    });
-    this.els.chkGridSnap.addEventListener('change', (e) => {
-      Service.updateGrid({ snap: e.target.checked });
-    });
-
     this.els.btnRoleGM.addEventListener('click', () => Service.setRole('gm'));
     this.els.btnRolePlayer.addEventListener('click', () => Service.setRole('player'));
 
     this.els.btnToggleSheet.addEventListener('click', () => {
-      if (!Service.state.selectedTokenId && Service.state.tokens.length) {
+      if (Service.state.role === 'player') {
+        const assigned = Selector.getPlayerAssignedTokenIds(Service.state);
+        if (assigned.length && !assigned.includes(Service.state.selectedTokenId)) {
+          Service.state.selectedTokenId = assigned[0];
+        }
+      } else if (!Service.state.selectedTokenId && Service.state.tokens.length) {
         Service.state.selectedTokenId = Service.state.tokens[0].id;
       }
       Service.state.sheetOpen = !Service.state.sheetOpen;
+      if (Service.state.sheetOpen) Service.state.gmScreenOpen = false;
       Service.notify();
     });
     this.els.btnCloseSheet.addEventListener('click', () => {
@@ -394,8 +444,19 @@ export const View = {
       Service.notify();
     });
 
+    this.els.btnToggleJournal?.addEventListener('click', () => {
+      Service.toggleJournal();
+    });
+    this.els.btnCloseJournalDrawer?.addEventListener('click', () => {
+      Service.toggleJournal(false);
+    });
+
     this.els.btnToggleTokenDrawer.addEventListener('click', () => {
-      Service.state.drawerOpen = !Service.state.drawerOpen;
+      const nextOpen = !Service.state.drawerOpen;
+      Service.state.drawerOpen = nextOpen;
+      if (nextOpen) {
+        Service.state.journalOpen = false;
+      }
       Service.notify();
     });
     this.els.btnCloseTokenDrawer.addEventListener('click', () => {
@@ -405,13 +466,47 @@ export const View = {
 
     this.bindDrawerResize(this.els.characterSheetDrawer, 'left', 'portal_sheet_width');
     this.bindDrawerResize(this.els.tokenDrawer, 'right', 'portal_compendium_width');
+    this.bindDrawerResize(this.els.journalDrawer, 'right', 'portal_journal_width');
+    this.bindGmScreenEvents();
 
-    this.els.btnToggleCombat.addEventListener('click', () => {
-      if (Service.state.combat?.active) Service.endCombat();
-      else Service.startCombat();
+    this.els.btnToggleCombat.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const combatActive = Boolean(Service.state.combat?.active);
+      if (Service.state.role === 'gm' && !combatActive) {
+        Service.startCombat();
+        this.setCombatPopoverOpen?.(true);
+        return;
+      }
+      if (combatActive) {
+        const isOpen = this.els.combatTrackerPopover?.classList.contains('is-open');
+        this.setCombatPopoverOpen?.(!isOpen);
+      }
     });
-    this.els.btnNextTurn.addEventListener('click', () => Service.nextCombatTurn());
-    this.els.btnEndCombat.addEventListener('click', () => Service.endCombat());
+    this.els.btnToggleCombatVisibility?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (Service.state.role !== 'gm') return;
+      const curPublic = Service.state.systemConfig?.combatTrackerPublic !== false;
+      Service.updateSystemConfig({ combatTrackerPublic: !curPublic });
+    });
+    this.els.btnPrevTurn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      Service.prevCombatTurn();
+    });
+    this.els.btnToggleAddCombatant?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (Service.state.role !== 'gm') return;
+      this.combatAddOpen = !this.combatAddOpen;
+      this.renderCombatTracker(Service.state);
+    });
+    this.els.btnNextTurn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      Service.nextCombatTurn();
+    });
+    this.els.btnEndCombat.addEventListener('click', () => {
+      this.combatAddOpen = false;
+      this.setCombatPopoverOpen?.(false);
+      Service.endCombat();
+    });
 
     this.els.rulerShapeSeg.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-ruler-shape]');
@@ -481,6 +576,37 @@ export const View = {
       this.renderSyncModal(Service.state);
       this.els.syncModal?.classList.add('is-open');
     });
+    this.els.uiScaleSeg?.querySelectorAll('[data-ui-scale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        Service.setUiScale(btn.dataset.uiScale);
+        requestAnimationFrame(() => {
+          (this._drawerClearanceUpdaters || []).forEach((fn) => fn());
+        });
+      });
+    });
+    this.els.railsSwapSeg?.querySelectorAll('[data-rails-swapped]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        Service.setRailsSwapped(btn.dataset.railsSwapped === 'true');
+        requestAnimationFrame(() => {
+          (this._drawerClearanceUpdaters || []).forEach((fn) => fn());
+        });
+      });
+    });
+    this.els.rngAudioVolume?.addEventListener('input', (e) => {
+      const pct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      TabletopAudio.setVolume(pct / 100);
+      this.syncAudioControlsUi?.();
+    });
+    this.els.btnToggleAudioMute?.addEventListener('click', () => {
+      TabletopAudio.toggleMute();
+      this.syncAudioControlsUi?.();
+      if (!TabletopAudio.getPrefs().muted) TabletopAudio.playTokenPickup(1);
+    });
+    this.els.shadowModeSeg?.querySelectorAll('[data-shadow-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.setShadowMode?.(btn.dataset.shadowMode);
+      });
+    });
     this.els.themePopover?.querySelectorAll('[data-theme-pick]').forEach((btn) => {
       btn.addEventListener('click', () => {
         Service.setTheme(btn.dataset.themePick);
@@ -509,28 +635,63 @@ export const View = {
 
     this.bindCompendiumEvents();
 
-    // 6. Bandeja de Dados 3D
+    // 6. Bandeja de Dados 3D y Presencia de Mesa
+    this.bindPresenceEvents();
     this.bindDiceEvents();
     this.bindModalEvents();
+    this.bindTokenEditorEvents();
+    this.bindTokenInspectEvents?.();
+    this.bindJournalEvents?.();
+    this.bindJournalShareEvents?.();
+    this.bindJournalPresentationEvents?.();
+    this.bindMapGridEditorEvents();
+  },
+
+  applyWorldCameraTransform(state) {
+    if (!this.els?.worldLayer || !state?.camera) return;
+    const sx = this._cameraShakeOffset?.x || 0;
+    const sy = this._cameraShakeOffset?.y || 0;
+    this.els.worldLayer.style.transform = `translate(${state.camera.x + sx}px, ${state.camera.y + sy}px) scale(${state.camera.zoom})`;
   },
 
   /* --------------------------------------------------------------------
      RENDERIZADO DE CAPAS Y PANELES
      -------------------------------------------------------------------- */
   render(state, opts = {}) {
+    if (opts.cameraOnly) {
+      this.applyWorldCameraTransform(state);
+      return;
+    }
+
+    if (opts.tokensOnly) {
+      if (opts.redrawFog) this.drawFogCanvas(state);
+      this.renderTokensLayer(state);
+      return;
+    }
+
     document.documentElement.setAttribute('data-theme', state.theme);
+    this.applyUiScaleToDom();
+    this.applyRailsSwappedToDom();
     this.els.themePopover?.querySelectorAll('[data-theme-pick]').forEach((btn) => {
       btn.classList.toggle('portal-btn-active', btn.dataset.themePick === state.theme);
     });
 
     // Cámara
-    this.els.worldLayer.style.transform = `translate(${state.camera.x}px, ${state.camera.y}px) scale(${state.camera.zoom})`;
+    this.applyWorldCameraTransform(state);
 
+    const roleChanged = this._lastFogRole !== state.role;
+    if (roleChanged) this._lastFogRole = state.role;
+    const themeChanged = this._lastFogTheme !== state.theme;
+    if (themeChanged) this._lastFogTheme = state.theme;
+    const shouldRedrawFog = Boolean(opts.redrawFog || roleChanged || themeChanged);
     if (opts.clearExplored) this.clearExploredMemory();
+    else if (opts.syncExplored || shouldRedrawFog) this.syncExploredMemoryFromState(state);
     if (opts.redrawMap) this.drawMapCanvas(state);
+    this.syncSceneAtmosphere?.(state);
+    this.drawWallShadowCanvas?.(state);
     if (opts.redrawGrid) this.drawGridCanvas(state);
     if (opts.redrawDraw) this.drawStrokesCanvas(state);
-    if (opts.redrawFog) this.drawFogCanvas(state);
+    if (shouldRedrawFog) this.drawFogCanvas(state);
 
     this.renderHudControls(state);
     this.renderCombatTracker(state);
@@ -539,9 +700,15 @@ export const View = {
     this.renderVectorOverlay(state);
     this.renderCharacterSheet(state);
     this.renderCompendium(state);
+    this.renderGmScreen(state);
+    this.renderJournal?.(state);
+    this.renderPublicClocksBar(state);
     this.renderDiceReadout(state);
     this.renderSequenceUI(state);
     this.renderHandoutModal(state);
+    this.renderTokenInspectModal?.(state);
+    this.renderJournalPresentationModal?.(state);
+    if (this.journalShareNoteId) this.renderJournalShareModal?.(state);
     if (this.els.systemModal?.classList.contains('is-open')) {
       this.renderSystemModal(state);
     }
@@ -565,35 +732,43 @@ export const View = {
         : `<option value="" disabled>(Sin enlaces externos aún)</option>`;
     }
 
-    const csLabel = Number(Number(state.grid.cellSize || 80).toFixed(1));
-    this.els.lblGridSizeDetail.textContent = `${csLabel}px · 1.5m`;
-    const opacityPct = Math.round(state.grid.opacity * 100);
-    this.els.lblGridOpacity.textContent = `${opacityPct}%`;
-    if (document.activeElement !== this.els.inpGridSize) {
-      this.els.inpGridSize.value = String(state.grid.cellSize);
-    }
-    if (document.activeElement !== this.els.inpGridOffX) {
-      this.els.inpGridOffX.value = String(state.grid.offsetX || 0);
-    }
-    if (document.activeElement !== this.els.inpGridOffY) {
-      this.els.inpGridOffY.value = String(state.grid.offsetY || 0);
-    }
-    this.els.rngGridOpacity.value = String(opacityPct);
-    this.els.chkGridSnap.checked = Boolean(state.grid.snap);
-
     const isPlayer = state.role === 'player';
     const isSpectator = Selector.isSpectator(state);
     this.els.btnToggleTokenDrawer?.classList.toggle('hidden', isPlayer);
-    this.els.btnToggleGridPopover?.classList.toggle('hidden', isPlayer);
+    this.els.btnToggleGmScreen?.classList.toggle('hidden', isPlayer);
+    this.els.btnToggleTokenDrawer?.classList.toggle('portal-btn-active', Boolean(!isPlayer && state.drawerOpen));
+    this.els.btnToggleGmScreen?.classList.toggle('portal-btn-active', Boolean(!isPlayer && state.gmScreenOpen));
     this.els.btnOpenDriveModal?.classList.toggle('hidden', isPlayer);
     this.els.btnOptOpenSystem?.classList.toggle('hidden', isPlayer);
-    this.els.btnToggleCombat?.classList.toggle('hidden', isPlayer);
+    const trackerVisibleToPlayer = Boolean(state.combat?.active) && state.systemConfig?.combatTrackerPublic !== false;
+    this.els.btnToggleCombat?.classList.toggle('hidden', isPlayer && !trackerVisibleToPlayer);
+    const showQuickNextTurn = !isPlayer && Boolean(state.combat?.active);
+    this.els.btnNextTurn?.classList.toggle('hidden', !showQuickNextTurn);
+    this.els.btnNextTurn?.classList.toggle('flex', showQuickNextTurn);
     this.els.btnToggleSheet?.classList.toggle('hidden', isSpectator);
     this.els.diceTrayBar?.classList.toggle('hidden', isSpectator);
     this.els.diceTrayBar?.classList.toggle('flex', !isSpectator);
 
+    this.els.roleSwitchGroup?.classList.toggle('hidden', !state.isHostGm);
     this.els.btnRoleGM.classList.toggle('is-active', !isPlayer);
     this.els.btnRolePlayer.classList.toggle('is-active', isPlayer);
+    if (this.els.uiScaleSeg) {
+      const curScale = Service.uiScale || 'normal';
+      this.els.uiScaleSeg.querySelectorAll('[data-ui-scale]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.uiScale === curScale);
+      });
+    }
+    if (this.els.lblUiScalePct) {
+      this.els.lblUiScalePct.textContent = `${Math.round((Service.getUiScale?.() || 1) * 100)}%`;
+    }
+    this.syncAudioControlsUi?.();
+    this.syncShadowModeUi?.();
+    if (this.els.railsSwapSeg) {
+      const swappedStr = Service.railsSwapped ? 'true' : 'false';
+      this.els.railsSwapSeg.querySelectorAll('[data-rails-swapped]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.railsSwapped === swappedStr);
+      });
+    }
     if (this.els.btnToggleCombat) {
       this.els.btnToggleCombat.classList.toggle('portal-btn-active', Boolean(state.combat?.active));
     }
@@ -608,7 +783,161 @@ export const View = {
     }
 
     const selTok = Selector.getSelectedToken(state);
-    this.els.characterSheetDrawer.classList.toggle('is-open', Boolean(!isSpectator && state.sheetOpen && selTok && Service.canControlToken(selTok)));
+    const sheetOpen = Boolean(!isSpectator && state.sheetOpen && selTok && Service.canControlToken(selTok));
+    const leftOpen = Boolean(sheetOpen || (!isPlayer && state.gmScreenOpen));
+    const rightOpen = Boolean((!isPlayer && state.drawerOpen) || state.journalOpen);
+
+    this.els.btnToggleSheet?.classList.toggle('portal-btn-active', sheetOpen);
+    this.els.btnToggleJournal?.classList.toggle('portal-btn-active', Boolean(state.journalOpen));
+    if (this.els.lblJournalUnread) {
+      const unread = Number(Service.journalUnreadCount) || 0;
+      this.els.lblJournalUnread.textContent = String(unread);
+      this.els.lblJournalUnread.classList.toggle('hidden', unread <= 0);
+    }
+    this.els.leftEdgeRail?.classList.toggle('hidden', isSpectator);
+    this.els.leftEdgeRail?.classList.toggle('is-hidden-by-drawer', leftOpen);
+    this.els.rightEdgeRail?.classList.toggle('is-hidden-by-drawer', rightOpen);
+
+    this.els.characterSheetDrawer.classList.toggle('is-open', sheetOpen);
     this.els.tokenDrawer.classList.toggle('is-open', Boolean(!isPlayer && state.drawerOpen));
+    this.els.gmScreenDrawer?.classList.toggle('is-open', Boolean(!isPlayer && state.gmScreenOpen));
+    this.els.journalDrawer?.classList.toggle('is-open', Boolean(state.journalOpen));
+  },
+
+  _getModalClosers() {
+    const els = this.els || {};
+    const state = Service.state;
+    const modalClosers = [
+      [
+        () => els.journalShareModal?.classList.contains('is-open') || Boolean(this.journalShareNoteId),
+        () => this.closeJournalShareModal?.()
+      ],
+      [
+        () => els.journalPresentationModal?.classList.contains('is-open') || Boolean(state.activeJournalPresentation),
+        () => {
+          els.journalPresentationModal?.classList.remove('is-open');
+          Service.closeJournalPresentation(false);
+        }
+      ],
+      [
+        () => els.handoutModal?.classList.contains('is-open') || Boolean(state.activeHandout?.url),
+        () => {
+          els.handoutModal?.classList.remove('is-open');
+          Service.closeHandout(false);
+        }
+      ],
+      [
+        () => els.tokenInspectModal?.classList.contains('is-open') || Boolean(state.inspectTokenId),
+        () => {
+          els.tokenInspectModal?.classList.remove('is-open');
+          Service.closeTokenInspection();
+        }
+      ],
+      [
+        () => Boolean(els.noteEditorModal && !els.noteEditorModal.classList.contains('hidden')),
+        () => this.closeNoteModal?.()
+      ],
+      [() => els.mapGridModal?.classList.contains('is-open'), () => this.closeMapGridEditor?.()],
+      [() => els.tokenEditorModal?.classList.contains('is-open'), () => this.closeTokenEditor?.()]
+    ];
+    for (const id of ['systemModal', 'roomModal', 'driveModal', 'syncModal']) {
+      modalClosers.push([
+        () => els[id]?.classList.contains('is-open'),
+        () => els[id]?.classList.remove('is-open')
+      ]);
+    }
+    return modalClosers;
+  },
+
+  /**
+   * Close active UI layers from top to bottom on Escape:
+   * 1) blocking modals/presentations, 2) floating popovers/chat/temp tools, 3) side drawers.
+   */
+  handleEscapeKey() {
+    const els = this.els || {};
+    const state = Service.state;
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && typeof active.blur === 'function') {
+      active.blur();
+    }
+
+    for (const [isOpen, close] of this._getModalClosers()) {
+      if (isOpen()) {
+        close();
+        return 'modal';
+      }
+    }
+
+    let closedOverlay = false;
+    let needsNotify = false;
+
+    if (els.contextIconMenu?.classList.contains('is-open')) {
+      this.hideContextMenu ? this.hideContextMenu() : els.contextIconMenu.classList.remove('is-open');
+      closedOverlay = true;
+    }
+    for (const id of ['optionsPopover', 'themePopover', 'profilePopover', 'playerTokenPickerPopover']) {
+      if (els[id]?.classList.contains('is-open')) {
+        els[id].classList.remove('is-open');
+        closedOverlay = true;
+      }
+    }
+    const controlledOverlays = [
+      [els.combatTrackerPopover, (open) => this.setCombatPopoverOpen?.(open)],
+      [els.chatDrawer, (open) => this.setChatDrawerOpen?.(open), () => Boolean(Service.chatOpen)],
+      [els.diceHistoryPopover, (open) => this.setDiceHistoryOpen?.(open)],
+      [els.diceStylePopover, (open) => this.setDicePopoverOpen?.(open)]
+    ];
+    for (const [el, setter, extraCheck] of controlledOverlays) {
+      if (el?.classList.contains('is-open') || extraCheck?.()) {
+        setter(false);
+        el?.classList.remove('is-open');
+        closedOverlay = true;
+      }
+    }
+    if (state.wallAnchor) {
+      state.wallAnchor = null;
+      closedOverlay = true;
+      needsNotify = true;
+    }
+    if (Array.isArray(state.dice?.hand) && state.dice.hand.length > 0) {
+      Service.clearDiceHand();
+      closedOverlay = true;
+      needsNotify = false;
+    }
+    if (state.activeSequence || state.tool === 'areaSelect') {
+      Service.clearActiveSequence();
+      closedOverlay = true;
+      needsNotify = false;
+    }
+    if (closedOverlay) {
+      if (needsNotify) Service.notify({ skipVaultSave: true, skipPeerSync: true });
+      return 'overlay';
+    }
+
+    if (state.sheetOpen || state.gmScreenOpen || state.drawerOpen || state.journalOpen) {
+      state.sheetOpen = false;
+      state.gmScreenOpen = false;
+      state.drawerOpen = false;
+      state.journalOpen = false;
+      Service._minimizedDrawersSnapshot = null;
+      Service.notify({ skipVaultSave: true, skipPeerSync: true });
+      return 'drawers';
+    }
+    return null;
+  },
+
+  /**
+   * Toggle temporary minimization of side drawers on Space when no modal, chat, or text input is active.
+   */
+  handleSpaceKey() {
+    const els = this.els || {};
+    if (this._getModalClosers().some(([isOpen]) => isOpen())) return null;
+    if (Service.chatOpen || els.chatDrawer?.classList.contains('is-open')) return null;
+
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (active && active.tagName === 'BUTTON' && typeof active.blur === 'function') {
+      active.blur();
+    }
+    return Service.toggleDrawersMinimize();
   }
 };

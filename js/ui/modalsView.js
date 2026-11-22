@@ -1,11 +1,11 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261117b1';
-import { CartridgePacker } from '../services/cartridgePacker.js?v=20261117b1';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
+import { BrowserVault } from '../services/browserVault.js?v=20261121a6';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261121a6';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261121a6';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261117b1';
-import { createInitialState, generateRoomCode } from '../core/model.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261121a6';
+import { createInitialState, generateRoomCode } from '../core/model.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
 
 /**
  * Room/Cartridge/Shelf modal, Google Drive modal, Sync/Event Log modal & Handouts modal.
@@ -47,7 +47,7 @@ export const ModalsViewMethods = {
       Service.state.role = 'gm';
       RealtimeBridge.connect(nextCode, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
       this.startPresenceHeartbeat();
-      Service.notify();
+      Service.notify({ redrawFog: true });
       this.renderRoomModal(Service.state);
       this.showRoomToast(`Sala efímera ${nextCode} activada.`);
     });
@@ -60,7 +60,7 @@ export const ModalsViewMethods = {
       await Service.restoreFromVault();
       RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
       this.startPresenceHeartbeat();
-      Service.notify();
+      Service.notify({ redrawFog: true });
       this.renderRoomModal(Service.state);
       this.showRoomToast(`Conectado a sala ${code}.`);
     });
@@ -116,6 +116,8 @@ export const ModalsViewMethods = {
       const title = (this.els.inpModuleTitle.value.trim() || 'Modulo_VTT').replace(/[^a-zA-Z0-9_-]/g, '_');
       Service.state.room.moduleTitle = title;
       try {
+        Service.flushExploredMask();
+        Service.saveActiveSceneLayers();
         const blob = await CartridgePacker.buildPortalBlob(Service.state);
         const kbSize = Math.max(1, Math.round(blob.size / 1024));
         const url = URL.createObjectURL(blob);
@@ -163,6 +165,8 @@ export const ModalsViewMethods = {
       const code = Service.state.room.code;
       await BrowserVault.clearRoom(code);
       Service.state = createInitialState();
+      Service.state.isHostGm = true;
+      Service.state.role = 'gm';
       Service.state.room.code = code;
       Service.notify({ redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
       this.els.btnResetVaultConfirm.classList.add('hidden');
@@ -202,7 +206,7 @@ export const ModalsViewMethods = {
       this.els.syncModal.classList.remove('is-open');
     });
     this.els.btnBroadcastFullNow.addEventListener('click', () => {
-      RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(Service.state) });
+      Service.syncWorldToPeers();
       this.showActionToast('Estado completo enviado a la sala.');
     });
     this.els.btnCompactEvents.addEventListener('click', () => {

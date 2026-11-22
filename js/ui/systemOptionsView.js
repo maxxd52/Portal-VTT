@@ -2,10 +2,11 @@
    SYSTEM OPTIONS VIEW: PREFERENCIAS ESTILO APPLE (REGLAS, INICIATIVA Y ESTADOS)
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
-import { SVG_ICONS, SystemBlockBuilderViewMethods } from './systemBlockBuilderView.js?v=20261117b1';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
+import { displayValueToMeters, formatDistance, metersToDisplayValue } from '../utils/lightingModel.js?v=20261121a6';
+import { SVG_ICONS, SystemBlockBuilderViewMethods } from './systemBlockBuilderView.js?v=20261121a6';
 
 export const SystemOptionsViewMethods = {
   ...SystemBlockBuilderViewMethods,
@@ -31,7 +32,7 @@ export const SystemOptionsViewMethods = {
       cfg = Service.state.systemConfig;
     }
     const enabledTabs = cfg.enabledTabs || { skills: true, traits: true, inventory: true };
-    const activeSection = ['rules', 'sheet', 'statuses'].includes(this.sysModalSection) ? this.sysModalSection : 'rules';
+    const activeSection = ['rules', 'sheet', 'statuses', 'gmscreen'].includes(this.sysModalSection) ? this.sysModalSection : 'rules';
 
     if (this.els.lblSystemModalTitle) {
       this.els.lblSystemModalTitle.textContent = `${state.room?.moduleTitle || state.room?.code || 'Portal'} · ${presetInfo.label}`;
@@ -117,6 +118,7 @@ export const SystemOptionsViewMethods = {
     const initOp = this.sysInitFormulaOp === '-' ? '-' : '+';
     const initGrouping = cfg.initGrouping === 'individual' ? 'individual' : 'group';
     const initNpcMode = cfg.initNpcMode === 'manual' ? 'manual' : 'fast';
+    const trackerPublic = cfg.combatTrackerPublic !== false;
     const initFormulaVal = cfg.initiativeFormula ?? (isGeneric ? '1d20+@agi' : '1d20+@des');
 
     const renderInitiativeSection = () => `
@@ -154,6 +156,16 @@ export const SystemOptionsViewMethods = {
             <div class="portal-seg inline-grid grid-cols-2 gap-0.5 text-[10.5px] shrink-0">
               <button type="button" data-sys-init-npc-mode="fast" class="portal-seg-btn px-2.5 py-1 font-medium ${initNpcMode === 'fast' ? 'is-active' : ''}">Rápida</button>
               <button type="button" data-sys-init-npc-mode="manual" class="portal-seg-btn px-2.5 py-1 font-medium ${initNpcMode === 'manual' ? 'is-active' : ''}">Manual</button>
+            </div>
+          </div>
+          <div class="portal-settings-row">
+            <div class="flex flex-col min-w-0">
+              <span class="text-xs font-medium">Visibilidad del Tracker</span>
+              <span class="text-[10.5px] opacity-60">Define si los jugadores pueden desplegar la lista de turnos o solo ven el foco activo.</span>
+            </div>
+            <div class="portal-seg inline-grid grid-cols-2 gap-0.5 text-[10.5px] shrink-0">
+              <button type="button" data-sys-tracker-public="1" class="portal-seg-btn px-2.5 py-1 font-medium ${trackerPublic ? 'is-active' : ''}">Todos</button>
+              <button type="button" data-sys-tracker-public="0" class="portal-seg-btn px-2.5 py-1 font-medium ${!trackerPublic ? 'is-active' : ''}">Solo Narrador</button>
             </div>
           </div>
         </div>
@@ -269,7 +281,7 @@ export const SystemOptionsViewMethods = {
                 </div>
                 ${
                   rule === 'low'
-                    ? '<p class="text-[10px] opacity-65 leading-snug">En <b>A la baja</b>, usá dado limpio arriba (ej. <code class="font-mono-tech">1d20</code> o <code class="font-mono-tech">1d100</code> sin <code class="font-mono-tech">+@stat</code>): compara ≤ valor del bloque y 1 es crítico.</p>'
+                    ? '<p class="text-[10px] opacity-65 leading-snug">En <b>A la baja</b>, usa dado limpio arriba (ej. <code class="font-mono-tech">1d20</code> o <code class="font-mono-tech">1d100</code> sin <code class="font-mono-tech">+@stat</code>): compara ≤ valor del bloque y 1 es crítico.</p>'
                     : ''
                 }
               </div>
@@ -306,6 +318,71 @@ export const SystemOptionsViewMethods = {
         ${renderTrayToolsSection()}
         ${genericRollAndOutcome}
         ${renderInitiativeSection()}
+        ${(() => {
+          const v = Selector.getSystemVisionConfig(state);
+          const u = v.distanceUnit;
+          const isFt = u === 'ft';
+          const visDisp = metersToDisplayValue(v.defaultVisionMeters, u);
+          const torchDisp = metersToDisplayValue(v.torchMeters, u);
+          const lanternDisp = metersToDisplayValue(v.lanternMeters, u);
+          return `
+            <div class="flex flex-col gap-1.5">
+              <span class="portal-settings-label">Visión e Iluminación</span>
+              <div class="portal-settings-group">
+                <div class="portal-settings-row">
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-xs font-medium">Unidad de distancia</span>
+                    <span class="text-[10.5px] opacity-60">Aplica a reglas, visión base y luces</span>
+                  </div>
+                  <div class="portal-seg inline-grid grid-cols-2 gap-0.5 text-[10.5px] shrink-0">
+                    <button type="button" data-sys-dist-unit="m" class="portal-seg-btn px-2.5 py-1 font-medium ${!isFt ? 'is-active' : ''}">Metros (m)</button>
+                    <button type="button" data-sys-dist-unit="ft" class="portal-seg-btn px-2.5 py-1 font-medium ${isFt ? 'is-active' : ''}">Pies (ft)</button>
+                  </div>
+                </div>
+                <div class="portal-settings-col">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-medium">Visión base de protagonistas</span>
+                    <span id="lblSysDefaultVision" class="text-[11px] font-semibold font-mono-tech tabular-nums">${esc(formatDistance(v.defaultVisionMeters, u))}</span>
+                  </div>
+                  <input type="range" id="rngSysDefaultVision" min="0" max="${isFt ? 120 : 36}" step="${isFt ? 5 : 0.5}" value="${visDisp}" class="portal-slider" />
+                  <span class="text-[10px] opacity-55">Alcance circular que heredan las fichas aliadas salvo ajuste propio.</span>
+                </div>
+                <div class="portal-settings-row flex-wrap gap-2">
+                  <span class="text-xs font-medium">Luces portátiles</span>
+                  <div class="flex items-center gap-2 text-[11px]">
+                    <label class="flex items-center gap-1">
+                      <span class="opacity-65">Antorcha</span>
+                      <input type="number" id="inpSysTorchDist" min="${isFt ? 5 : 0.5}" max="${isFt ? 200 : 60}" step="${isFt ? 5 : 0.5}" value="${torchDisp}" class="portal-input w-14 px-1.5 py-1 text-center text-[11px] font-semibold tabular-nums" />
+                      <span class="opacity-55">${u}</span>
+                    </label>
+                    <label class="flex items-center gap-1">
+                      <span class="opacity-65">Linterna</span>
+                      <input type="number" id="inpSysLanternDist" min="${isFt ? 5 : 0.5}" max="${isFt ? 200 : 60}" step="${isFt ? 5 : 0.5}" value="${lanternDisp}" class="portal-input w-14 px-1.5 py-1 text-center text-[11px] font-semibold tabular-nums" />
+                      <span class="opacity-55">${u}</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="portal-settings-row">
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-xs font-medium">Visión de jugadores</span>
+                    <span class="text-[10.5px] opacity-60">Individual limita la vista a los tokens asignados a cada jugador.</span>
+                  </div>
+                  <div class="portal-seg inline-grid grid-cols-2 gap-0.5 text-[10.5px] shrink-0">
+                    <button type="button" data-sys-vision-mode="shared" class="portal-seg-btn px-2.5 py-1 font-medium ${v.visionMode !== 'individual' ? 'is-active' : ''}">Compartida</button>
+                    <button type="button" data-sys-vision-mode="individual" class="portal-seg-btn px-2.5 py-1 font-medium ${v.visionMode === 'individual' ? 'is-active' : ''}">Individual</button>
+                  </div>
+                </div>
+                <label class="portal-settings-row cursor-pointer select-none">
+                  <span class="flex flex-col min-w-0">
+                    <span class="text-xs font-medium leading-tight">Recordar área explorada por defecto</span>
+                    <span class="text-[10.5px] opacity-60 leading-snug mt-0.5">Conserva en penumbra las zonas ya visitadas de cada escenario</span>
+                  </span>
+                  ${renderSwitch('id="chkSysRememberExplored"', v.rememberExplored !== false)}
+                </label>
+              </div>
+            </div>
+          `;
+        })()}
       `;
     };
 
@@ -378,10 +455,11 @@ export const SystemOptionsViewMethods = {
 
     body.innerHTML = `
       <div class="flex flex-col gap-3">
-        <div class="portal-seg grid-cols-3 gap-1">
-          <button type="button" data-sys-nav-tab="rules" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold ${activeSection === 'rules' ? 'is-active' : ''}">Reglas y Dados</button>
-          <button type="button" data-sys-nav-tab="sheet" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold ${activeSection === 'sheet' ? 'is-active' : ''}">${isGeneric ? 'Ficha y Bloques' : 'Opciones de Ficha'}</button>
-          <button type="button" data-sys-nav-tab="statuses" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold ${activeSection === 'statuses' ? 'is-active' : ''}">Estados (${statuses.length})</button>
+        <div class="portal-seg grid-cols-4 gap-1">
+          <button type="button" data-sys-nav-tab="rules" class="portal-seg-btn py-1.5 text-[11px] font-semibold ${activeSection === 'rules' ? 'is-active' : ''}">Reglas y Dados</button>
+          <button type="button" data-sys-nav-tab="sheet" class="portal-seg-btn py-1.5 text-[11px] font-semibold ${activeSection === 'sheet' ? 'is-active' : ''}">${isGeneric ? 'Ficha y Bloques' : 'Opciones de Ficha'}</button>
+          <button type="button" data-sys-nav-tab="statuses" class="portal-seg-btn py-1.5 text-[11px] font-semibold ${activeSection === 'statuses' ? 'is-active' : ''}">Estados (${statuses.length})</button>
+          <button type="button" data-sys-nav-tab="gmscreen" class="portal-seg-btn py-1.5 text-[11px] font-semibold ${activeSection === 'gmscreen' ? 'is-active' : ''}">Pantalla</button>
         </div>
         <div data-sys-pane="rules" class="${activeSection === 'rules' ? 'flex' : 'hidden'} flex-col gap-3">
           ${renderRulesPane()}
@@ -391,6 +469,9 @@ export const SystemOptionsViewMethods = {
         </div>
         <div data-sys-pane="statuses" class="${activeSection === 'statuses' ? 'flex' : 'hidden'} flex-col gap-3">
           ${renderGenericStatusesPane()}
+        </div>
+        <div data-sys-pane="gmscreen" class="${activeSection === 'gmscreen' ? 'flex' : 'hidden'} flex-col gap-3">
+          ${this.renderGmScreenConfigPane?.(state) || ''}
         </div>
         ${footerHtml}
       </div>
@@ -496,6 +577,11 @@ export const SystemOptionsViewMethods = {
         Service.updateSystemConfig({ initNpcMode: btn.dataset.sysInitNpcMode === 'manual' ? 'manual' : 'fast' });
       });
     });
+    body.querySelectorAll('[data-sys-tracker-public]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        Service.updateSystemConfig({ combatTrackerPublic: btn.dataset.sysTrackerPublic === '1' });
+      });
+    });
     body.querySelector('#inpSysInitFormula')?.addEventListener('change', (e) => {
       Service.updateSystemConfig({ initiativeFormula: e.target.value.trim() });
     });
@@ -583,6 +669,39 @@ export const SystemOptionsViewMethods = {
       btn.addEventListener('click', () => Service.toggleSystemTrayTool(btn.dataset.sysTrayTool));
     });
 
+    body.querySelectorAll('[data-sys-dist-unit]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        Service.updateSystemVisionConfig({ distanceUnit: btn.dataset.sysDistUnit === 'ft' ? 'ft' : 'm' });
+      });
+    });
+    const rngVis = body.querySelector('#rngSysDefaultVision');
+    const lblVis = body.querySelector('#lblSysDefaultVision');
+    rngVis?.addEventListener('input', () => {
+      const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
+      const meters = displayValueToMeters(Number(rngVis.value) || 0, u);
+      if (lblVis) lblVis.textContent = formatDistance(meters, u);
+    });
+    rngVis?.addEventListener('change', () => {
+      const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
+      Service.updateSystemVisionConfig({ defaultVisionMeters: displayValueToMeters(Number(rngVis.value) || 0, u) });
+    });
+    body.querySelector('#inpSysTorchDist')?.addEventListener('change', (e) => {
+      const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
+      Service.updateSystemVisionConfig({ torchMeters: displayValueToMeters(Number(e.target.value) || 1, u) });
+    });
+    body.querySelector('#inpSysLanternDist')?.addEventListener('change', (e) => {
+      const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
+      Service.updateSystemVisionConfig({ lanternMeters: displayValueToMeters(Number(e.target.value) || 1, u) });
+    });
+    body.querySelectorAll('[data-sys-vision-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        Service.updateSystemVisionConfig({ visionMode: btn.dataset.sysVisionMode === 'individual' ? 'individual' : 'shared' });
+      });
+    });
+    body.querySelector('#chkSysRememberExplored')?.addEventListener('change', (e) => {
+      Service.updateSystemVisionConfig({ rememberExplored: e.target.checked });
+    });
+
     body.querySelector('#btnSysOpenCompendium')?.addEventListener('click', () => {
       this.els.systemModal?.classList.remove('is-open');
       Service.state.drawerOpen = true;
@@ -591,5 +710,6 @@ export const SystemOptionsViewMethods = {
     body.querySelector('#btnSysDone')?.addEventListener('click', () => this.els.systemModal?.classList.remove('is-open'));
 
     this.bindSystemBlockBuilderEvents(body);
+    this.bindGmScreenConfigEvents?.(body);
   }
 };

@@ -2,9 +2,10 @@
    CONTEXT MENU VIEW: MENÚ CONTEXTUAL SEPARADO PARA TOKEN VS MAPA
    ========================================================================== */
 
-import { COMPENDIUM_ACTORS } from '../data/compendium.js';
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
+import { formatDistance, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261121a6';
 
 export const ContextMenuViewMethods = {
   openContextMenu(clientX, clientY) {
@@ -19,11 +20,12 @@ export const ContextMenuViewMethods = {
       this.renderMapContextMenu(state);
     }
 
-    const menuHeight = isTokenCtx ? 250 : 185;
-    const x = Math.min(window.innerWidth - 285, Math.max(8, clientX));
-    const y = Math.min(window.innerHeight - menuHeight, Math.max(8, clientY));
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
+    const scale = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
+    const menuHeight = isTokenCtx ? 250 : 215;
+    const x = Math.min(window.innerWidth / scale - 285, Math.max(8, clientX / scale));
+    const y = Math.min(window.innerHeight / scale - menuHeight, Math.max(8, clientY / scale));
+    menu.style.left = `${Math.round(x)}px`;
+    menu.style.top = `${Math.round(y)}px`;
     menu.classList.add('is-open');
   },
 
@@ -87,6 +89,10 @@ export const ContextMenuViewMethods = {
     const statusDefs = Selector.getSystemStatuses(state);
     const sizeVal = Number(tok.size) || 1;
     const isAlly = tok.isAlly !== false;
+    const visionCfg = Selector.getSystemVisionConfig(state);
+    const lightMeters = resolveTokenLightMeters(tok);
+    const torchLabel = formatDistance(visionCfg.torchMeters, visionCfg.distanceUnit);
+    const lanternLabel = formatDistance(visionCfg.lanternMeters, visionCfg.distanceUnit);
 
     this.els.contextSubOptionsRow.className = 'grid grid-cols-5 gap-1 pt-1 border-t';
     this.els.contextSubOptionsRow.innerHTML =
@@ -106,7 +112,7 @@ export const ContextMenuViewMethods = {
         .join('') +
       `
       <div class="col-span-5 grid grid-cols-3 gap-1 pt-1 border-t" style="border-color: var(--border-subtle);">
-        <button type="button" data-ctx-extra="light" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${tok.lightRadius ? 'portal-btn-active' : ''}" title="Alternar Luz del Token (Off / 20ft / 40ft)">💡 ${tok.lightRadius ? (tok.lightRadius === 360 ? '40ft' : '20ft') : 'Luz'}</button>
+        <button type="button" data-ctx-extra="light" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${lightMeters > 0 ? 'portal-btn-active' : ''}" title="Alternar Luz del Token (Apagada / ${torchLabel} / ${lanternLabel})">💡 ${lightMeters > 0 ? formatDistance(lightMeters, visionCfg.distanceUnit) : 'Luz'}</button>
         <button type="button" data-ctx-extra="aura" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${tok.auraRadius ? 'portal-btn-active' : ''}" title="Alternar Aura del Token (Off / 10ft / 15ft)">⭕ ${tok.auraRadius ? (tok.auraRadius === 135 ? '15ft' : '10ft') : 'Aura'}</button>
         <button type="button" data-ctx-extra="owner" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${tok.ownerId ? 'portal-btn-active' : ''}" title="Propiedad de ficha (Libre / Solo DJ o Reclamar)">🔑 ${tok.ownerId === 'gm' ? 'Solo DJ' : tok.ownerId ? 'Mía' : 'Libre'}</button>
       </div>
@@ -167,14 +173,14 @@ export const ContextMenuViewMethods = {
       btn.classList.toggle('portal-btn-active', btn.dataset.ctxTool === state.tool);
     });
 
-    this.els.contextDynamicRow.className = 'grid grid-cols-6 gap-1 pt-1 border-t';
+    this.els.contextDynamicRow.className = 'grid grid-cols-5 gap-1 pt-1 border-t';
     this.els.contextDynamicRow.innerHTML = `
       <button type="button" data-ctx-act="ping-here" class="portal-subpanel portal-btn h-8" title="Ping Aquí">📡</button>
       <button type="button" data-ctx-act="add-note" class="portal-subpanel portal-btn h-8" title="Fijar Nota Aquí">📌</button>
       <button type="button" data-ctx-act="spawn-here" class="portal-subpanel portal-btn h-8" title="Invocar Ficha Aquí">➕</button>
-      <button type="button" data-ctx-act="toggle-dynlight" class="portal-subpanel portal-btn h-8 ${state.dynamicLighting ? 'portal-btn-active' : ''}" title="Alternar Luz Dinámica">💡</button>
+      <button type="button" data-ctx-act="toggle-dynlight" class="portal-subpanel portal-btn h-8 ${state.dynamicLighting ? 'portal-btn-active' : ''}" title="Alternar Luz Dinámica del Escenario">💡</button>
       <button type="button" data-ctx-act="roll-d20" class="portal-subpanel portal-btn h-8 font-mono-tech font-bold" title="Tirar d20">d20</button>
-      <button type="button" data-ctx-act="clear-fog" class="portal-subpanel portal-btn h-8" title="Limpiar Niebla">🧹</button>
+      <button type="button" data-ctx-act="open-grid" class="col-span-5 portal-subpanel portal-btn h-7 text-[11px] font-medium mt-0.5" title="Grilla e Iluminación del escenario">⚙️ Escenario (Grilla e Iluminación)</button>
     `;
 
     this.els.contextDynamicRow.querySelectorAll('[data-ctx-act]').forEach((btn) => {
@@ -186,13 +192,12 @@ export const ContextMenuViewMethods = {
           await Service.spawnActorFromTemplate(COMPENDIUM_ACTORS[0], this.ctxWorldPos.x, this.ctxWorldPos.y);
         } else if (act === 'toggle-dynlight') {
           Service.toggleDynamicLighting();
-          this.showActionToast(Service.state.dynamicLighting ? '💡 Luz Dinámica activada' : '💡 Luz Dinámica apagada');
+          this.showActionToast(
+            Service.state.dynamicLighting ? '💡 Luz dinámica activada en este escenario' : '☀️ Luz ambiental activada en este escenario'
+          );
         } else if (act === 'roll-d20') Service.rollDice(20);
-        else if (act === 'clear-fog') {
-          Service.pushUndoSnapshot();
-          Service.state.fogRects = [];
-          this.clearExploredMemory();
-          Service.notify({ redrawFog: true });
+        else if (act === 'open-grid') {
+          this.openMapGridEditorForActiveScene?.();
         }
         this.hideContextMenu();
       });
@@ -214,24 +219,15 @@ export const ContextMenuViewMethods = {
           this.hideContextMenu();
         });
       });
-    } else if (state.tool === 'fog') {
-      this.els.contextSubOptionsRow.className = 'flex items-center justify-between gap-1 pt-1 border-t';
-      this.els.contextSubOptionsRow.innerHTML = `
-        <button type="button" data-ctx-fog="reveal" class="portal-subpanel portal-btn flex-1 py-1 text-[11px] ${state.fogMode === 'reveal' ? 'portal-btn-active' : ''}">👁️ Revelar</button>
-        <button type="button" data-ctx-fog="hide" class="portal-subpanel portal-btn flex-1 py-1 text-[11px] ${state.fogMode === 'hide' ? 'portal-btn-active' : ''}">☁️ Cubrir</button>
-      `;
-      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-fog]').forEach((b) => {
-        b.addEventListener('click', () => {
-          Service.state.fogMode = b.dataset.ctxFog;
-          Service.notify();
-          this.hideContextMenu();
-        });
-      });
     } else if (state.tool === 'wall') {
-      this.els.contextSubOptionsRow.className = 'flex items-center justify-between gap-1 pt-1 border-t';
+      this.els.contextSubOptionsRow.className = 'flex flex-wrap items-center gap-1 pt-1 border-t';
+      const wt = state.wallType || 'wall';
       this.els.contextSubOptionsRow.innerHTML = `
-        <button type="button" data-ctx-wall="wall" class="portal-subpanel portal-btn flex-1 py-1 text-[11px] ${state.wallType === 'wall' ? 'portal-btn-active' : ''}">🧱 Muro</button>
-        <button type="button" data-ctx-wall="door" class="portal-subpanel portal-btn flex-1 py-1 text-[11px] ${state.wallType === 'door' ? 'portal-btn-active' : ''}">🚪 Puerta</button>
+        <button type="button" data-ctx-wall="wall" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'wall' ? 'portal-btn-active' : ''}" title="Muro sólido (Alt: libre)">🧱 Muro</button>
+        <button type="button" data-ctx-wall="terrain" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'terrain' ? 'portal-btn-active' : ''}" title="Pilar / Terreno: se ve el obstáculo y bloquea detrás (Alt: libre)">🏛 Pilar</button>
+        <button type="button" data-ctx-wall="door" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'door' ? 'portal-btn-active' : ''}" title="Puerta clicable">🚪 Puerta</button>
+        <button type="button" data-ctx-wall="secret" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'secret' ? 'portal-btn-active' : ''}" title="Puerta secreta (solo visible para el DJ cerrada)">🔮 Secreta</button>
+        <button type="button" data-ctx-wall="erase" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'erase' ? 'portal-btn-active' : ''}" title="Borrar muro al hacer clic">🗑</button>
         <button type="button" data-ctx-wall="undo" class="portal-subpanel portal-btn px-2 py-1 text-[11px]" title="Deshacer último muro">↩</button>
       `;
       this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-wall]').forEach((b) => {
@@ -240,6 +236,7 @@ export const ContextMenuViewMethods = {
           if (mode === 'undo') Service.removeLastWall();
           else {
             Service.state.wallType = mode;
+            Service.state.wallAnchor = null;
             Service.notify();
           }
           this.hideContextMenu();
@@ -296,11 +293,12 @@ export const ContextMenuViewMethods = {
       });
     });
 
+    const scale = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
     const estHeight = Math.max(110, 56 + actions.length * 36);
-    const x = Math.min(window.innerWidth - 285, Math.max(8, clientX));
-    const y = Math.min(window.innerHeight - estHeight, Math.max(8, clientY));
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
+    const x = Math.min(window.innerWidth / scale - 285, Math.max(8, clientX / scale));
+    const y = Math.min(window.innerHeight / scale - estHeight, Math.max(8, clientY / scale));
+    menu.style.left = `${Math.round(x)}px`;
+    menu.style.top = `${Math.round(y)}px`;
     menu.classList.add('is-open');
   }
 };

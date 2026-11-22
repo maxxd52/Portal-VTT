@@ -2,11 +2,38 @@
    SHEET VIEW: FICHA DE PERSONAJE, ATRIBUTOS, HABILIDADES, RASGOS E INVENTARIO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
+import {
+  displayValueToMeters,
+  formatDistance,
+  hasExplicitTokenVision,
+  metersToDisplayValue,
+  resolveTokenLightMeters
+} from '../utils/lightingModel.js?v=20261121a6';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
+    if (this.els.sheetPortraitBox) {
+      this.els.sheetPortraitBox.addEventListener('click', () => {
+        const tok = Selector.getSelectedToken(Service.state);
+        if (!tok || !Service.canControlToken(tok)) return;
+        this.openTokenEditor?.({
+          initialUrl: tok.imageUrl || '',
+          defaultColor: tok.color || '#8b5cf6',
+          canRemove: Boolean(tok.imageUrl),
+          onApply: (dataUrl) => {
+            Service.updateTokenImage(tok.id, dataUrl);
+            this.showActionToast(`Imagen de ${tok.name} actualizada.`);
+          },
+          onRemove: () => {
+            Service.updateTokenImage(tok.id, '');
+            this.showActionToast(`Imagen de ${tok.name} quitada.`);
+          }
+        });
+      });
+    }
+
     this.els.inpSheetName.addEventListener('change', (e) => {
       const tok = Selector.getSelectedToken(Service.state);
       if (tok && e.target.value.trim()) {
@@ -55,6 +82,43 @@ export const SheetViewMethods = {
         if (!tok) return;
         tok.speed = e.target.value.trim() || '30 ft';
         Service.notify();
+      });
+    }
+    this.els.inpSheetPublicDesc?.addEventListener('change', (e) => {
+      const tok = Selector.getSelectedToken(Service.state);
+      if (!tok || !Service.canControlToken(tok)) return;
+      Service.updateTokenPublicDescription(tok.id, e.target.value);
+    });
+    this.els.inpSheetPrivateNotes?.addEventListener('change', (e) => {
+      const tok = Selector.getSelectedToken(Service.state);
+      if (!tok || !Service.canControlToken(tok)) return;
+      Service.updateTokenPrivateNotes(tok.id, e.target.value);
+    });
+    if (this.els.inpSheetVision) {
+      this.els.inpSheetVision.addEventListener('change', (e) => {
+        const tok = Selector.getSelectedToken(Service.state);
+        if (!tok || !Service.canControlToken(tok)) return;
+        const raw = e.target.value.trim();
+        if (raw === '') {
+          Service.setTokenVision(tok.id, null);
+        } else {
+          const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
+          Service.setTokenVision(tok.id, displayValueToMeters(Number(raw), u));
+        }
+      });
+    }
+    if (this.els.btnSheetVisionReset) {
+      this.els.btnSheetVisionReset.addEventListener('click', () => {
+        const tok = Selector.getSelectedToken(Service.state);
+        if (!tok || !Service.canControlToken(tok)) return;
+        Service.setTokenVision(tok.id, null);
+      });
+    }
+    if (this.els.btnSheetLightCycle) {
+      this.els.btnSheetLightCycle.addEventListener('click', () => {
+        const tok = Selector.getSelectedToken(Service.state);
+        if (!tok || !Service.canControlToken(tok)) return;
+        Service.cycleTokenLight(tok.id);
       });
     }
     if (this.els.btnLoadDnd55Skills) {
@@ -264,10 +328,16 @@ export const SheetViewMethods = {
       }
     }
 
-    this.els.sheetPortraitBox.style.backgroundColor = tok.color;
-    this.els.sheetPortraitBox.innerHTML = tok.imageUrl
-      ? `<img src="${tok.imageUrl}" alt="${tok.name}" class="w-full h-full object-cover" />`
-      : tok.name.slice(0, 2).toUpperCase();
+    const hasImg = Boolean(tok.imageUrl);
+    this.els.sheetPortraitBox.style.backgroundColor = hasImg ? 'transparent' : tok.color;
+    this.els.sheetPortraitBox.classList.toggle('rounded-full', !hasImg);
+    this.els.sheetPortraitBox.classList.toggle('overflow-hidden', !hasImg);
+    this.els.sheetPortraitBox.classList.toggle('rounded-xl', hasImg);
+    this.els.sheetPortraitBox.classList.toggle('border-white/25', !hasImg);
+    this.els.sheetPortraitBox.classList.toggle('border-transparent', hasImg);
+    this.els.sheetPortraitBox.innerHTML = hasImg
+      ? `<img src="${this.escapeHtml(tok.imageUrl)}" alt="${this.escapeHtml(tok.name)}" class="w-full h-full object-contain pointer-events-none" />`
+      : `<span>${this.escapeHtml(tok.name.slice(0, 2).toUpperCase())}</span>`;
 
     if (document.activeElement !== this.els.inpSheetName) {
       this.els.inpSheetName.value = tok.name;
@@ -292,10 +362,43 @@ export const SheetViewMethods = {
     if (this.els.inpSheetSpeed && document.activeElement !== this.els.inpSheetSpeed) {
       this.els.inpSheetSpeed.value = tok.speed || '30 ft';
     }
+    if (this.els.inpSheetPublicDesc && document.activeElement !== this.els.inpSheetPublicDesc) {
+      this.els.inpSheetPublicDesc.value = tok.publicDescription || '';
+    }
+    if (this.els.inpSheetPrivateNotes && document.activeElement !== this.els.inpSheetPrivateNotes) {
+      this.els.inpSheetPrivateNotes.value = tok.privateNotes || '';
+    }
+
+    const visionCfg = Selector.getSystemVisionConfig(state);
+    const vUnit = visionCfg.distanceUnit;
+    const isAllyTok = tok.isAlly !== false;
+    const customVision = hasExplicitTokenVision(tok);
+    const lightMeters = resolveTokenLightMeters(tok);
+    if (this.els.sheetVisionBox) {
+      this.els.sheetVisionBox.classList.toggle('hidden', !isAllyTok);
+    }
+    if (this.els.sheetLightBox) {
+      this.els.sheetLightBox.classList.toggle('col-span-2', !isAllyTok);
+    }
+    if (this.els.inpSheetVision && document.activeElement !== this.els.inpSheetVision) {
+      this.els.inpSheetVision.value = customVision ? String(metersToDisplayValue(tok.visionMeters, vUnit)) : '';
+      this.els.inpSheetVision.placeholder = String(metersToDisplayValue(visionCfg.defaultVisionMeters, vUnit));
+      this.els.inpSheetVision.step = vUnit === 'ft' ? '5' : '0.5';
+    }
+    if (this.els.lblSheetVisionUnit) {
+      this.els.lblSheetVisionUnit.textContent = vUnit;
+    }
+    if (this.els.btnSheetVisionReset) {
+      this.els.btnSheetVisionReset.classList.toggle('hidden', !customVision);
+    }
+    if (this.els.btnSheetLightCycle) {
+      this.els.btnSheetLightCycle.textContent = lightMeters > 0 ? formatDistance(lightMeters, vUnit) : 'Apagada';
+      this.els.btnSheetLightCycle.classList.toggle('portal-btn-accent', lightMeters > 0);
+    }
 
     const sysCfg = state.systemConfig || {};
-    const sysBlocks = Array.isArray(sysCfg.sheetBlocks) ? sysCfg.sheetBlocks : null;
-    const hasBlocks = Boolean(sysBlocks);
+    const hasBlocks = Array.isArray(sysCfg.sheetBlocks);
+    const sysBlocks = hasBlocks ? Selector.getSystemSheetBlocks(state) : null;
     const showHp = !hasBlocks && sysCfg.showHp !== false;
     const showDef = !hasBlocks && sysCfg.showDefense !== false;
     const showInit = !hasBlocks && sysCfg.showInit !== false;
@@ -499,7 +602,7 @@ export const SheetViewMethods = {
               `;
             })
             .join('')
-        : `<div class="text-[10px] opacity-55 text-center py-3">Usá <b>5.5e</b> para cargar las 18 habilidades o agregá una manual.</div>`;
+        : `<div class="text-[10px] opacity-55 text-center py-3">Usa <b>5.5e</b> para cargar las 18 habilidades o agrega una manual.</div>`;
 
       this.els.sheetSkillsList.querySelectorAll('[data-prof-skill]').forEach((btn) => {
         btn.addEventListener('click', () => Service.cycleTokenSkillProf(tok.id, btn.dataset.profSkill));
@@ -572,7 +675,7 @@ export const SheetViewMethods = {
             `
             )
             .join('')
-        : `<div class="text-[10px] opacity-55 text-center py-3">Agregá ventajas, talentos o notas del personaje.</div>`;
+        : `<div class="text-[10px] opacity-55 text-center py-3">Agrega ventajas, talentos o notas del personaje.</div>`;
 
       const openTraitMenu = (traitId, cx, cy) => {
         const tr = traits.find((x) => x.id === traitId);

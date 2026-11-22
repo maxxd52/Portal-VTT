@@ -1,6 +1,6 @@
-import { Dice3DEngine } from './dice3dEngine.js?v=20261117b1';
-import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
+import { Dice3DEngine } from './dice3dEngine.js?v=20261121a6';
+import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
 
 /**
  * Deck management, arithmetic & formula evaluation, and roll summary methods mixed into DiceServiceMethods.
@@ -301,29 +301,46 @@ export const DiceFormulaServiceMethods = {
       ac: Number(tok?.ac) || 0,
       ca: Number(tok?.ac) || 0
     };
-    const numBlocks = Selector.getSystemSheetBlocks(this.state).filter((b) => b.kind === 'number');
+    const allBlocks = Selector.getSystemSheetBlocks(this.state);
+    const numBlocks = allBlocks.filter((b) => b.kind === 'number');
+    const dieVars = {};
     const defs = Selector.getSheetStatsDef(this.state, tok);
     defs.forEach((def) => {
       const blk = numBlocks.find((b) => b.key === def.key);
-      const val = blk && blk.valueMode === 'calc'
+      if (blk && blk.valueMode === 'die') {
+        const sides = Selector.resolveTokenBlockValue(this.state, tok, blk);
+        const dieExpr = `1d${sides}`;
+        if (def.key) dieVars[def.key] = dieExpr;
+        if (def.alias) dieVars[def.alias] = dieExpr;
+        const normLabel = Selector.normalizeStatKey(def.label);
+        if (normLabel) dieVars[normLabel] = dieExpr;
+        return;
+      }
+      const baseVal = blk && blk.valueMode === 'calc'
         ? Selector.resolveTokenBlockValue(this.state, tok, blk)
         : (Number(stats[def.key]) || 0);
+      const checkBonus = blk && blk.hasCheck && tok?.blockChecks?.[blk.key] ? (Number(blk.checkBonus) || 0) : 0;
+      const val = baseVal + checkBonus;
       if (def.key) vars[def.key] = val;
       if (def.alias) vars[def.alias] = val;
       const normLabel = Selector.normalizeStatKey(def.label);
       if (normLabel) vars[normLabel] = val;
     });
     if (Array.isArray(tok?.resources)) {
+      const resBlocks = allBlocks.filter((b) => b.kind === 'resource' && b.key && b.key !== 'hp');
       tok.resources.forEach((res) => {
+        const val = Number(res.cur) || 0;
         const key = Selector.normalizeStatKey(res.name);
-        if (key) vars[key] = Number(res.cur) || 0;
+        if (key) vars[key] = val;
+        const matchBlk = resBlocks.find((b) => b.id === res.id || b.key === key);
+        if (matchBlk?.key) vars[matchBlk.key] = val;
       });
     }
     const resolved = String(formulaStr || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
-      .replace(/@([a-z0-9_]+)/gi, (_, k) => String(vars[k] ?? 0));
+      .replace(/@([a-z0-9_]+)/gi, (_, k) => dieVars[k] ?? String(vars[k] ?? 0));
 
     const style = { ...DEFAULT_DICE_STYLE, ...this.state.dice.style };
     const trayMod = Number(this.state.dice?.modifier) || 0;
@@ -434,13 +451,17 @@ export const DiceFormulaServiceMethods = {
         deckRemaining: isDeckRoll ? (this.state.deck?.cards?.length ?? 54) : undefined
       });
       const can3D = typeof Dice3DEngine.canRoll3D === 'function' && Dice3DEngine.canRoll3D();
-      if (can3D) Dice3DEngine.prepareFlight();
+      if (can3D) {
+        this.markRollFlying(roll.rollId);
+        Dice3DEngine.prepareFlight();
+      }
       this.broadcastRoll(roll);
       const isPrivate = (this.state.dice?.visibility || 'public') === 'private';
       this.recordEvent('TIRADA_FORMULA', `${label || formulaStr}: ${summary.headline || total}`, { broadcast: !isPrivate });
       this.notify();
       if (can3D) {
-        Dice3DEngine.rollHand(
+        this.playSeatDiceFlight(
+          roll,
           diceResults.map((d) => ({ kind: d.kind, sides: d.sides, colorHex: d.colorHex, value: d.chosen, card: d.card })),
           { style }
         );

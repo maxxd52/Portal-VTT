@@ -1,8 +1,46 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261117b1';
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
+import { normalizeSceneLighting } from '../utils/lightingModel.js?v=20261121a6';
 
 export const CompendiumViewMethods = {
+  renderCustomMapGridSummary() {
+    const el = this.els.lblCustomMapGridSummary;
+    if (!el) return;
+    const g = normalizeGridConfig(this.pendingCustomMapGrid || {});
+    const l = normalizeSceneLighting(this.pendingCustomMapLighting || {});
+    const label =
+      g.type === 'none'
+        ? 'Sin grilla'
+        : g.type === 'hex-v'
+          ? 'Hex (punta)'
+          : g.type === 'hex-h'
+            ? 'Hex (lado)'
+            : 'Cuadrada';
+    const lightLabel = l.dynamicLighting ? 'Luz dinámica' : 'Luz ambiental';
+    el.textContent = `${label} · ${Number(g.cellSize.toFixed(1))}px · ${lightLabel}`;
+  },
+
+  renderCustomTokenPreview() {
+    const preview = this.els.btnCustomTokenPreview;
+    if (!preview) return;
+    const url = String(this.els.inpCustomTokenImg?.value || '').trim();
+    const color = this.selectedTokenColor || '#8b5cf6';
+    const name = String(this.els.inpCustomTokenName?.value || '').trim();
+    const hasImg = Boolean(url);
+    preview.style.backgroundColor = hasImg ? 'transparent' : color;
+    preview.classList.toggle('rounded-full', !hasImg);
+    preview.classList.toggle('overflow-hidden', !hasImg);
+    preview.classList.toggle('rounded-xl', hasImg);
+    preview.classList.toggle('border-transparent', hasImg);
+    preview.classList.toggle('border-white/15', !hasImg);
+    preview.innerHTML = hasImg
+      ? `<img src="${this.escapeHtml(url)}" alt="Token" class="w-full h-full object-contain pointer-events-none" />`
+      : `<span>${this.escapeHtml((name || 'PJ').slice(0, 2).toUpperCase())}</span>`;
+    this.els.btnEditCustomTokenImg?.classList.toggle('hidden', !hasImg);
+  },
+
   bindCompendiumEvents() {
     const setCompendiumBrowseVisible = (visible) => {
       [this.els.compendiumTabs, this.els.inpCompendiumSearch, this.els.tokenTemplatesGrid, this.els.btnNewCompendiumFolder].forEach((el) => {
@@ -26,6 +64,9 @@ export const CompendiumViewMethods = {
       if (this.els.lblCustomItemFormTitle) this.els.lblCustomItemFormTitle.textContent = 'Nuevo complemento';
       if (this.els.lblCustomFormTitle) this.els.lblCustomFormTitle.textContent = 'Nuevo personaje';
       if (this.els.lblCustomMapFormTitle) this.els.lblCustomMapFormTitle.textContent = 'Nuevo escenario';
+      this.pendingCustomMapGrid = normalizeGridConfig({});
+      this.pendingCustomMapLighting = normalizeSceneLighting({});
+      this.renderCustomMapGridSummary();
       if (this.els.btnToggleCustomToken) this.els.btnToggleCustomToken.classList.remove('portal-btn-accent');
       if (this.els.btnNewCompendiumFolder) this.els.btnNewCompendiumFolder.classList.remove('portal-btn-accent');
       setCompendiumBrowseVisible(true);
@@ -49,32 +90,92 @@ export const CompendiumViewMethods = {
     };
     const openCompendiumForm = this.openCompendiumForm;
 
+    const openFormTokenEditor = (file = null) => {
+      const curUrl = this.els.inpCustomTokenImg?.value.trim() || '';
+      this.openTokenEditor?.({
+        initialUrl: file ? '' : curUrl,
+        file,
+        defaultColor: this.selectedTokenColor || '#8b5cf6',
+        canRemove: Boolean(curUrl),
+        onApply: (dataUrl) => {
+          if (this.els.inpCustomTokenImg) this.els.inpCustomTokenImg.value = dataUrl;
+          this.renderCustomTokenPreview();
+          this.showActionToast('Token listo.');
+        },
+        onRemove: () => {
+          if (this.els.inpCustomTokenImg) this.els.inpCustomTokenImg.value = '';
+          this.renderCustomTokenPreview();
+        }
+      });
+    };
+
     if (this.els.fileCustomTokenImg) {
       this.els.fileCustomTokenImg.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-          this.els.inpCustomTokenImg.value = await Service.compressImageFile(file, 256, 0.84);
-          this.showActionToast('Retrato cargado.');
-        } catch (err) {
-          this.showActionToast(err.message);
-        }
         e.target.value = '';
+        if (!file) return;
+        openFormTokenEditor(file);
       });
     }
+    this.els.btnOpenTokenStudioForm?.addEventListener('click', () => openFormTokenEditor());
+    this.els.btnEditCustomTokenImg?.addEventListener('click', () => openFormTokenEditor());
+    this.els.btnCustomTokenPreview?.addEventListener('click', () => openFormTokenEditor());
+    this.els.btnCustomTokenPreview?.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.els.btnCustomTokenPreview.classList.add('ring-2', 'ring-violet-400');
+    });
+    this.els.btnCustomTokenPreview?.addEventListener('dragleave', (e) => {
+      e.stopPropagation();
+      this.els.btnCustomTokenPreview.classList.remove('ring-2', 'ring-violet-400');
+    });
+    this.els.btnCustomTokenPreview?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.els.btnCustomTokenPreview.classList.remove('ring-2', 'ring-violet-400');
+      const file = e.dataTransfer?.files?.[0];
+      if (file && file.type?.startsWith('image/')) {
+        openFormTokenEditor(file);
+      }
+    });
+    this.els.inpCustomTokenImg?.addEventListener('input', () => this.renderCustomTokenPreview());
+    this.els.inpCustomTokenName?.addEventListener('input', () => this.renderCustomTokenPreview());
+    const openCustomMapGridCalibrator = () => {
+      const title = this.els.inpCustomMapName?.value.trim() || 'Nuevo escenario';
+      const imageUrl = this.els.inpCustomMapImg?.value.trim() || '';
+      const editingKey = this.editingCompendiumKey || '';
+      const isEditingActive = Boolean(editingKey && Service.getActiveSceneKey() === editingKey);
+      this.openMapGridEditor?.({
+        title,
+        mapId: imageUrl ? 'custom' : 'empty',
+        sceneKey: editingKey,
+        isActiveScene: isEditingActive,
+        imageUrl,
+        initialGrid: this.pendingCustomMapGrid || normalizeGridConfig({}),
+        initialLighting: this.pendingCustomMapLighting || normalizeSceneLighting({}),
+        walls: editingKey ? (isEditingActive ? Service.state.walls : Service.state.sceneLayers?.[editingKey]?.walls || []) : [],
+        onApply: ({ grid, lighting }) => {
+          this.pendingCustomMapGrid = grid;
+          this.pendingCustomMapLighting = lighting;
+          this.renderCustomMapGridSummary();
+        }
+      });
+    };
+
     if (this.els.fileCustomMapImg) {
       this.els.fileCustomMapImg.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
         try {
           this.els.inpCustomMapImg.value = await Service.compressImageFile(file, 1600, 0.82);
-          this.showActionToast('Mapa comprimido y listo.');
+          openCustomMapGridCalibrator();
         } catch (err) {
           this.showActionToast(err.message);
         }
         e.target.value = '';
       });
     }
+    this.els.btnCustomMapGridConfig?.addEventListener('click', openCustomMapGridCalibrator);
 
     this.els.compendiumTabs.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-comp-tab]');
@@ -112,8 +213,16 @@ export const CompendiumViewMethods = {
           this.resetItemCreatorBlocks();
           openCompendiumForm(this.els.customItemForm, this.els.btnToggleCustomToken, this.els.inpCustomItemName);
         }
-        else if (tab === 'maps') openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName);
-        else openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName);
+        else if (tab === 'maps') {
+          this.pendingCustomMapGrid = normalizeGridConfig({});
+          this.pendingCustomMapLighting = normalizeSceneLighting({});
+          this.renderCustomMapGridSummary();
+          openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName);
+        }
+        else {
+          this.renderCustomTokenPreview();
+          openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName);
+        }
       });
     }
     if (this.els.btnCancelCustomToken) this.els.btnCancelCustomToken.addEventListener('click', closeAllCompendiumForms);
@@ -144,6 +253,7 @@ export const CompendiumViewMethods = {
         folder: this.els.inpCustomTokenFolder.value.trim(),
         isAlly,
         imageUrl: this.els.inpCustomTokenImg.value.trim(),
+        publicDescription: this.els.inpCustomTokenPublicDesc ? this.els.inpCustomTokenPublicDesc.value.trim() : '',
         color: this.selectedTokenColor || '#8b5cf6',
         hp: Number(this.els.inpCustomTokenHp.value) || 16,
         ac: Number(this.els.inpCustomTokenAc.value) || 13,
@@ -159,7 +269,9 @@ export const CompendiumViewMethods = {
       this.els.inpCustomTokenName.value = '';
       this.els.inpCustomTokenRole.value = '';
       this.els.inpCustomTokenImg.value = '';
+      if (this.els.inpCustomTokenPublicDesc) this.els.inpCustomTokenPublicDesc.value = '';
       this.els.inpCustomTokenFolder.value = '';
+      this.renderCustomTokenPreview();
       closeAllCompendiumForms();
       this.showActionToast(`${saved.name} guardado en Personajes.`);
     });
@@ -170,7 +282,7 @@ export const CompendiumViewMethods = {
       if (!name) return;
       const kind = this.els.selCustomItemKind.value;
       const { passives, steps } = this.getCreatorPayload();
-      const firstRoll = steps.find((s) => s.type === 'roll');
+      const firstRoll = steps.find((s) => s.type === 'roll' && s.rollKind !== 'request');
       const saved = Service.saveCustomItem({
         key: this.editingCompendiumKey || undefined,
         name,
@@ -200,7 +312,9 @@ export const CompendiumViewMethods = {
         name,
         imageUrl,
         desc: this.els.inpCustomMapDesc.value.trim() || 'Escenario personalizado',
-        folder: this.els.inpCustomMapFolder.value.trim()
+        folder: this.els.inpCustomMapFolder.value.trim(),
+        grid: this.pendingCustomMapGrid,
+        lighting: this.pendingCustomMapLighting
       });
       this.els.inpCustomMapName.value = '';
       this.els.inpCustomMapImg.value = '';
@@ -341,9 +455,11 @@ export const CompendiumViewMethods = {
       if (this.els.inpCustomWis) this.els.inpCustomWis.value = String(a.stats?.wis || 0);
       if (this.els.inpCustomCha) this.els.inpCustomCha.value = String(a.stats?.cha || 0);
       this.els.inpCustomTokenImg.value = a.imageUrl || '';
+      if (this.els.inpCustomTokenPublicDesc) this.els.inpCustomTokenPublicDesc.value = a.publicDescription || '';
       this.els.inpCustomTokenFolder.value = a.folder || '';
       this.selectedTokenColor = a.color || '#8b5cf6';
       this.renderCustomColorGrids();
+      this.renderCustomTokenPreview();
       this.openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName, true);
     };
 
@@ -367,15 +483,52 @@ export const CompendiumViewMethods = {
       const m = (Service.state.customMaps || []).find((x) => x.key === key);
       if (!m) return;
       this.editingCompendiumKey = m.key;
+      if (this.els.lblCustomMapFormTitle) this.els.lblCustomMapFormTitle.textContent = 'Editar escenario';
       this.els.inpCustomMapName.value = m.name || '';
       this.els.inpCustomMapImg.value = m.imageUrl || '';
       this.els.inpCustomMapDesc.value = m.desc || '';
       this.els.inpCustomMapFolder.value = m.folder || '';
+      this.pendingCustomMapGrid = normalizeGridConfig(m.grid || Service.state.mapGrids?.[m.key] || {});
+      this.pendingCustomMapLighting = normalizeSceneLighting(m.lighting || Service.getSceneLighting(m.key));
+      this.renderCustomMapGridSummary();
       this.openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName, true);
     };
 
+    const buildGmPinActions = (kind, key, label) => {
+      if (Service.state.role !== 'gm') return [];
+      const tabs = Selector.getGmStagingTabs(Service.state);
+      if (tabs.length <= 1) {
+        const target = tabs[0];
+        return [
+          {
+            icon: '📌',
+            label: 'Agregar a la Pantalla',
+            onClick: () => {
+              const res = Service.pinToGmScreen({ kind, key, tabId: target?.id, title: label });
+              if (res?.alreadyPinned) this.showActionToast(`"${label}" ya está en ${res.tab.label}.`);
+              else if (res) this.showActionToast(`"${label}" agregado a ${res.tab.label}.`);
+            }
+          }
+        ];
+      }
+      return tabs.slice(0, 4).map((t) => ({
+        icon: '📌',
+        label: `Pantalla · ${t.label}`,
+        onClick: () => {
+          const res = Service.pinToGmScreen({ kind, key, tabId: t.id, title: label });
+          if (res?.alreadyPinned) this.showActionToast(`"${label}" ya está en ${res.tab.label}.`);
+          else if (res) this.showActionToast(`"${label}" agregado a ${res.tab.label}.`);
+        }
+      }));
+    };
+
     if (tab === 'actors') {
-      const allActors = [...(state.customActors || []), ...COMPENDIUM_ACTORS];
+      const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
+      const baseActors =
+        preset === 'vieja_escuela'
+          ? COMPENDIUM_ACTORS.filter((a) => a.system === 'vieja_escuela')
+          : COMPENDIUM_ACTORS.filter((a) => a.system !== 'vieja_escuela');
+      const allActors = [...(state.customActors || []), ...baseActors];
       const list = allActors.filter((a) => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q));
       renderWithFolders(
         list,
@@ -384,11 +537,11 @@ export const CompendiumViewMethods = {
             draggable="true"
             data-drag-spec="actor:${a.key}"
             data-actor-key="${a.key}"
-            class="group portal-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-grab"
           >
-            <div class="flex items-center gap-2.5 min-w-0">
-              <span class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] text-white flex-shrink-0 overflow-hidden" style="background:${a.color};">
-                ${a.imageUrl ? `<img src="${a.imageUrl}" alt="${a.name}" class="w-full h-full object-cover" />` : a.name.slice(0, 2).toUpperCase()}
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="w-11 h-11 ${a.imageUrl ? '' : 'rounded-full overflow-hidden'} flex items-center justify-center font-bold text-xs text-white flex-shrink-0" style="background:${a.imageUrl ? 'transparent' : a.color};">
+                ${a.imageUrl ? `<img src="${this.escapeHtml(a.imageUrl)}" alt="${this.escapeHtml(a.name)}" class="w-full h-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.45)]" />` : this.escapeHtml(a.name.slice(0, 2).toUpperCase())}
               </span>
               <div class="min-w-0">
                 <div class="font-semibold text-xs truncate">${a.name}</div>
@@ -404,6 +557,7 @@ export const CompendiumViewMethods = {
         const a = allActors.find((x) => x.key === key);
         if (!a) return;
         const actions = [
+          ...buildGmPinActions('actor', a.key, a.name),
           {
             icon: '⧉',
             label: 'Duplicar para editar',
@@ -451,10 +605,13 @@ export const CompendiumViewMethods = {
         });
       });
     } else if (tab === 'items') {
+      const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
       const baseItems =
-        state.ruleset === 'free'
-          ? COMPENDIUM_ITEMS.filter((i) => !String(i.key || '').startsWith('55_'))
-          : COMPENDIUM_ITEMS;
+        preset === 'vieja_escuela'
+          ? COMPENDIUM_ITEMS.filter((i) => i.system === 'vieja_escuela')
+          : state.ruleset === 'free'
+            ? COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela' && !String(i.key || '').startsWith('55_'))
+            : COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela');
       const allItems = [...(state.customItems || []), ...baseItems];
       const list = allItems.filter((i) => i.name.toLowerCase().includes(q) || i.badge.toLowerCase().includes(q));
       renderWithFolders(
@@ -481,7 +638,7 @@ export const CompendiumViewMethods = {
       const openItemMenu = (key, cx, cy) => {
         const it = allItems.find((x) => x.key === key);
         if (!it) return;
-        const actions = [];
+        const actions = [...buildGmPinActions('item', it.key, it.name)];
         if (Service.state.selectedTokenId) {
           actions.push({
             icon: '🎒',
@@ -556,12 +713,52 @@ export const CompendiumViewMethods = {
         const m = allMaps.find((x) => x.key === key);
         if (!m) return;
         const actions = [
+          ...buildGmPinActions('map', m.key, m.name),
           {
             icon: '🗺️',
             label: 'Activar escenario',
             onClick: async () => {
               await Service.activateMapTemplate(m);
               this.showActionToast(`Escenario "${m.name}" activado.`);
+            }
+          },
+          {
+            icon: '⚙️',
+            label: 'Opciones del escenario',
+            onClick: () => {
+              const isActive = Service.getActiveSceneKey() === m.key;
+              if (isActive) Service.flushExploredMask();
+              const curGrid = Service.state.mapGrids?.[m.key] || m.grid || (isActive ? Service.state.grid : {});
+              const curLighting = Service.getSceneLighting(m.key);
+              const walls = isActive
+                ? Service.state.walls
+                : (Service.state.sceneLayers?.[m.key]?.walls || (m.isCustom ? [] : buildPresetWallsForMap(m.key)));
+              this.openMapGridEditor?.({
+                title: m.name,
+                mapId: m.isCustom ? 'custom' : m.key,
+                sceneKey: m.key,
+                isActiveScene: isActive,
+                imageUrl: m.isCustom ? (m.imageUrl || '') : '',
+                initialGrid: curGrid,
+                initialLighting: curLighting,
+                walls,
+                onApply: ({ grid, lighting }) => {
+                  Service.updateMapGridForScene(m.key, grid);
+                  Service.updateSceneLighting(m.key, {
+                    dynamicLighting: lighting.dynamicLighting,
+                    rememberExplored: lighting.rememberExplored
+                  });
+                  this.showActionToast(`Escenario "${m.name}" actualizado.`);
+                }
+              });
+            }
+          },
+          {
+            icon: '↺',
+            label: 'Resetear área descubierta',
+            onClick: () => {
+              Service.resetSceneExploredFog(m.key);
+              this.showActionToast(`Área descubierta de "${m.name}" reseteada.`);
             }
           }
         ];

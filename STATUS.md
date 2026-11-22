@@ -1,0 +1,15 @@
+# Project Status — Portal-VTT
+- **Goal:** Client-side minimalist 2.5D tactile VTT with unified sheets, dynamic lighting, 3D dice, GM screen, combat tracker, and zero-leak journal (`?v=20261121a6`).
+- **Completed:**
+  - Tabletop physical realism (`tabletopMaterial.js`, `styles.css`, `canvasView.js`, `gridGeometry.js`): themed desk backdrop, physical board slab/bevel, dual-ink blended grid (`overlay`/`soft-light`/`multiply`/`screen`), and seamless procedural micro-grain (`#boardGrainLayer`), degrading cleanly under `Básico` (`data-tabletop-fx="basic"`).
+  - Wall contact shadows & warm/cool lighting (`canvasView.js`, `boardView.js`, `index.html`): `#wallShadowCanvas` (`z-index: 2`, below fog) with cached multi-pass AO; cool nocturnal penumbra (`source-atop`, preserving opaque player fog) + wall-clipped warm torchlight; suppressed unclipped `.vtt-token-light` when `dynamicLighting` is active.
+  - Dynamic custom-map bounds (`tabletopMaterial.js`, `canvasView.js`, `styles.css`): `computeActiveMapBounds` hugs board slab, bevel, grain, `#customMapImg`, and clips grid/shadows/fog to the actual uploaded image rect inside `2400x1600`, eliminating empty letterbox bands.
+  - Upgraded Wall System (`wallGeometry.js`, `selector.js`, `service.js`, `boardView.js`, `contextMenuView.js`, `tokenShadowModel.js`, `scenePreviewDraw.js`): added `terrain` (Pillar: 1st-hit pass-through, 2nd-hit block) and `secret` doors (redacted to plain `wall` for players when closed), vertex deduplication in raycasting, `Alt` freehand + `14px` vertex magnet + polyline chaining, and click-to-erase (`🗑`) with Undo.
+  - Added `tests/tabletopMaterial.test.mjs` (7 tests) and `tests/wallSystem.test.mjs` (3 tests); full suite 120/120 green + 3 browser verifications (0 console/network errors).
+- **Closed Decisions:**
+  - Keep internal `2400x1600` world coordinates and fit visual frame/clipping via `--map-x/y/w/h` + `clipToActiveMapBounds` (discarded resizing world canvas per image to preserve saved scenes, P2P coords, `exploredMask`, and `.portal` cartridges).
+  - Keep all 5 visual realism effects 100% automatic and tied to existing `Sombras por luz` (`Básico` disables grain + wall shadows) instead of adding new UI toggles.
+  - Redact closed `secret` doors to plain `wall` in `extractWorldForSeat` and cast full wall shadows so players have zero visual or payload leaks.
+- **Open Risks / Gotchas:**
+  - Large pre-existing dirty working tree (multiple uncommitted features); review and split commits cleanly before pushing.
+- **Next Step:** Split and commit working-tree changes in reviewable work units (`/enraizar` or `/revision`), or plan the next feature with `/inicio`.

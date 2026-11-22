@@ -2,7 +2,8 @@
    MODEL: COMPENDIO SRD (PERSONAJES, OBJETOS, MAPAS) Y MUROS PREDEFINIDOS
    ========================================================================== */
 
-import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261117b1';
+import { DND55_CLASS_ITEMS } from './dnd55Classes.js?v=20261121a6';
+import { VIEJA_ESCUELA_ACTORS, VIEJA_ESCUELA_ITEMS } from './viejaEscuela.js?v=20261121a6';
 
 export const COMPENDIUM_ACTORS = [
   {
@@ -11,7 +12,7 @@ export const COMPENDIUM_ACTORS = [
     role: 'Vanguardia SRD',
     color: '#3b82f6',
     isAlly: true,
-    visionRadius: 520,
+    visionMeters: null,
     hp: 24,
     ac: 16,
     stats: { str: 3, dex: 1, con: 2, int: 0 },
@@ -23,7 +24,7 @@ export const COMPENDIUM_ACTORS = [
     role: 'Conjuradora SRD',
     color: '#8b5cf6',
     isAlly: true,
-    visionRadius: 560,
+    visionMeters: null,
     hp: 14,
     ac: 12,
     stats: { str: -1, dex: 2, con: 1, int: 3 },
@@ -35,7 +36,7 @@ export const COMPENDIUM_ACTORS = [
     role: 'Explorador SRD',
     color: '#10b981',
     isAlly: true,
-    visionRadius: 600,
+    visionMeters: null,
     hp: 18,
     ac: 15,
     stats: { str: 0, dex: 3, con: 1, int: 1 },
@@ -47,7 +48,7 @@ export const COMPENDIUM_ACTORS = [
     role: 'Secundario SRD',
     color: '#ef4444',
     isAlly: false,
-    visionRadius: 420,
+    visionMeters: null,
     hp: 10,
     ac: 13,
     stats: { str: -1, dex: 2, con: 0, int: -1 },
@@ -59,12 +60,13 @@ export const COMPENDIUM_ACTORS = [
     role: 'Jefe SRD',
     color: '#f59e0b',
     isAlly: false,
-    visionRadius: 420,
+    visionMeters: null,
     hp: 42,
     ac: 15,
     stats: { str: 4, dex: -1, con: 3, int: -2 },
     starterItems: ['greatclub']
-  }
+  },
+  ...VIEJA_ESCUELA_ACTORS
 ];
 
 export const COMPENDIUM_ITEMS = [
@@ -74,9 +76,10 @@ export const COMPENDIUM_ITEMS = [
   { key: 'scimitar', name: 'Cimitarra Curva', kind: 'weapon', badge: 'ATQ +4 (1d6)', bonusMod: 4, die: 6, acBonus: 0, heal: 0, lightRadius: 0, color: '#ef4444' },
   { key: 'greatclub', name: 'Garrote Rúnico', kind: 'weapon', badge: 'ATQ +6 (1d12)', bonusMod: 6, die: 12, acBonus: 0, heal: 0, lightRadius: 0, color: '#f59e0b' },
   { key: 'shield_wood', name: 'Escudo Reforzado', kind: 'armor', badge: '+2 CA', bonusMod: 0, die: 0, acBonus: 2, heal: 0, lightRadius: 0, color: '#06b6d4' },
-  { key: 'torch', name: 'Antorcha Táctica', kind: 'light', badge: 'Luz +5 cas', bonusMod: 0, die: 0, acBonus: 0, heal: 0, lightRadius: 400, color: '#fbbf24' },
+  { key: 'torch', name: 'Antorcha Táctica', kind: 'light', badge: 'Luz 6 m', bonusMod: 0, die: 0, acBonus: 0, heal: 0, lightMeters: 6, lightRadius: 0, color: '#fbbf24' },
   { key: 'potion_heal', name: 'Poción de Curación', kind: 'consumable', badge: 'Cura +8 HP', bonusMod: 0, die: 0, acBonus: 0, heal: 8, lightRadius: 0, color: '#ec4899' },
-  ...DND55_CLASS_ITEMS
+  ...DND55_CLASS_ITEMS,
+  ...VIEJA_ESCUELA_ITEMS
 ];
 
 export const COMPENDIUM_MAPS = [

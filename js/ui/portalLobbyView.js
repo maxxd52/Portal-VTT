@@ -1,7 +1,7 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261117b1';
-import { CartridgePacker } from '../services/cartridgePacker.js?v=20261117b1';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { BrowserVault } from '../services/browserVault.js?v=20261121a6';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261121a6';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
 
 /**
  * Portal-VTT entry lobby: create a portal with ruleset/options, join by code/URL, or resume recent portals.
@@ -33,6 +33,7 @@ export const PortalLobbyViewMethods = {
     if (!this.els.portalLobby) return;
     Service.state.sheetOpen = false;
     Service.state.drawerOpen = false;
+    Service.state.gmScreenOpen = false;
     Service.notify({ skipVaultSave: true });
     try {
       window.history.replaceState(null, '', window.location.pathname);
@@ -57,7 +58,7 @@ export const PortalLobbyViewMethods = {
       return;
     }
 
-    const rulesetLabel = { dnd55: 'D&D 5.5', pbta: 'PbtA 2d6', pool: 'Pool d10', d100: '1d100', free: 'Genérico' };
+    const rulesetLabel = { dnd55: 'D&D 5.5', pbta: 'PbtA 2d6', pool: 'Pool d10', d100: '1d100', vieja_escuela: 'Vieja Escuela', free: 'Genérico' };
     box.innerHTML = rooms
       .slice(0, 6)
       .map(

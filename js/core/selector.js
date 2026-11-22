@@ -2,7 +2,34 @@
    SELECTOR: CONSULTAS PURAS DE COORDENADAS, RAYCASTING 2D Y SERIALIZACIÓN
    ========================================================================== */
 
-import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261117b1';
+import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261121a6';
+import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261121a6';
+import { normalizeGridConfig, snapToGrid } from '../utils/gridGeometry.js?v=20261121a6';
+import {
+  castVisibilityRay,
+  collectUniqueRayAngles,
+  findWallNearPoint,
+  isWallOpenDoor,
+  redactWallsForPlayer
+} from '../utils/wallGeometry.js?v=20261121a6';
+import {
+  normalizeSceneLighting,
+  normalizeVisionConfig,
+  resolveTokenVisionMeters,
+  resolveTokenLightMeters,
+  metersToPixels
+} from '../utils/lightingModel.js?v=20261121a6';
+import {
+  canSeatSeeJournalBlock,
+  collectPlayerAuthorizedMedia,
+  collectReferencedMediaIds,
+  filterVisibleMapNotes,
+  getSeatAllowedTokenIds,
+  hashMediaSource,
+  normalizeMediaAssets,
+  redactCombatForSeat,
+  redactTokenForNonOwner
+} from '../utils/worldRedaction.js?v=20261121a6';
 
 export const Selector = {
   normalizeStatKey(raw) {
@@ -107,9 +134,77 @@ export const Selector = {
     return itemTabs[0].id;
   },
 
+  normalizeSheetBlock(blk) {
+    if (!blk || typeof blk !== 'object') return null;
+    if (blk.kind === 'roll') {
+      return {
+        ...blk,
+        kind: 'text',
+        textMode: 'fixed',
+        fixedText: String(blk.fixedText || ''),
+        clickAction: 'roll',
+        formula: String(blk.formula || '1d20'),
+        resultMode: blk.resultMode || 'inherit',
+        successThreshold: Number(blk.successThreshold) || 6,
+        isInitiative: blk.isInitiative !== undefined ? Boolean(blk.isInitiative) : blk.key === 'init'
+      };
+    }
+    if (blk.kind === 'number') {
+      const valueMode = ['manual', 'calc', 'die'].includes(blk.valueMode) ? blk.valueMode : 'manual';
+      const rollMode = ['none', 'base', 'custom'].includes(blk.rollMode) ? blk.rollMode : 'base';
+      return {
+        ...blk,
+        valueMode,
+        rollMode,
+        hideValue: Boolean(blk.hideValue),
+        showSign: Boolean(blk.showSign),
+        suffix: String(blk.suffix || ''),
+        hasCheck: Boolean(blk.hasCheck),
+        checkBonus: Number(blk.checkBonus) || 0,
+        resultMode: blk.resultMode || 'inherit',
+        successThreshold: Number(blk.successThreshold) || 6,
+        isInitiative: Boolean(blk.isInitiative)
+      };
+    }
+    if (blk.kind === 'resource') {
+      const maxMode = ['fixed', 'free', 'calc'].includes(blk.maxMode)
+        ? blk.maxMode
+        : (Number(blk.max) || 0) === 0
+          ? 'free'
+          : 'fixed';
+      const resStyle = ['auto', 'bar', 'pips', 'counter'].includes(blk.resStyle) ? blk.resStyle : 'auto';
+      return {
+        ...blk,
+        maxMode,
+        maxFormula: String(blk.maxFormula || ''),
+        editableMax: blk.editableMax !== undefined ? Boolean(blk.editableMax) : blk.key === 'hp',
+        resStyle,
+        rollMode: blk.rollMode === 'custom' ? 'custom' : 'none',
+        formula: String(blk.formula || ''),
+        resultMode: blk.resultMode || 'inherit',
+        successThreshold: Number(blk.successThreshold) || 6,
+        consumeOnRoll: Boolean(blk.consumeOnRoll)
+      };
+    }
+    const textMode = ['input', 'fixed', 'select', 'tags'].includes(blk.textMode) ? blk.textMode : 'input';
+    const clickAction = ['none', 'roll', 'announce'].includes(blk.clickAction) ? blk.clickAction : 'none';
+    return {
+      ...blk,
+      kind: 'text',
+      textMode,
+      fixedText: String(blk.fixedText || ''),
+      options: Array.isArray(blk.options) ? blk.options.map((o) => String(o).trim()).filter(Boolean) : [],
+      clickAction,
+      formula: String(blk.formula || ''),
+      resultMode: blk.resultMode || 'inherit',
+      successThreshold: Number(blk.successThreshold) || 6,
+      isInitiative: Boolean(blk.isInitiative)
+    };
+  },
+
   getSystemSheetBlocks(state) {
     const blocks = state?.systemConfig?.sheetBlocks;
-    return Array.isArray(blocks) ? blocks : [];
+    return Array.isArray(blocks) ? blocks.map((b) => this.normalizeSheetBlock(b)).filter(Boolean) : [];
   },
 
   resolveBlockSize(block) {
@@ -191,12 +286,43 @@ export const Selector = {
       const textParts = [];
       const actionSteps = [];
       item.steps.forEach((s) => {
-        if (s && s.type === 'text') {
+        if (!s || typeof s !== 'object') return;
+        if (s.type === 'text') {
           const t = String(s.text || '').trim();
           if (t) textParts.push(t);
-        } else if (s) {
-          actionSteps.push({ ...s });
+          return;
         }
+        if (s.type === 'save_request') {
+          actionSteps.push({ ...s, type: 'roll', rollKind: 'request' });
+          return;
+        }
+        if (s.type === 'roll') {
+          actionSteps.push({ ...s, type: 'roll', rollKind: s.rollKind === 'request' ? 'request' : 'self' });
+          return;
+        }
+        if (s.type === 'area' || s.type === 'targets') {
+          actionSteps.push({ ...s, type: 'targets', shape: s.shape || 'circle' });
+          return;
+        }
+        if (s.type === 'apply_hp' || s.type === 'modify') {
+          if (s.effectMode === 'passive') {
+            const target = String(s.passiveTarget || s.target || 'ac');
+            const value = Number(s.passiveValue ?? s.value) || 0;
+            if (!passives.some((p) => p.target === target && p.value === value)) {
+              passives.push({ target, value });
+            }
+            return;
+          }
+          actionSteps.push({
+            ...s,
+            type: 'modify',
+            effectMode: s.effectMode || (s.isHeal ? 'heal' : 'damage'),
+            targetScope: s.targetScope === 'self' ? 'self' : 'targets',
+            resourceKey: String(s.resourceKey || 'hp')
+          });
+          return;
+        }
+        actionSteps.push({ ...s });
       });
       if (!message && textParts.length > 0) message = textParts.join('\n');
       return { passives, message, steps: actionSteps };
@@ -211,6 +337,7 @@ export const Selector = {
     if (formula) {
       steps.push({
         type: 'roll',
+        rollKind: 'self',
         label: item.name || 'Tirada',
         formula,
         message,
@@ -221,6 +348,7 @@ export const Selector = {
       const modStr = mod === 0 ? '' : mod > 0 ? `+${mod}` : String(mod);
       steps.push({
         type: 'roll',
+        rollKind: 'self',
         label: item.name || 'Tirada',
         formula: `1d${die}${modStr}`,
         message,
@@ -238,15 +366,7 @@ export const Selector = {
   },
 
   snapPosition(state, wx, wy, sizeCells = 1) {
-    if (!state.grid.snap) return { x: wx, y: wy };
-    const cs = state.grid.cellSize;
-    const ox = Number(state.grid.offsetX) || 0;
-    const oy = Number(state.grid.offsetY) || 0;
-    const half = (cs * sizeCells) / 2;
-    return {
-      x: Math.round((wx - ox - half) / cs) * cs + ox + half,
-      y: Math.round((wy - oy - half) / cs) * cs + oy + half
-    };
+    return snapToGrid(state?.grid, wx, wy, sizeCells);
   },
 
   getSelectedToken(state) {
@@ -303,79 +423,43 @@ export const Selector = {
   },
 
   findDoorNearPoint(state, wx, wy, maxDist = 22) {
-    for (const w of state.walls || []) {
-      if (w.kind === 'door' && this.distToSegment(wx, wy, w.x1, w.y1, w.x2, w.y2) <= maxDist) {
-        return w;
-      }
-    }
-    return null;
+    const allowedKinds = state?.role === 'gm' ? ['door', 'secret'] : ['door'];
+    return findWallNearPoint(state?.walls || [], wx, wy, maxDist, { kinds: allowedKinds });
   },
 
   // Raycasting 2D: calcula el polígono de visibilidad alrededor de (ox, oy) hasta radius
   computeVisibilityPolygon(origin, radius, walls) {
     const ox = origin.x;
     const oy = origin.y;
-    const R = Math.max(120, radius || 520);
+    const R = Math.max(16, Number(radius) || 520);
     const minX = ox - R;
     const maxX = ox + R;
     const minY = oy - R;
     const maxY = oy + R;
 
-    // Segmentos activos (muros cerrados + puertas cerradas + caja delimitadora de alcance)
+    // Segmentos activos (muros sólidos, terrenos/pilares, puertas cerradas + caja delimitadora)
     const segments = [
-      { x1: minX, y1: minY, x2: maxX, y2: minY },
-      { x1: maxX, y1: minY, x2: maxX, y2: maxY },
-      { x1: maxX, y1: maxY, x2: minX, y2: maxY },
-      { x1: minX, y1: maxY, x2: minX, y2: minY }
+      { x1: minX, y1: minY, x2: maxX, y2: minY, kind: 'wall' },
+      { x1: maxX, y1: minY, x2: maxX, y2: maxY, kind: 'wall' },
+      { x1: maxX, y1: maxY, x2: minX, y2: maxY, kind: 'wall' },
+      { x1: minX, y1: maxY, x2: minX, y2: minY, kind: 'wall' }
     ];
 
     for (const w of walls || []) {
-      if (w.kind === 'door' && w.open) continue;
+      if (isWallOpenDoor(w)) continue;
       if (Math.max(w.x1, w.x2) < minX || Math.min(w.x1, w.x2) > maxX) continue;
       if (Math.max(w.y1, w.y2) < minY || Math.min(w.y1, w.y2) > maxY) continue;
       segments.push(w);
     }
 
-    // Recolectar ángulos únicos hacia todos los vértices con micro-desplazamiento ±eps
-    const angles = [];
-    const eps = 0.00015;
-    for (const seg of segments) {
-      const pts = [
-        [seg.x1, seg.y1],
-        [seg.x2, seg.y2]
-      ];
-      for (const [px, py] of pts) {
-        const baseAngle = Math.atan2(py - oy, px - ox);
-        angles.push(baseAngle - eps, baseAngle, baseAngle + eps);
-      }
-    }
-
+    // Recolectar ángulos únicos deduplicados hacia vértices compartidos (±eps)
+    const angles = collectUniqueRayAngles(ox, oy, segments, 0.00015);
+    const maxT = R * 1.45;
     const hits = [];
-    for (const angle of angles) {
-      const dx = Math.cos(angle);
-      const dy = Math.sin(angle);
-      let minT = R * 1.45;
-      let hitX = ox + dx * R;
-      let hitY = oy + dy * R;
-
-      for (const seg of segments) {
-        const sdx = seg.x2 - seg.x1;
-        const sdy = seg.y2 - seg.y1;
-        const denom = dx * sdy - dy * sdx;
-        if (Math.abs(denom) < 1e-9) continue;
-
-        const qpx = seg.x1 - ox;
-        const qpy = seg.y1 - oy;
-        const t = (qpx * sdy - qpy * sdx) / denom;
-        const u = (qpx * dy - qpy * dx) / denom;
-
-        if (t >= 0 && u >= 0 && u <= 1 && t < minT) {
-          minT = t;
-          hitX = ox + dx * t;
-          hitY = oy + dy * t;
-        }
-      }
-      hits.push({ angle, x: hitX, y: hitY });
+    for (let i = 0; i < angles.length; i++) {
+      const angle = angles[i];
+      const hit = castVisibilityRay(ox, oy, Math.cos(angle), Math.sin(angle), maxT, segments);
+      hits.push({ angle, x: hit.x, y: hit.y });
     }
 
     hits.sort((a, b) => a.angle - b.angle);
@@ -397,20 +481,94 @@ export const Selector = {
     return inside;
   },
 
-  getAlliedVisibilityPolygons(state) {
-    const sources = (state.tokens || []).filter(
-      (t) => !t.hidden && (t.isAlly !== false || (Number(t.lightRadius) || 0) > 0)
-    );
-    return sources.map((tok) => {
-      const vision = tok.isAlly !== false ? (tok.visionRadius || 520) : 0;
-      const light = Number(tok.lightRadius) || 0;
-      const radius = Math.max(vision, light) || 520;
-      return {
+  getSystemVisionConfig(state) {
+    return normalizeVisionConfig(state?.systemConfig?.vision || {});
+  },
+
+  getSceneLightingConfig(state, sceneKey) {
+    const key = sceneKey || state?.activeMapKey || state?.mapId || 'bastion';
+    const visCfg = this.getSystemVisionConfig(state);
+    return normalizeSceneLighting(state?.sceneLighting?.[key], {
+      dynamicLighting: state?.dynamicLighting ?? true,
+      rememberExplored: visCfg.rememberExplored
+    });
+  },
+
+  getAlliedVisibilityPolygons(state, seatKey = '') {
+    const visionCfg = this.getSystemVisionConfig(state);
+    const grid = normalizeGridConfig(state?.grid);
+    let viewers = (state?.tokens || []).filter((t) => !t.hidden && t.isAlly !== false);
+
+    if (visionCfg.visionMode === 'individual' && (seatKey || state?.role === 'player')) {
+      const assignedIds = seatKey ? getSeatAllowedTokenIds(state, seatKey) : this.getPlayerAssignedTokenIds(state);
+      if (assignedIds.length > 0) {
+        const assignedSet = new Set(assignedIds);
+        viewers = viewers.filter((t) => assignedSet.has(t.id));
+      }
+    }
+
+    const out = [];
+    for (const tok of viewers) {
+      const visionMeters = resolveTokenVisionMeters(tok, visionCfg);
+      const lightMeters = resolveTokenLightMeters(tok);
+      const effectiveMeters = Math.max(visionMeters, lightMeters);
+      const radius = metersToPixels(effectiveMeters, grid);
+      if (radius <= 0) continue;
+      out.push({
         token: tok,
         radius,
-        poly: this.computeVisibilityPolygon({ x: tok.x, y: tok.y }, radius, state.walls)
-      };
+        visionRadiusPx: metersToPixels(visionMeters, grid),
+        lightRadiusPx: metersToPixels(lightMeters, grid),
+        poly: this.computeVisibilityPolygon({ x: tok.x, y: tok.y }, radius, state?.walls)
+      });
+    }
+    return out;
+  },
+
+  /**
+   * Resolves tokens visible on the board for the current role or a specific player seat,
+   * enforcing both hidden flag and dynamic lighting line-of-sight polygons.
+   */
+  getVisibleTokensForSeat(state, seatKey = '') {
+    const tokens = Array.isArray(state?.tokens) ? state.tokens : [];
+    if (!seatKey && state?.role === 'gm') return tokens;
+    const visSources = state?.dynamicLighting ? this.getAlliedVisibilityPolygons(state, seatKey) : null;
+    return tokens.filter((t) => {
+      if (!t || t.hidden) return false;
+      if (visSources && t.isAlly === false) {
+        return visSources.some(
+          (src) =>
+            Math.hypot(t.x - src.token.x, t.y - src.token.y) <= src.radius &&
+            this.isPointInPolygon({ x: t.x, y: t.y }, src.poly)
+        );
+      }
+      return true;
     });
+  },
+
+  /**
+   * Computes snapshot dimensions equal to ~1/4 of viewport area (0.5x per axis),
+   * clamped within [minDim, maxDim] on the longest side while preserving aspect ratio.
+   */
+  computeQuarterViewportDimensions(viewportW, viewportH, maxDim = 720, minDim = 320) {
+    const vw = Math.max(1, Number(viewportW) || 1280);
+    const vh = Math.max(1, Number(viewportH) || 720);
+    let w = vw * 0.5;
+    let h = vh * 0.5;
+    const longest = Math.max(w, h);
+    if (longest > maxDim) {
+      const k = maxDim / longest;
+      w *= k;
+      h *= k;
+    } else if (longest < minDim) {
+      const k = minDim / longest;
+      w *= k;
+      h *= k;
+    }
+    return {
+      width: Math.max(1, Math.round(w)),
+      height: Math.max(1, Math.round(h))
+    };
   },
 
   appendDiceToFormula(formula, sides, op = '+') {
@@ -476,6 +634,7 @@ export const Selector = {
     if (preset === 'pbta') return { dice: ['6'], coin: false, fudge: false, deck: false };
     if (preset === 'pool') return { dice: ['10'], coin: false, fudge: false, deck: false };
     if (preset === 'd100') return { dice: ['10', '100'], coin: false, fudge: false, deck: false };
+    if (preset === 'vieja_escuela') return { dice: ['4', '6', '8', '10', '12', '20'], coin: false, fudge: false, deck: false };
     return { dice: [...ALL_DICE], coin: false, fudge: false, deck: false };
   },
 
@@ -491,6 +650,7 @@ export const Selector = {
     if (preset === 'pbta') return ['sum'];
     if (preset === 'pool') return ['success', 'sum'];
     if (preset === 'd100') return ['sum'];
+    if (preset === 'vieja_escuela') return ['sum', 'each'];
     return [...ALL_MODES];
   },
 
@@ -572,28 +732,28 @@ export const Selector = {
     return Number.isFinite(res) ? Math.round(res) : 0;
   },
 
-  resolveTokenBlockValue(state, tok, blk, visited = new Set()) {
-    if (!tok || !blk) return 0;
-    if (blk.valueMode !== 'calc') {
-      return blk.key === 'ac'
-        ? (Number.isFinite(Number(tok.ac)) ? Number(tok.ac) : 10)
-        : (Number(tok.stats?.[blk.key]) || 0);
-    }
-    const selfKey = String(blk.key || blk.id || '');
-    if (visited.has(selfKey) || visited.size > 6) return 0;
+  evaluateTokenFormula(state, tok, formulaStr, selfKey = '', visited = new Set()) {
+    if (!tok) return 0;
+    const key = String(selfKey || '');
+    if (key && (visited.has(key) || visited.size > 6)) return 0;
     const nextVisited = new Set(visited);
-    nextVisited.add(selfKey);
+    if (key) nextVisited.add(key);
 
-    const blocks = this.getSystemSheetBlocks(state).filter((b) => b.kind === 'number');
+    const allBlocks = this.getSystemSheetBlocks(state);
+    const numBlocks = allBlocks.filter((b) => b.kind === 'number');
     const byKey = new Map();
-    blocks.forEach((b) => {
+    numBlocks.forEach((b) => {
       if (b.key) byKey.set(b.key, b);
       const norm = this.normalizeStatKey(b.label);
       if (norm && !byKey.has(norm)) byKey.set(norm, b);
     });
+    const resBlocksByKey = new Map();
+    allBlocks
+      .filter((b) => b.kind === 'resource' && b.key && b.key !== 'hp')
+      .forEach((b) => resBlocksByKey.set(b.key, b));
 
     const stats = tok.stats || {};
-    const expr = String(blk.calcFormula || '0')
+    const expr = String(formulaStr || '0')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
@@ -605,12 +765,49 @@ export const Selector = {
         if (k === 'maxhp') return `(${Number(tok.maxHp) || 0})`;
         if (k === 'ac' || k === 'ca') return `(${Number(tok.ac) || 0})`;
         if (Array.isArray(tok.resources)) {
-          const res = tok.resources.find((r) => this.normalizeStatKey(r.name) === k);
+          const rBlk = resBlocksByKey.get(k);
+          const res = rBlk
+            ? tok.resources.find((r) => r.id === rBlk.id || this.normalizeStatKey(r.name) === k)
+            : tok.resources.find((r) => this.normalizeStatKey(r.name) === k);
           if (res) return `(${Number(res.cur) || 0})`;
         }
         return `(${Number(stats[k]) || 0})`;
       });
     return this.evaluateArithmeticExpr(expr);
+  },
+
+  resolveTokenBlockValue(state, tok, rawBlk, visited = new Set()) {
+    const blk = this.normalizeSheetBlock(rawBlk);
+    if (!tok || !blk) return 0;
+    if (blk.valueMode === 'die') {
+      const validDice = [4, 6, 8, 10, 12, 20];
+      const raw = Number(tok.stats?.[blk.key]);
+      return validDice.includes(raw) ? raw : 6;
+    }
+    if (blk.valueMode !== 'calc') {
+      return blk.key === 'ac'
+        ? (Number.isFinite(Number(tok.ac)) ? Number(tok.ac) : 10)
+        : (Number(tok.stats?.[blk.key]) || 0);
+    }
+    const selfKey = String(blk.key || blk.id || '');
+    return this.evaluateTokenFormula(state, tok, blk.calcFormula || '0', selfKey, visited);
+  },
+
+  resolveResourceMax(state, tok, rawBlk, resObj = null) {
+    const blk = this.normalizeSheetBlock(rawBlk);
+    if (!blk) return Math.max(0, Number(resObj?.max) || 0);
+    if (blk.maxMode === 'free') return 0;
+    if (blk.maxMode === 'calc') {
+      const val = this.evaluateTokenFormula(state, tok, blk.maxFormula || '1', `res:${blk.key || blk.id || ''}`);
+      return Math.max(1, Math.min(999, val));
+    }
+    if (blk.key === 'hp') {
+      return Math.max(1, Number(tok?.maxHp) || Number(blk.max) || 18);
+    }
+    if (blk.editableMax && Number(resObj?.max) > 0) {
+      return Math.max(1, Number(resObj.max));
+    }
+    return Math.max(1, Number(blk.max) || 1);
   },
 
   getPlayerInvites(state) {
@@ -634,8 +831,504 @@ export const Selector = {
     return state?.role === 'player' && this.getPlayerAssignedTokenIds(state).length === 0;
   },
 
-  extractSerializableWorld(state) {
+  getGmScreenState(state) {
+    const presetKey = state?.systemConfig?.preset || (state?.ruleset === 'free' ? 'free' : 'dnd55');
+    const raw = state?.gmScreen;
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.tabs) || raw.tabs.length === 0) {
+      return createDefaultGmScreen(presetKey);
+    }
+    const tabs = raw.tabs
+      .filter((t) => t && t.id)
+      .map((t) => ({
+        id: String(t.id),
+        label: String(t.label || 'Pestaña').trim() || 'Pestaña',
+        allowCompendium: Boolean(t.allowCompendium)
+      }));
+    const validTabIds = new Set(tabs.map((t) => t.id));
+    const activeTabId = validTabIds.has(raw.activeTabId) ? raw.activeTabId : (tabs[0]?.id || 'table');
     return {
+      activeTabId,
+      tabs,
+      widgets: Array.isArray(raw.widgets) ? raw.widgets : [],
+      pins: Array.isArray(raw.pins) ? raw.pins : [],
+      clocks: Array.isArray(raw.clocks) ? raw.clocks : [],
+      notes: Array.isArray(raw.notes) ? raw.notes : [],
+      tables: Array.isArray(raw.tables) ? raw.tables : [],
+      references: Array.isArray(raw.references) ? raw.references : []
+    };
+  },
+
+  getGmStagingTabs(state) {
+    const gm = this.getGmScreenState(state);
+    const stagingTabIds = new Set(
+      gm.widgets.filter((w) => w && w.type === 'staging' && w.enabled !== false).map((w) => w.tabId)
+    );
+    const eligible = gm.tabs.filter((t) => t.allowCompendium || stagingTabIds.has(t.id));
+    return eligible.length > 0 ? eligible : (gm.tabs[0] ? [gm.tabs[0]] : []);
+  },
+
+  getPublicClocks(state) {
+    if (state?.role === 'gm' && state?.gmScreen && Array.isArray(state.gmScreen.clocks)) {
+      return state.gmScreen.clocks
+        .filter((c) => c && c.isPublic === true)
+        .map((c) => ({
+          id: String(c.id),
+          label: String(c.label || 'Reloj'),
+          kind: c.kind === 'counter' ? 'counter' : 'clock',
+          segments: Math.max(2, Math.min(12, Number(c.segments) || 6)),
+          value: Math.max(0, Number(c.value) || 0),
+          color: String(c.color || '#8b5cf6')
+        }));
+    }
+    return Array.isArray(state?.publicClocks)
+      ? state.publicClocks.map((c) => ({
+          id: String(c.id),
+          label: String(c.label || 'Reloj'),
+          kind: c.kind === 'counter' ? 'counter' : 'clock',
+          segments: Math.max(2, Math.min(12, Number(c.segments) || 6)),
+          value: Math.max(0, Number(c.value) || 0),
+          color: String(c.color || '#8b5cf6')
+        }))
+      : [];
+  },
+
+  evaluateRollAgainstRequest(req, resp, token = null, state = null) {
+    if (!req || !resp) return { status: 'none', badge: '', detail: '' };
+    const outcome = state
+      ? this.getSystemOutcomeConfig(state)
+      : {
+          outcomeRule: 'high',
+          tieredHigh: 10,
+          tieredMid: 7,
+          labels: { success: 'Éxito', partial: 'Éxito parcial', fail: 'Fallo' }
+        };
+    const total = Number(resp.total) || 0;
+    const mode = req.evalMode
+      || (req.resultMode === 'success' || state?.systemConfig?.resultMode === 'success'
+        ? 'pool'
+        : outcome.outcomeRule);
+
+    if (mode === 'none') {
+      return { status: 'none', badge: '', detail: '' };
+    }
+    if (mode === 'pool') {
+      const reqHits = Number(req.requiredSuccesses) || Number(req.dc) || 0;
+      if (reqHits <= 0) return { status: 'none', badge: '', detail: '' };
+      const ok = total >= reqHits;
+      return {
+        status: ok ? 'pass' : 'fail',
+        badge: ok ? '✓' : '✗',
+        detail: `${total}/${reqHits}`
+      };
+    }
+    if (mode === 'low') {
+      let target = Number(req.dc) > 0 ? Number(req.dc) : 0;
+      if (target <= 0 && token && req.statKey) {
+        const base = Number(token.stats?.[req.statKey]) || 0;
+        const scale = [1, 2, 5].includes(Number(req.lowScale)) ? Number(req.lowScale) : 1;
+        const mod = Number(req.difficultyMod) || 0;
+        if (base > 0) target = Math.max(1, Math.floor(base / scale) + mod);
+      }
+      if (target <= 0) return { status: 'none', badge: '', detail: '' };
+      const ok = total <= target;
+      return {
+        status: ok ? 'pass' : 'fail',
+        badge: ok ? '✓' : '✗',
+        detail: `≤ ${target}`
+      };
+    }
+    if (mode === 'tiered') {
+      const high = Number.isFinite(Number(req.tieredHigh)) ? Number(req.tieredHigh) : outcome.tieredHigh;
+      const mid = Number.isFinite(Number(req.tieredMid)) ? Number(req.tieredMid) : outcome.tieredMid;
+      if (total >= high) return { status: 'pass', badge: '✓', detail: outcome.labels.success };
+      if (total >= mid) return { status: 'partial', badge: '◐', detail: outcome.labels.partial };
+      return { status: 'fail', badge: '✗', detail: outcome.labels.fail };
+    }
+    const dc = Number(req.dc) || 0;
+    if (dc <= 0) return { status: 'none', badge: '', detail: '' };
+    const ok = total >= dc;
+    return { status: ok ? 'pass' : 'fail', badge: ok ? '✓' : '✗', detail: `CD ${dc}` };
+  },
+
+  buildWireRollRequest(fullReq) {
+    if (!fullReq || typeof fullReq !== 'object') return null;
+    const wire = {
+      requestId: fullReq.requestId,
+      senderId: fullReq.senderId,
+      label: fullReq.label,
+      statKey: fullReq.statKey,
+      formula: fullReq.formula,
+      damageTotal: Number(fullReq.damageTotal) || 0,
+      targets: Array.isArray(fullReq.targets) ? fullReq.targets.map((t) => ({ id: t.id, name: t.name })) : [],
+      secretDc: Boolean(fullReq.secretDc)
+    };
+    if (fullReq.isInitiative) wire.isInitiative = true;
+    if (fullReq.resultMode) wire.resultMode = fullReq.resultMode;
+    if (Number(fullReq.successThreshold) > 0) wire.successThreshold = Number(fullReq.successThreshold);
+    if (wire.secretDc) {
+      wire.dc = 0;
+      return wire;
+    }
+    wire.dc = Number(fullReq.dc) || 0;
+    if (fullReq.evalMode) wire.evalMode = fullReq.evalMode;
+    if (fullReq.lowScale) wire.lowScale = fullReq.lowScale;
+    if (Number.isFinite(Number(fullReq.difficultyMod)) && Number(fullReq.difficultyMod) !== 0) {
+      wire.difficultyMod = Number(fullReq.difficultyMod);
+    }
+    if (Number(fullReq.requiredSuccesses) > 0) wire.requiredSuccesses = Number(fullReq.requiredSuccesses);
+    if (Number.isFinite(Number(fullReq.tieredHigh))) wire.tieredHigh = Number(fullReq.tieredHigh);
+    if (Number.isFinite(Number(fullReq.tieredMid))) wire.tieredMid = Number(fullReq.tieredMid);
+    return wire;
+  },
+
+  /**
+   * Computes total Euclidean length along a polyline of {x, y} points.
+   * @param {Array<{x: number, y: number}>} points
+   * @returns {number}
+   */
+  getPolylineLength(points) {
+    if (!Array.isArray(points) || points.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+      total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    }
+    return total;
+  },
+
+  /**
+   * Simplifies a dragged token polyline with Ramer-Douglas-Peucker,
+   * dropping near-straight points and capping to maxPoints. Returns null
+   * for straight segments (<= 2 points) so compact moves omit path.
+   * @param {Array<{x: number, y: number}>} rawPoints
+   * @param {{x: number, y: number}} finalPt
+   * @param {number} maxPoints
+   * @returns {Array<{x: number, y: number}>|null}
+   */
+  simplifyMovePath(rawPoints, finalPt, maxPoints = 12) {
+    const clampPt = (p) => {
+      if (!p || typeof p !== 'object') return null;
+      const x = Number(p.x);
+      const y = Number(p.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return {
+        x: Math.round(Math.max(40, Math.min(2360, x))),
+        y: Math.round(Math.max(40, Math.min(1560, y)))
+      };
+    };
+
+    const end = clampPt(finalPt);
+    if (!end || !Array.isArray(rawPoints) || rawPoints.length === 0) return null;
+
+    const cleaned = [];
+    for (const raw of rawPoints) {
+      const pt = clampPt(raw);
+      if (!pt) continue;
+      if (cleaned.length === 0 || Math.hypot(pt.x - cleaned[cleaned.length - 1].x, pt.y - cleaned[cleaned.length - 1].y) >= 8) {
+        cleaned.push(pt);
+      }
+    }
+    if (cleaned.length === 0) return null;
+
+    if (Math.hypot(end.x - cleaned[cleaned.length - 1].x, end.y - cleaned[cleaned.length - 1].y) <= 28) {
+      cleaned[cleaned.length - 1] = end;
+    } else {
+      cleaned.push(end);
+    }
+
+    if (cleaned.length < 2) return null;
+    if (cleaned[0].x === end.x && cleaned[0].y === end.y && cleaned.length === 2) return null;
+
+    const perpDist = (pt, a, b) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq <= 0.0001) return Math.hypot(pt.x - a.x, pt.y - a.y);
+      return Math.abs(dy * pt.x - dx * pt.y + b.x * a.y - b.y * a.x) / Math.sqrt(lenSq);
+    };
+
+    const rdp = (pts, eps) => {
+      if (pts.length <= 2) return pts.slice();
+      let maxD = -1;
+      let maxIdx = 0;
+      const first = pts[0];
+      const last = pts[pts.length - 1];
+      for (let i = 1; i < pts.length - 1; i++) {
+        const d = perpDist(pts[i], first, last);
+        if (d > maxD) {
+          maxD = d;
+          maxIdx = i;
+        }
+      }
+      if (maxD > eps) {
+        const left = rdp(pts.slice(0, maxIdx + 1), eps);
+        const right = rdp(pts.slice(maxIdx), eps);
+        return left.slice(0, -1).concat(right);
+      }
+      return [first, last];
+    };
+
+    let eps = 18;
+    let simplified = rdp(cleaned, eps);
+    for (let pass = 0; pass < 8 && simplified.length > maxPoints; pass++) {
+      eps *= 1.45;
+      const cand = rdp(cleaned, eps);
+      if (cand.length < 3) break;
+      simplified = cand;
+    }
+
+    if (simplified.length > maxPoints && maxPoints >= 2) {
+      const thinned = [simplified[0]];
+      const innerCount = maxPoints - 2;
+      const avail = simplified.length - 2;
+      for (let k = 1; k <= innerCount; k++) {
+        const idx = Math.min(simplified.length - 2, Math.max(1, Math.round((k / (innerCount + 1)) * (avail + 1))));
+        const cand = simplified[idx];
+        if (cand !== thinned[thinned.length - 1]) thinned.push(cand);
+      }
+      thinned.push(simplified[simplified.length - 1]);
+      simplified = thinned;
+    }
+
+    if (simplified.length <= 2) return null;
+    return simplified;
+  },
+
+  /**
+   * Arc-length-parameterized sample along a polyline for progress in [0, 1].
+   * @param {Array<{x: number, y: number}>} points
+   * @param {number} progress
+   * @returns {{x: number, y: number}|null}
+   */
+  samplePointAlongPath(points, progress) {
+    if (!Array.isArray(points) || points.length === 0) return null;
+    if (points.length === 1) return { x: points[0].x, y: points[0].y };
+    const p = Math.max(0, Math.min(1, Number(progress) || 0));
+    if (p <= 0) return { x: points[0].x, y: points[0].y };
+    const last = points[points.length - 1];
+    if (p >= 1) return { x: last.x, y: last.y };
+
+    const totalLen = this.getPolylineLength(points);
+    if (totalLen <= 0) return { x: last.x, y: last.y };
+
+    const target = totalLen * p;
+    let accum = 0;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+      if (accum + segLen >= target && segLen > 0) {
+        const localT = (target - accum) / segLen;
+        return {
+          x: a.x + (b.x - a.x) * localT,
+          y: a.y + (b.y - a.y) * localT
+        };
+      }
+      accum += segLen;
+    }
+    return { x: last.x, y: last.y };
+  },
+
+  /**
+   * C2-smooth asymmetric ease-in-out (half-cosine / half-sine, split = 0.38)
+   * capping peak velocity near ~1.57x so 60 Hz playback stays crisp without judder.
+   * @param {number} t
+   * @returns {number}
+   */
+  easeTokenGlide(t) {
+    const x = Math.max(0, Math.min(1, Number(t) || 0));
+    const split = 0.38;
+    if (x <= split) {
+      return split * (1 - Math.cos((Math.PI * x) / (2 * split)));
+    }
+    return split + (1 - split) * Math.sin((Math.PI * (x - split)) / (2 * (1 - split)));
+  },
+
+  /**
+   * Smooths multi-segment paths by replacing sharp interior corners with short
+   * quadratic Bezier fillets while keeping start/end points exact.
+   * @param {Array<{x: number, y: number}>} points
+   * @param {number} cornerRadius
+   * @param {number} stepsPerCorner
+   * @returns {Array<{x: number, y: number}>}
+   */
+  smoothMovePath(points, cornerRadius = 36, stepsPerCorner = 4) {
+    if (!Array.isArray(points) || points.length <= 2) {
+      return Array.isArray(points) ? points.map((p) => ({ x: p.x, y: p.y })) : [];
+    }
+    const out = [{ x: points[0].x, y: points[0].y }];
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const next = points[i + 1];
+      const dx1 = curr.x - prev.x;
+      const dy1 = curr.y - prev.y;
+      const len1 = Math.hypot(dx1, dy1);
+      const dx2 = next.x - curr.x;
+      const dy2 = next.y - curr.y;
+      const len2 = Math.hypot(dx2, dy2);
+      if (len1 < 4 || len2 < 4) {
+        out.push({ x: curr.x, y: curr.y });
+        continue;
+      }
+      const trim = Math.min(cornerRadius, len1 * 0.35, len2 * 0.35);
+      const ax = curr.x - (dx1 / len1) * trim;
+      const ay = curr.y - (dy1 / len1) * trim;
+      const cx = curr.x + (dx2 / len2) * trim;
+      const cy = curr.y + (dy2 / len2) * trim;
+      for (let s = 0; s <= stepsPerCorner; s++) {
+        const u = s / stepsPerCorner;
+        const inv = 1 - u;
+        const bx = inv * inv * ax + 2 * inv * u * curr.x + u * u * cx;
+        const by = inv * inv * ay + 2 * inv * u * curr.y + u * u * cy;
+        const last = out[out.length - 1];
+        if (Math.hypot(bx - last.x, by - last.y) >= 0.5) {
+          out.push({ x: bx, y: by });
+        }
+      }
+    }
+    const end = points[points.length - 1];
+    const last = out[out.length - 1];
+    if (Math.hypot(end.x - last.x, end.y - last.y) >= 0.5) {
+      out.push({ x: end.x, y: end.y });
+    } else {
+      out[out.length - 1] = { x: end.x, y: end.y };
+    }
+    return out;
+  },
+
+  extractJournalForSeat(state, seatKey) {
+    const journal = state?.journal || {};
+    const assets = state?.mediaAssets || {};
+    const gmNotes = Array.isArray(journal.gmNotes) ? journal.gmNotes : [];
+    const receivedReveals = [];
+
+    if (seatKey) {
+      for (const note of gmNotes) {
+        if (!note || typeof note !== 'object') continue;
+        const revealed = Boolean(
+          note.revealedTo?.all ||
+          (Array.isArray(note.revealedTo?.seatKeys) && note.revealedTo.seatKeys.includes(seatKey))
+        );
+        if (!revealed) continue;
+        const visibleBlocks = (Array.isArray(note.blocks) ? note.blocks : [])
+          .filter((b) => canSeatSeeJournalBlock(b, seatKey))
+          .map((b) => ({
+            id: String(b.id || ''),
+            heading: String(b.heading || ''),
+            body: String(b.body || '')
+          }));
+        if (!visibleBlocks.length) continue;
+        const allowMedia = note.revealMedia !== false;
+        const mediaId = allowMedia ? String(note.mediaId || '') : '';
+        const imageUrl = allowMedia ? ((mediaId && assets[mediaId]?.url) || String(note.imageUrl || '')) : '';
+        receivedReveals.push({
+          id: String(note.id || ''),
+          title: String(note.title || 'Nota'),
+          gmFolder: String(note.folder || ''),
+          mediaId,
+          imageUrl,
+          blocks: visibleBlocks,
+          updatedAt: Number(note.updatedAt) || 0
+        });
+      }
+    }
+
+    const rawPj = seatKey && journal.playerJournals && journal.playerJournals[seatKey];
+    const playerJournal = rawPj && typeof rawPj === 'object'
+      ? JSON.parse(JSON.stringify({
+          folders: Array.isArray(rawPj.folders) ? rawPj.folders : [],
+          notes: Array.isArray(rawPj.notes) ? rawPj.notes : [],
+          revealedAnnotations: rawPj.revealedAnnotations && typeof rawPj.revealedAnnotations === 'object'
+            ? rawPj.revealedAnnotations
+            : {}
+        }))
+      : { folders: [], notes: [], revealedAnnotations: {} };
+
+    return { receivedReveals, playerJournal };
+  },
+
+  extractWorldForSeat(state, seatKey) {
+    return this.extractSerializableWorld(state, { includePrivateGm: false, forSeatKey: seatKey || '' });
+  },
+
+  extractSerializableWorld(state, { includePrivateGm = false, forSeatKey = null } = {}) {
+    const rawAssets = normalizeMediaAssets(state.mediaAssets);
+    if (includePrivateGm) {
+      const refs = collectReferencedMediaIds(state);
+      const retainedAssets = {};
+      for (const [id, asset] of Object.entries(rawAssets)) {
+        const urlHash = asset?.url ? hashMediaSource(asset.url) : '';
+        if (refs.has(id) || (urlHash && refs.has(urlHash))) {
+          retainedAssets[id] = asset;
+        }
+      }
+      const rawJournal = state.journal || {};
+      const world = {
+        moduleTitle: state.room.moduleTitle,
+        playerInvites: JSON.parse(JSON.stringify(this.getPlayerInvites(state))),
+        ruleset: state.ruleset || 'dnd55',
+        systemConfig: JSON.parse(JSON.stringify(state.systemConfig || {})),
+        sheetSchema: JSON.parse(JSON.stringify(state.sheetSchema || [])),
+        deck: state.deck ? JSON.parse(JSON.stringify(state.deck)) : null,
+        mapId: state.mapId,
+        activeMapKey: state.activeMapKey || state.mapId || 'bastion',
+        customMapUrl: state.customMapUrl,
+        mapGrids: JSON.parse(JSON.stringify(state.mapGrids || {})),
+        notes: JSON.parse(JSON.stringify(state.notes || [])),
+        combat: JSON.parse(JSON.stringify(state.combat || { active: false, round: 1, turnIndex: 0, order: [] })),
+        dynamicLighting: Boolean(state.dynamicLighting),
+        rememberExplored: state.rememberExplored !== false,
+        exploredMask: String(state.exploredMask || ''),
+        exploredRev: Math.max(0, Math.trunc(Number(state.exploredRev) || 0)),
+        walls: JSON.parse(JSON.stringify(state.walls || [])),
+        grid: { ...state.grid },
+        customActors: JSON.parse(JSON.stringify(state.customActors || [])),
+        customItems: JSON.parse(JSON.stringify(state.customItems || [])),
+        customMaps: JSON.parse(JSON.stringify(state.customMaps || [])),
+        compendiumFolders: JSON.parse(JSON.stringify(state.compendiumFolders || { actors: [], items: [], maps: [] })),
+        tokens: JSON.parse(JSON.stringify(state.tokens || [])),
+        strokes: JSON.parse(JSON.stringify(state.strokes || [])),
+        publicClocks: this.getPublicClocks(state),
+        mediaAssets: retainedAssets,
+        journal: JSON.parse(JSON.stringify({
+          gmFolders: Array.isArray(rawJournal.gmFolders) ? rawJournal.gmFolders : [],
+          gmNotes: Array.isArray(rawJournal.gmNotes) ? rawJournal.gmNotes : [],
+          playerJournals: rawJournal.playerJournals && typeof rawJournal.playerJournals === 'object'
+            ? rawJournal.playerJournals
+            : {}
+        })),
+        sceneLayers: JSON.parse(JSON.stringify(state.sceneLayers || {})),
+        sceneLighting: JSON.parse(JSON.stringify(state.sceneLighting || {}))
+      };
+      if (state.gmScreen) {
+        world.gmScreen = JSON.parse(JSON.stringify(state.gmScreen));
+      }
+      return world;
+    }
+
+    const effectiveSeat = forSeatKey || (state?.role === 'player' ? (state.activeInviteId || '') : '');
+    const allowedIds = new Set(effectiveSeat ? getSeatAllowedTokenIds(state, effectiveSeat) : []);
+    const redactedTokens = (state.tokens || []).map((tok) =>
+      allowedIds.has(tok.id) ? JSON.parse(JSON.stringify(tok)) : redactTokenForNonOwner(tok)
+    );
+    const visibleTokenIds = new Set(this.getVisibleTokensForSeat(state, effectiveSeat).map((t) => t.id));
+    const authMedia = collectPlayerAuthorizedMedia(state, effectiveSeat, { visibleTokenIds });
+    const seatAssets = {};
+    for (const item of authMedia) {
+      if (item.mediaId && rawAssets[item.mediaId]) {
+        seatAssets[item.mediaId] = rawAssets[item.mediaId];
+      } else if (item.mediaId && item.url) {
+        seatAssets[item.mediaId] = {
+          id: item.mediaId,
+          url: item.url,
+          label: item.label || 'Imagen',
+          kind: item.kind || 'token',
+          createdAt: 0
+        };
+      }
+    }
+
+    const wireWorld = {
       moduleTitle: state.room.moduleTitle,
       playerInvites: JSON.parse(JSON.stringify(this.getPlayerInvites(state))),
       ruleset: state.ruleset || 'dnd55',
@@ -646,18 +1339,26 @@ export const Selector = {
       activeMapKey: state.activeMapKey || state.mapId || 'bastion',
       customMapUrl: state.customMapUrl,
       mapGrids: JSON.parse(JSON.stringify(state.mapGrids || {})),
-      notes: JSON.parse(JSON.stringify(state.notes || [])),
-      combat: JSON.parse(JSON.stringify(state.combat || { active: false, round: 1, turnIndex: 0, order: [] })),
+      notes: filterVisibleMapNotes(state.notes, false),
+      combat: redactCombatForSeat(state.combat, state.tokens, state.systemConfig?.combatTrackerPublic !== false),
       dynamicLighting: Boolean(state.dynamicLighting),
-      walls: JSON.parse(JSON.stringify(state.walls || [])),
+      rememberExplored: state.rememberExplored !== false,
+      exploredMask: String(state.exploredMask || ''),
+      exploredRev: Math.max(0, Math.trunc(Number(state.exploredRev) || 0)),
+      walls: redactWallsForPlayer(state.walls || []),
       grid: { ...state.grid },
-      customActors: JSON.parse(JSON.stringify(state.customActors || [])),
-      customItems: JSON.parse(JSON.stringify(state.customItems || [])),
-      customMaps: JSON.parse(JSON.stringify(state.customMaps || [])),
-      compendiumFolders: JSON.parse(JSON.stringify(state.compendiumFolders || { actors: [], items: [], maps: [] })),
-      tokens: JSON.parse(JSON.stringify(state.tokens)),
-      strokes: JSON.parse(JSON.stringify(state.strokes)),
-      fogRects: JSON.parse(JSON.stringify(state.fogRects))
+      customActors: [],
+      customItems: [],
+      customMaps: [],
+      compendiumFolders: { actors: [], items: [], maps: [] },
+      tokens: redactedTokens,
+      strokes: JSON.parse(JSON.stringify(state.strokes || [])),
+      publicClocks: this.getPublicClocks(state),
+      mediaAssets: seatAssets
     };
+    if (forSeatKey) {
+      wireWorld.journal = this.extractJournalForSeat(state, forSeatKey);
+    }
+    return wireWorld;
   }
 };

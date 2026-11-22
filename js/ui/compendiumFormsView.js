@@ -84,6 +84,7 @@ export const CompendiumFormsViewMethods = {
     this.renderColorSwatchGrid(this.els.customTokenColorGrid, this.selectedTokenColor, (hex) => {
       this.selectedTokenColor = hex;
       this.renderCustomColorGrids();
+      this.renderCustomTokenPreview?.();
     });
     this.renderColorSwatchGrid(this.els.customItemColorGrid, this.selectedItemColor, (hex) => {
       this.selectedItemColor = hex;

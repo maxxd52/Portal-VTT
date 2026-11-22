@@ -3,94 +3,19 @@
    Soporta d4, d6, d8, d10 (trapezoedro pentagonal), d12, d20 y d100 (2×d10)
    ========================================================================== */
 
-const DiceAudio = {
-  ctx: null,
-  noiseBuffer: null,
-
-  getContext() {
-    if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-      return this.ctx;
-    }
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return null;
-    this.ctx = new AudioCtx();
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-    return this.ctx;
-  },
-
-  getNoiseBuffer(ctx) {
-    if (this.noiseBuffer) return this.noiseBuffer;
-    const len = Math.floor(ctx.sampleRate * 0.08);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    this.noiseBuffer = buf;
-    return buf;
-  },
-
-  // Impacto físico sin ondas senoidales: solo ruido filtrado en banda de madera + chasquido de resina
-  playWoodTap(intensity = 1, delaySec = 0) {
-    try {
-      const ctx = this.getContext();
-      if (!ctx) return;
-      const t0 = ctx.currentTime + delaySec;
-      const level = Math.max(0.03, Math.min(1, intensity));
-      const jitter = 0.86 + Math.random() * 0.28;
-
-      // 1. Golpe seco de arista acrílica/resina
-      const snapSrc = ctx.createBufferSource();
-      snapSrc.buffer = this.getNoiseBuffer(ctx);
-      const snapFilter = ctx.createBiquadFilter();
-      snapFilter.type = 'bandpass';
-      snapFilter.frequency.value = 2250 * jitter;
-      snapFilter.Q.value = 1.6;
-      const snapGain = ctx.createGain();
-      snapGain.gain.setValueAtTime(0.32 * level, t0);
-      snapGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.011);
-      snapSrc.connect(snapFilter);
-      snapFilter.connect(snapGain);
-      snapGain.connect(ctx.destination);
-      snapSrc.start(t0);
-      snapSrc.stop(t0 + 0.014);
-
-      // 2. Resonancia mate de mesa de madera (banda media-grave, sin tono electrónico)
-      const bodySrc = ctx.createBufferSource();
-      bodySrc.buffer = this.getNoiseBuffer(ctx);
-      const bodyFilter = ctx.createBiquadFilter();
-      bodyFilter.type = 'bandpass';
-      bodyFilter.frequency.value = 430 * jitter;
-      bodyFilter.Q.value = 1.3;
-      const bodyGain = ctx.createGain();
-      bodyGain.gain.setValueAtTime(0.36 * level, t0);
-      bodyGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.024);
-      bodySrc.connect(bodyFilter);
-      bodyFilter.connect(bodyGain);
-      bodyGain.connect(ctx.destination);
-      bodySrc.start(t0);
-      bodySrc.stop(t0 + 0.028);
-    } catch (_) {}
-  },
-
-  playPickup(count = 1) {
-    this.playWoodTap(0.28, 0);
-    if (count > 1) {
-      this.playWoodTap(0.20, 0.022 + Math.random() * 0.012);
-    }
-  },
-
-  playThrow() {
-    this.playWoodTap(0.14, 0);
-  }
-};
+import { TabletopAudio as DiceAudio } from './tabletopAudio.js?v=20261121a6';
 
 export const Dice3DEngine = {
   renderer: null,
   scene: null,
   camera: null,
   diceGroup: null,
+  activeFlights: [],
+  pendingQueue: [],
+  maxActiveFlights: 4,
+  maxActiveDice: 24,
+  maxPendingQueue: 8,
+  _nextFlightId: 1,
   animId: null,
   canvas: null,
   overlayEl: null,
@@ -104,7 +29,32 @@ export const Dice3DEngine = {
   previewTargetQuat: null,
   previewAnimId: null,
 
-  setupSceneLights(sceneObj) {
+  getActiveDiceCount() {
+    return (this.activeFlights || []).reduce((sum, f) => sum + (Number(f?.totalDice) || 0), 0);
+  },
+
+  canStartFlightNow(diceCount = 1, mode = 'remote') {
+    if (mode === 'local') return true;
+    const active = Array.isArray(this.activeFlights) ? this.activeFlights : [];
+    if (active.length === 0) return true;
+    const n = Math.max(1, Number(diceCount) || 1);
+    return active.length < this.maxActiveFlights && (this.getActiveDiceCount() + n) <= this.maxActiveDice;
+  },
+
+  syncCompatState() {
+    const active = Array.isArray(this.activeFlights) ? this.activeFlights : [];
+    this.diceGroup = active.length ? active[active.length - 1].group : null;
+    this.isFlying = active.some((f) => !f.poseSettled);
+  },
+
+  disposeFlight(flight) {
+    if (!flight) return;
+    this.disposeObjectTree(this.scene, flight.group);
+    this.activeFlights = (this.activeFlights || []).filter((f) => f !== flight);
+    this.syncCompatState();
+  },
+
+  setupSceneLights(sceneObj, isMainScene = false) {
     const THREE = window.THREE;
     const hemi = new THREE.HemisphereLight(0xf8fafc, 0x1e293b, 0.62);
     const keyLight = new THREE.DirectionalLight(0xfffaf0, 1.05);
@@ -114,6 +64,27 @@ export const Dice3DEngine = {
     const rimLight = new THREE.DirectionalLight(0xe0e7ff, 0.48);
     rimLight.position.set(-1.6, 3.6, -2.4);
     sceneObj.add(hemi, keyLight, fillLight, rimLight);
+    if (isMainScene) {
+      this.lights = { hemi, keyLight, fillLight, rimLight };
+      this.shadowDir = { x: -0.28, y: -0.36 };
+    }
+  },
+
+  setSceneAtmosphere(atmo) {
+    if (!atmo || typeof atmo !== 'object') return;
+    if (atmo.diceShadowDir && Number.isFinite(atmo.diceShadowDir.x) && Number.isFinite(atmo.diceShadowDir.y)) {
+      this.shadowDir = { x: atmo.diceShadowDir.x, y: atmo.diceShadowDir.y };
+    }
+    const L = this.lights;
+    if (!L) return;
+    if (Number.isFinite(atmo.hemiSkyHex)) L.hemi?.color?.setHex(atmo.hemiSkyHex);
+    if (Number.isFinite(atmo.hemiGroundHex)) L.hemi?.groundColor?.setHex(atmo.hemiGroundHex);
+    if (Number.isFinite(atmo.keyHex)) L.keyLight?.color?.setHex(atmo.keyHex);
+    if (Number.isFinite(atmo.fillHex)) L.fillLight?.color?.setHex(atmo.fillHex);
+    if (Number.isFinite(atmo.rimHex)) L.rimLight?.color?.setHex(atmo.rimHex);
+    if (L.keyLight && this.shadowDir) {
+      L.keyLight.position.set(-this.shadowDir.x * 9.0, -this.shadowDir.y * 11.6, 5.2);
+    }
   },
 
   init(canvas, { overlayEl = null, trayEl = null } = {}) {
@@ -129,21 +100,100 @@ export const Dice3DEngine = {
       this.camera = new window.THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 120);
       this.camera.position.set(0, 0, 24);
 
-      this.setupSceneLights(this.scene);
+      this.setupSceneLights(this.scene, true);
+      if (!this._resizeBound && typeof window !== 'undefined') {
+        this._resizeBound = true;
+        window.addEventListener('resize', () => this.handleResize());
+      }
     } catch (_) {}
   },
 
-  clear() {
+  handleResize() {
+    if (!this.renderer || !this.camera || typeof window === 'undefined') return;
+    if (!Array.isArray(this.activeFlights) || this.activeFlights.length === 0) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (vw <= 0 || vh <= 0) return;
+    this._lastVw = vw;
+    this._lastVh = vh;
+    const flyCamZ = 24;
+    const tanHalfFov = Math.tan((20 * Math.PI) / 180);
+    const visH = 2 * flyCamZ * tanHalfFov;
+    const pxPerUnit = vh / visH;
+
+    this.renderer.setSize(vw, vh, false);
+    this.camera.aspect = vw / vh;
+    this.camera.updateProjectionMatrix();
+
+    for (let i = 0; i < this.activeFlights.length; i++) {
+      const f = this.activeFlights[i];
+      if (f.cellPx > 0) {
+        f.dieScale = (f.cellPx * 0.78 / pxPerUnit) / 2.2;
+        for (let j = 0; j < f.actors.length; j++) {
+          const a = f.actors[j];
+          a.mesh.scale.setScalar(f.dieScale);
+          this.updateActorShadow(a, f.dieScale, f.flyCamZ);
+        }
+      }
+    }
+    if (!this.animId && this.scene) {
+      this.renderer.render(this.scene, this.camera);
+    }
+  },
+
+  clear({ localOnly = false } = {}) {
+    if (localOnly) {
+      const locals = (this.activeFlights || []).filter((f) => f.mode === 'local');
+      locals.forEach((f) => {
+        this.disposeFlight(f);
+        if (typeof f.onComplete === 'function' && !f.completedNotified) {
+          f.completedNotified = true;
+          f.onComplete();
+        }
+      });
+      if ((this.activeFlights || []).length === 0 && (this.pendingQueue || []).length === 0) {
+        if (this.animId) {
+          cancelAnimationFrame(this.animId);
+          this.animId = null;
+        }
+        if (this.renderer && this.scene && this.camera) {
+          this.renderer.render(this.scene, this.camera);
+        }
+        if (this.canvas) {
+          this.canvas.style.opacity = '';
+          this.canvas.classList.add('hidden');
+        }
+      } else if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+      this.syncCompatState();
+      return;
+    }
+
     if (this.animId) {
       cancelAnimationFrame(this.animId);
       this.animId = null;
     }
-    this.isFlying = false;
-    this.disposeGroup();
+    const droppedFlights = [...(this.activeFlights || [])];
+    droppedFlights.forEach((f) => this.disposeFlight(f));
+    this.activeFlights = [];
+    const droppedQueue = [...(this.pendingQueue || [])];
+    this.pendingQueue = [];
+    droppedQueue.forEach((q) => {
+      if (typeof q?.opts?.onComplete === 'function') q.opts.onComplete();
+    });
+    droppedFlights.forEach((f) => {
+      if (typeof f.onComplete === 'function' && !f.completedNotified) {
+        f.completedNotified = true;
+        f.onComplete();
+      }
+    });
+    this.syncCompatState();
     if (this.renderer && this.scene && this.camera) {
       this.renderer.render(this.scene, this.camera);
     }
     if (this.canvas) {
+      this.canvas.style.opacity = '';
       this.canvas.classList.add('hidden');
     }
   },
@@ -950,8 +1000,9 @@ export const Dice3DEngine = {
   },
 
   disposeGroup() {
-    this.disposeObjectTree(this.scene, this.diceGroup);
-    this.diceGroup = null;
+    [...(this.activeFlights || [])].forEach((f) => this.disposeFlight(f));
+    this.activeFlights = [];
+    this.syncCompatState();
   },
 
   playPickup(count = 1) {
@@ -992,9 +1043,11 @@ export const Dice3DEngine = {
     const dieRadius = 1.50 * dieScale;
     const shadowZ = -1.68 * dieScale;
 
-    // Desplazamiento abajo-izquierda acorde a keyLight (2.5, 4, 5)
-    const tx = actor.mesh.position.x - 0.28 * dieRadius - 0.16 * h;
-    const ty = actor.mesh.position.y - 0.36 * dieRadius - 0.22 * h;
+    // Desplazamiento alineado con la iluminación ambiental de la mesa
+    const sdx = Number.isFinite(this.shadowDir?.x) ? this.shadowDir.x : -0.28;
+    const sdy = Number.isFinite(this.shadowDir?.y) ? this.shadowDir.y : -0.36;
+    const tx = actor.mesh.position.x + sdx * dieRadius + (sdx * 0.58) * h;
+    const ty = actor.mesh.position.y + sdy * dieRadius + (sdy * 0.61) * h;
     const zComp = (camZ - shadowZ) / camZ;
 
     actor.shadowMesh.position.set(tx * zComp, ty * zComp, shadowZ);
@@ -1018,6 +1071,29 @@ export const Dice3DEngine = {
     return { emissiveIntensity, neighborShade };
   },
 
+  /**
+   * Computes friction-damped return progress and diminishing gravity bounce Z
+   * for remote dice rolls after tabletop impact.
+   * @param {number} u2 Normalized post-bounce progress in [0, 1]
+   * @param {number} zArc Peak incoming arc height
+   * @returns {{sPos: number, sRot: number, z: number, bounceStage: number}}
+   */
+  computeRemoteReturnKinematics(u2, zArc = 2.8) {
+    const u = Math.max(0, Math.min(1, Number(u2) || 0));
+    const sPos = 1 - Math.pow(1 - u, 2.35);
+    const sRot = 1 - Math.pow(1 - u, 2.65);
+    let z = 0;
+    let bounceStage = 3;
+    if (u < 0.38) {
+      z = Math.sin((u / 0.38) * Math.PI) * (zArc * 0.34);
+      bounceStage = 1;
+    } else if (u < 0.62) {
+      z = Math.sin(((u - 0.38) / 0.24) * Math.PI) * (zArc * 0.10);
+      bounceStage = 2;
+    }
+    return { sPos, sRot, z, bounceStage };
+  },
+
   canRoll3D() {
     return Boolean(this.renderer && this.scene && this.canvas && typeof window.THREE !== 'undefined');
   },
@@ -1032,14 +1108,51 @@ export const Dice3DEngine = {
     this.rollHand([{ sides, colorHex, value: rolledValue }]);
   },
 
-  rollHand(items, { targetX = null, targetY = null, style = null } = {}) {
+  rollHand(items, opts = {}) {
     if (!this.renderer || !this.scene || typeof window.THREE === 'undefined') return;
     if (!Array.isArray(items) || items.length === 0) return;
-    if (this.animId) cancelAnimationFrame(this.animId);
-    this.disposeGroup();
+
+    const mode = opts?.mode === 'remote' ? 'remote' : 'local';
+    const diceCount = items.reduce((acc, it) => acc + (Number(it?.sides) === 100 ? 2 : 1), 0);
+    if (!this.canvas || diceCount === 0) {
+      if (typeof opts?.onComplete === 'function') opts.onComplete();
+      return;
+    }
+
+    if (mode === 'remote' && !this.canStartFlightNow(diceCount, 'remote')) {
+      this.pendingQueue.push({ items, opts, totalDice: diceCount });
+      if (this.pendingQueue.length > this.maxPendingQueue) {
+        const dropped = this.pendingQueue.shift();
+        if (typeof dropped?.opts?.onComplete === 'function') dropped.opts.onComplete();
+      }
+      this.ensureLoopRunning();
+      return;
+    }
+
+    if (mode === 'local') {
+      const prevLocals = (this.activeFlights || []).filter((f) => f.mode === 'local');
+      prevLocals.forEach((f) => {
+        this.disposeFlight(f);
+        if (typeof f.onComplete === 'function' && !f.completedNotified) {
+          f.completedNotified = true;
+          f.onComplete();
+        }
+      });
+    }
+
+    const launched = this.launchFlight(items, opts);
+    if (!launched && typeof opts?.onComplete === 'function') {
+      opts.onComplete();
+    }
+    this.ensureLoopRunning();
+  },
+
+  launchFlight(items, { targetX = null, targetY = null, originX = null, mode = 'local', style = null, onComplete = null } = {}) {
+    if (!this.renderer || !this.scene || !this.canvas || typeof window.THREE === 'undefined') return null;
+    if (!Array.isArray(items) || items.length === 0) return null;
 
     const THREE = window.THREE;
-    this.diceGroup = new THREE.Group();
+    const group = new THREE.Group();
     const actors = [];
 
     // Expandir cada dado (d100 se desdobla en par inseparable de d10)
@@ -1084,9 +1197,9 @@ export const Dice3DEngine = {
       }
     }
 
-    if (!this.canvas || totalDice === 0) return;
+    if (totalDice === 0) return null;
 
-    this.isFlying = true;
+    this.canvas.style.opacity = '';
     this.canvas.classList.remove('hidden');
 
     const vw = window.innerWidth;
@@ -1094,10 +1207,14 @@ export const Dice3DEngine = {
     const flyCamZ = 24;
     const tanHalfFov = Math.tan((20 * Math.PI) / 180);
 
-    this.renderer.setSize(vw, vh, false);
-    this.camera.aspect = vw / vh;
-    this.camera.position.set(0, 0, flyCamZ);
-    this.camera.updateProjectionMatrix();
+    if (this._lastVw !== vw || this._lastVh !== vh) {
+      this._lastVw = vw;
+      this._lastVh = vh;
+      this.renderer.setSize(vw, vh, false);
+      this.camera.aspect = vw / vh;
+      this.camera.position.set(0, 0, flyCamZ);
+      this.camera.updateProjectionMatrix();
+    }
 
     const visH = 2 * flyCamZ * tanHalfFov;
     const visW = visH * (vw / vh);
@@ -1147,9 +1264,28 @@ export const Dice3DEngine = {
     const zoneCx = vw * 0.5;
     const zoneCy = Math.max(zoneH * 0.5 + 76, zoneBottomSy - zoneH * 0.5);
 
+    const isRemoteMode = mode === 'remote';
     const aimX = targetX !== null ? targetX : vw * 0.5;
     const aimY = targetY !== null ? targetY : vh * 0.35;
+    const anchorX = Number.isFinite(Number(originX)) ? Number(originX) : aimX;
+    const remoteZoneHalfW = (cols * cellStepX) * 0.5 + 36;
+    let remoteCx = Math.max(remoteZoneHalfW, Math.min(vw - remoteZoneHalfW, anchorX));
+    if (isRemoteMode) {
+      const activeRemotes = (this.activeFlights || []).filter((f) => f.mode === 'remote');
+      if (activeRemotes.some((f) => Math.abs(f.remoteCx - remoteCx) < 130)) {
+        const offsets = [150, -150, 290, -290, 420, -420];
+        for (const off of offsets) {
+          const cand = Math.max(remoteZoneHalfW, Math.min(vw - remoteZoneHalfW, remoteCx + off));
+          if (activeRemotes.every((f) => Math.abs(f.remoteCx - cand) >= 120)) {
+            remoteCx = cand;
+            break;
+          }
+        }
+      }
+    }
+    const remoteZoneCy = Math.max(108 + zoneH * 0.5, Math.min(vh * 0.30, 142 + zoneH * 0.38));
     const shadowTex = this.getShadowTexture();
+    const baseShadowOpacity = isRemoteMode ? 0.62 : 0.68;
 
     let flatIdx = 0;
     for (let r = 0; r < rows; r++) {
@@ -1159,190 +1295,370 @@ export const Dice3DEngine = {
         const idx = flatIdx++;
         const die = rowMeshes[c];
         die.mesh.scale.setScalar(dieScale);
-        this.diceGroup.add(die.mesh);
+        group.add(die.mesh);
 
         const shadowMesh = new THREE.Mesh(
           new THREE.PlaneGeometry(1, 1),
           new THREE.MeshBasicMaterial({
             map: shadowTex,
             transparent: true,
-            opacity: 0.68,
+            opacity: baseShadowOpacity,
             depthWrite: false
           })
         );
-        this.diceGroup.add(shadowMesh);
+        group.add(shadowMesh);
 
-        const jitterX = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.04;
-        const jitterY = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.06;
-        const endSx = zoneCx + (c - (rowCount - 1) / 2) * cellStepX + jitterX;
-        const endSy = zoneCy + (r - (rows - 1) / 2) * cellStepY + jitterY;
+        const fanNorm = totalDice === 1 ? 0 : (idx / (totalDice - 1)) * 2 - 1;
+        let sx0;
+        let sy0;
+        let px0;
+        let py0;
+        let ctrlSx;
+        let ctrlSy;
+        let endSx;
+        let endSy;
+        let bounceT;
+        let startDelay;
+        let zArc;
+        let launchAngle;
+        let returnAngle;
+        let restTwist;
 
-      const fanNorm = totalDice === 1 ? 0 : (idx / (totalDice - 1)) * 2 - 1;
-      const sx0 = Math.max(48, Math.min(vw - 48, vw * 0.5 + fanNorm * Math.min(260, vw * 0.24) + (Math.random() - 0.5) * 90));
-      const sy0 = vh + 36 + Math.random() * 48;
+        if (isRemoteMode) {
+          // Remoto: entra desde arriba (avatar del jugador), rebota abajo y frena suave en el tercio superior
+          sx0 = Math.max(48, Math.min(vw - 48, anchorX + fanNorm * Math.min(90, vw * 0.08) + (Math.random() - 0.5) * 32));
+          sy0 = -28 - Math.random() * 24;
 
-      const scatterSpread = totalDice === 1 ? 0 : fanNorm * Math.min(vw * 0.36, 400);
-      const px0 = Math.max(64, Math.min(vw - 64, aimX + scatterSpread + (Math.random() - 0.5) * 140));
-      const py0 = totalDice === 1
-        ? Math.max(58, Math.min(aimY * 0.25, 110))
-        : Math.max(58, Math.min(vh * 0.44, 72 + Math.random() * 195));
+          const scatterSpread = totalDice === 1 ? (Math.random() - 0.5) * 80 : fanNorm * Math.min(vw * 0.24, 240);
+          px0 = Math.max(72, Math.min(vw - 72, remoteCx + scatterSpread + (Math.random() - 0.5) * 70));
+          py0 = Math.min(vh * 0.74, Math.max(vh * 0.58, vh - (165 + Math.random() * 60)));
 
-      const sideDir = px0 >= endSx ? -1 : 1;
-      const startW = screenToWorld(sx0, sy0);
-      const peakW = screenToWorld(px0, py0);
-      const endW = screenToWorld(endSx, endSy);
+          endSx = remoteCx + (c - (rowCount - 1) / 2) * cellStepX + (totalDice === 1 ? (Math.random() - 0.5) * 26 : (Math.random() - 0.5) * cellPx * 0.08);
+          endSy = remoteZoneCy + (r - (rows - 1) / 2) * cellStepY + (totalDice === 1 ? (Math.random() - 0.5) * 18 : (Math.random() - 0.5) * cellPx * 0.08);
 
-      // Punto de control Bézier para curvar suavemente tras el rebote y frenar alineado a endW
-      const ctrlSx = (px0 + endSx) * 0.5 + sideDir * (35 + Math.random() * 65);
-      const ctrlSy = (py0 + endSy) * 0.5 - (25 + Math.random() * 45);
-      const ctrlW = screenToWorld(ctrlSx, ctrlSy);
+          const driftDir = px0 >= endSx ? 1 : -1;
+          ctrlSx = (px0 + endSx) * 0.5 + driftDir * (28 + Math.random() * 44);
+          ctrlSy = (py0 + endSy) * 0.5 - (18 + Math.random() * 34);
 
-      const bounceT = totalDice === 1 ? 0.32 : 0.28 + Math.random() * 0.1;
-      const startDelay = totalDice === 1 ? 0 : Math.random() * 0.07;
-      const zArc = 2.4 + Math.random() * 2.4;
+          bounceT = totalDice === 1 ? 0.38 : 0.34 + Math.random() * 0.08;
+          startDelay = totalDice === 1 ? 0 : Math.random() * 0.08;
+          zArc = 2.6 + Math.random() * 1.8;
+          launchAngle = Math.PI * (2.1 + Math.random() * 0.6);
+          returnAngle = Math.PI * (2.35 + Math.random() * 0.65);
+          restTwist = (Math.random() - 0.5) * (totalDice === 1 ? 0.22 : 0.34);
+        } else {
+          // Local: trayectoria clásica desde abajo, rebota arriba y frena sobre la tarjeta central
+          const jitterX = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.04;
+          const jitterY = totalDice === 1 ? 0 : (Math.random() - 0.5) * cellPx * 0.06;
+          endSx = zoneCx + (c - (rowCount - 1) / 2) * cellStepX + jitterX;
+          endSy = zoneCy + (r - (rows - 1) / 2) * cellStepY + jitterY;
 
-      const zTwist = (Math.random() - 0.5) * 95;
-      const upAxis = new THREE.Vector3(py0 - sy0, px0 - sx0, zTwist).normalize();
-      const downAxis = new THREE.Vector3(endSy - ctrlSy, endSx - ctrlSx, -zTwist * 0.6).normalize();
-      const launchAngle = Math.PI * (1.85 + Math.random() * 0.55);
-      const returnAngle = Math.PI * (2.35 + Math.random() * 0.65);
-      // Pequeña inclinación orgánica en reposo (±6°..10°) para romper alineación robótica
-      const restTwist = (Math.random() - 0.5) * (totalDice === 1 ? 0.20 : 0.34);
-      const finalQuat = new THREE.Quaternion()
-        .setFromAxisAngle(new THREE.Vector3(0, 0, 1), restTwist)
-        .multiply(die.targetQuat);
-      const impactQuat = new THREE.Quaternion()
-        .setFromAxisAngle(downAxis, -returnAngle)
-        .multiply(finalQuat);
+          sx0 = Math.max(48, Math.min(vw - 48, vw * 0.5 + fanNorm * Math.min(260, vw * 0.24) + (Math.random() - 0.5) * 90));
+          sy0 = vh + 36 + Math.random() * 48;
 
-      actors.push({
-        mesh: die.mesh,
-        shadowMesh,
-        targetQuat: finalQuat,
-        targetMaterial: die.targetMaterial,
-        otherMaterials: die.otherMaterials,
-        bouncesSounded: 0,
-        startDelay,
-        bounceT,
-        startW,
-        peakW,
-        ctrlW,
-        endW,
-        zArc,
-        upAxis,
-        downAxis,
-        launchAngle,
-        returnAngle,
-        impactQuat
-      });
+          const scatterSpread = totalDice === 1 ? 0 : fanNorm * Math.min(vw * 0.36, 400);
+          px0 = Math.max(64, Math.min(vw - 64, aimX + scatterSpread + (Math.random() - 0.5) * 140));
+          py0 = totalDice === 1
+            ? Math.max(58, Math.min(aimY * 0.25, 110))
+            : Math.max(58, Math.min(vh * 0.44, 72 + Math.random() * 195));
+
+          const sideDir = px0 >= endSx ? -1 : 1;
+          ctrlSx = (px0 + endSx) * 0.5 + sideDir * (35 + Math.random() * 65);
+          ctrlSy = (py0 + endSy) * 0.5 - (25 + Math.random() * 45);
+
+          bounceT = totalDice === 1 ? 0.32 : 0.28 + Math.random() * 0.1;
+          startDelay = totalDice === 1 ? 0 : Math.random() * 0.07;
+          zArc = 2.4 + Math.random() * 2.4;
+          launchAngle = Math.PI * (1.85 + Math.random() * 0.55);
+          returnAngle = Math.PI * (2.35 + Math.random() * 0.65);
+          restTwist = (Math.random() - 0.5) * (totalDice === 1 ? 0.20 : 0.34);
+        }
+
+        const startW = screenToWorld(sx0, sy0);
+        const peakW = screenToWorld(px0, py0);
+        const endW = screenToWorld(endSx, endSy);
+        const ctrlW = screenToWorld(ctrlSx, ctrlSy);
+
+        const zTwist = (Math.random() - 0.5) * 95;
+        const upAxis = new THREE.Vector3(py0 - sy0, px0 - sx0, zTwist).normalize();
+        const downAxis = new THREE.Vector3(endSy - ctrlSy, endSx - ctrlSx, -zTwist * 0.6).normalize();
+        const finalQuat = new THREE.Quaternion()
+          .setFromAxisAngle(new THREE.Vector3(0, 0, 1), restTwist)
+          .multiply(die.targetQuat);
+        const impactQuat = new THREE.Quaternion()
+          .setFromAxisAngle(downAxis, -returnAngle)
+          .multiply(finalQuat);
+
+        actors.push({
+          mesh: die.mesh,
+          shadowMesh,
+          targetQuat: finalQuat,
+          targetMaterial: die.targetMaterial,
+          otherMaterials: die.otherMaterials,
+          bouncesSounded: 0,
+          startDelay,
+          bounceT,
+          startW,
+          peakW,
+          ctrlW,
+          endW,
+          zArc,
+          upAxis,
+          downAxis,
+          launchAngle,
+          returnAngle,
+          impactQuat
+        });
       }
     }
 
-    this.scene.add(this.diceGroup);
+    this.scene.add(group);
 
-    let overlayShown = this.overlayEl ? this.overlayEl.classList.contains('is-open') : false;
-    let poseSettled = false;
-    let lastAudioTapMs = 0;
-    const tapAtten = 1 / Math.sqrt(Math.max(1, totalDice));
-    const durationMs = totalDice === 1 ? 1240 : 1420;
-    const glowDurationMs = 780;
-    const startTime = performance.now();
-    const tmpQuat = new THREE.Quaternion();
-
-    DiceAudio.playThrow();
-
-    const triggerBounceAudio = (nowMs, baseLevel) => {
-      if (nowMs - lastAudioTapMs < 18) return;
-      lastAudioTapMs = nowMs;
-      DiceAudio.playWoodTap(Math.max(0.08, Math.min(0.95, baseLevel * tapAtten)), 0);
+    const flight = {
+      id: this._nextFlightId++,
+      mode: isRemoteMode ? 'remote' : 'local',
+      group,
+      actors,
+      totalDice,
+      cellPx,
+      dieScale,
+      flyCamZ,
+      remoteCx,
+      baseShadowOpacity,
+      overlayShown: !isRemoteMode && this.overlayEl ? this.overlayEl.classList.contains('is-open') : false,
+      poseSettled: false,
+      idle: false,
+      done: false,
+      fadeStarted: false,
+      completedNotified: false,
+      lastAudioTapMs: 0,
+      tapAtten: 1 / Math.sqrt(Math.max(1, totalDice)),
+      durationMs: isRemoteMode
+        ? (totalDice === 1 ? 1180 : 1320)
+        : (totalDice === 1 ? 1240 : 1420),
+      glowDurationMs: isRemoteMode ? 0 : 780,
+      remoteHoldMs: 200,
+      remoteFadeMs: 280,
+      startTime: null,
+      onComplete
     };
 
-    const step = (now = performance.now()) => {
-      const elapsed = Math.max(0, now - startTime);
-      const rawT = Math.min(1, elapsed / durationMs);
+    this.activeFlights.push(flight);
+    this.syncCompatState();
+    DiceAudio.playThrow();
+    return flight;
+  },
 
-      if (!poseSettled) {
-        for (let i = 0; i < actors.length; i++) {
-          const a = actors[i];
-          const localT = Math.min(1, Math.max(0, (rawT - a.startDelay) / (1 - a.startDelay)));
+  drainPendingQueue() {
+    let launched = false;
+    while (this.pendingQueue.length > 0 && this.canStartFlightNow(this.pendingQueue[0].totalDice, 'remote')) {
+      const next = this.pendingQueue.shift();
+      const flight = this.launchFlight(next.items, next.opts);
+      if (flight) launched = true;
+      else if (typeof next?.opts?.onComplete === 'function') next.opts.onComplete();
+    }
+    return launched;
+  },
 
-          if (localT <= a.bounceT) {
-            const u1 = localT / a.bounceT;
-            const airEase = Math.pow(u1, 0.86);
-            a.mesh.position.x = a.startW.x + (a.peakW.x - a.startW.x) * airEase;
-            a.mesh.position.y = a.startW.y + (a.peakW.y - a.startW.y) * airEase;
-            // Arco parabólico en el aire que toca el plano de la mesa (z=0) al impactar
-            a.mesh.position.z = Math.sin(u1 * Math.PI) * a.zArc;
+  ensureLoopRunning() {
+    if (this.animId) return;
+    if (typeof document !== 'undefined' && document.hidden) {
+      this.animId = requestAnimationFrame((t) => this.tickFlights(t));
+    } else {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      this.tickFlights(now);
+    }
+  },
 
-            const launchSpin = Math.pow(u1, 0.85);
-            tmpQuat.setFromAxisAngle(a.upAxis, -a.launchAngle * (1 - launchSpin));
-            a.mesh.quaternion.copy(a.impactQuat).premultiply(tmpQuat);
-          } else {
-            if (a.bouncesSounded === 0) {
-              a.bouncesSounded = 1;
-              triggerBounceAudio(now, 0.78 + Math.random() * 0.18);
-              if (!overlayShown && this.overlayEl) {
-                this.overlayEl.classList.add('is-open');
-                overlayShown = true;
-              }
+  stepFlight(flight, now) {
+    if (!flight || flight.idle || flight.done) return false;
+    const THREE = window.THREE;
+    const isRemoteMode = flight.mode === 'remote';
+    if (flight.startTime === null) flight.startTime = now;
+    const elapsed = Math.max(0, now - flight.startTime);
+    const rawT = Math.min(1, elapsed / flight.durationMs);
+    const tmpQuat = this._tmpQuat || (this._tmpQuat = new THREE.Quaternion());
+
+    const triggerBounceAudio = (baseLevel) => {
+      if (now - flight.lastAudioTapMs < 18) return;
+      flight.lastAudioTapMs = now;
+      DiceAudio.playWoodTap(Math.max(0.08, Math.min(0.95, baseLevel * flight.tapAtten)), 0);
+    };
+
+    const applyActorsHighlight = (progress) => {
+      const { emissiveIntensity, neighborShade } = this.computeResultHighlight(progress);
+      for (let i = 0; i < flight.actors.length; i++) {
+        const a = flight.actors[i];
+        if (a.targetMaterial) a.targetMaterial.emissiveIntensity = emissiveIntensity;
+        for (let m = 0; m < a.otherMaterials.length; m++) {
+          a.otherMaterials[m].color.setRGB(neighborShade, neighborShade, neighborShade);
+        }
+      }
+    };
+
+    if (!flight.poseSettled) {
+      for (let i = 0; i < flight.actors.length; i++) {
+        const a = flight.actors[i];
+        const localT = Math.min(1, Math.max(0, (rawT - a.startDelay) / (1 - a.startDelay)));
+
+        if (localT <= a.bounceT) {
+          const u1 = localT / a.bounceT;
+          const airEase = Math.pow(u1, isRemoteMode ? 0.92 : 0.86);
+          a.mesh.position.x = a.startW.x + (a.peakW.x - a.startW.x) * airEase;
+          a.mesh.position.y = a.startW.y + (a.peakW.y - a.startW.y) * airEase;
+          a.mesh.position.z = Math.sin(u1 * Math.PI) * a.zArc;
+
+          const launchSpin = Math.pow(u1, isRemoteMode ? 0.9 : 0.85);
+          tmpQuat.setFromAxisAngle(a.upAxis, -a.launchAngle * (1 - launchSpin));
+          a.mesh.quaternion.copy(a.impactQuat).premultiply(tmpQuat);
+        } else {
+          if (a.bouncesSounded === 0) {
+            a.bouncesSounded = 1;
+            triggerBounceAudio(0.78 + Math.random() * 0.18);
+            if (!isRemoteMode && !flight.overlayShown && this.overlayEl) {
+              this.overlayEl.classList.add('is-open');
+              flight.overlayShown = true;
             }
-            const u2 = (localT - a.bounceT) / (1 - a.bounceT);
-            // Desaceleración en posición Bézier y rotación con dos botes decrecientes reales
-            const sPos = 1 - Math.pow(1 - u2, 2.45);
-            const sRot = 1 - Math.pow(1 - u2, 2.75);
-            const invS = 1 - sPos;
-            a.mesh.position.x = invS * invS * a.peakW.x + 2 * invS * sPos * a.ctrlW.x + sPos * sPos * a.endW.x;
-            a.mesh.position.y = invS * invS * a.peakW.y + 2 * invS * sPos * a.ctrlW.y + sPos * sPos * a.endW.y;
-
+          }
+          const u2 = (localT - a.bounceT) / (1 - a.bounceT);
+          let sPos;
+          let sRot;
+          if (isRemoteMode) {
+            const kin = this.computeRemoteReturnKinematics(u2, a.zArc);
+            sPos = kin.sPos;
+            sRot = kin.sRot;
+            a.mesh.position.z = kin.z;
+            if (kin.bounceStage === 2 && a.bouncesSounded < 2) {
+              a.bouncesSounded = 2;
+              triggerBounceAudio(0.36 + Math.random() * 0.12);
+            } else if (kin.bounceStage === 3 && a.bouncesSounded < 3 && flight.totalDice <= 6) {
+              a.bouncesSounded = 3;
+              triggerBounceAudio(0.16);
+            }
+          } else {
+            sPos = 1 - Math.pow(1 - u2, 2.45);
+            sRot = 1 - Math.pow(1 - u2, 2.75);
             if (u2 < 0.36) {
               a.mesh.position.z = Math.sin((u2 / 0.36) * Math.PI) * (a.zArc * 0.28);
             } else if (u2 < 0.58) {
               if (a.bouncesSounded < 2) {
                 a.bouncesSounded = 2;
-                triggerBounceAudio(now, 0.42 + Math.random() * 0.12);
+                triggerBounceAudio(0.42 + Math.random() * 0.12);
               }
               a.mesh.position.z = Math.sin(((u2 - 0.36) / 0.22) * Math.PI) * (a.zArc * 0.08);
             } else {
-              if (a.bouncesSounded < 3 && totalDice <= 6) {
+              if (a.bouncesSounded < 3 && flight.totalDice <= 6) {
                 a.bouncesSounded = 3;
-                triggerBounceAudio(now, 0.18);
+                triggerBounceAudio(0.18);
               }
               a.mesh.position.z = 0;
             }
-
-            tmpQuat.setFromAxisAngle(a.downAxis, -a.returnAngle * (1 - sRot));
-            a.mesh.quaternion.copy(a.targetQuat).premultiply(tmpQuat);
           }
-          this.updateActorShadow(a, dieScale, flyCamZ);
-        }
-        if (rawT >= 1) {
-          poseSettled = true;
-          this.isFlying = false;
-        }
-      }
+          const invS = 1 - sPos;
+          a.mesh.position.x = invS * invS * a.peakW.x + 2 * invS * sPos * a.ctrlW.x + sPos * sPos * a.endW.x;
+          a.mesh.position.y = invS * invS * a.peakW.y + 2 * invS * sPos * a.ctrlW.y + sPos * sPos * a.endW.y;
 
-      let glowDone = false;
+          tmpQuat.setFromAxisAngle(a.downAxis, -a.returnAngle * (1 - sRot));
+          a.mesh.quaternion.copy(a.targetQuat).premultiply(tmpQuat);
+        }
+        this.updateActorShadow(a, flight.dieScale, flight.flyCamZ);
+      }
       if (rawT >= 1) {
-        const g = Math.min(1, (elapsed - durationMs) / glowDurationMs);
-        const { emissiveIntensity, neighborShade } = this.computeResultHighlight(g);
-        for (let i = 0; i < actors.length; i++) {
-          const a = actors[i];
-          if (a.targetMaterial) a.targetMaterial.emissiveIntensity = emissiveIntensity;
-          for (let m = 0; m < a.otherMaterials.length; m++) {
-            a.otherMaterials[m].color.setRGB(neighborShade, neighborShade, neighborShade);
+        flight.poseSettled = true;
+      }
+      return true;
+    }
+
+    if (isRemoteMode) {
+      const postMs = Math.max(0, elapsed - flight.durationMs);
+      const effHoldMs = this.pendingQueue.length > 0 ? 110 : flight.remoteHoldMs;
+      if (postMs < effHoldMs) {
+        applyActorsHighlight(postMs / (effHoldMs + flight.remoteFadeMs));
+        return true;
+      }
+      const fadeT = Math.min(1, (postMs - effHoldMs) / flight.remoteFadeMs);
+      const alpha = 1 - fadeT * fadeT * (3 - 2 * fadeT);
+      if (!flight.fadeStarted) {
+        flight.fadeStarted = true;
+        for (let i = 0; i < flight.actors.length; i++) {
+          const mats = flight.actors[i].mesh.material;
+          const list = Array.isArray(mats) ? mats : (mats ? [mats] : []);
+          for (let m = 0; m < list.length; m++) {
+            list[m].transparent = true;
+            list[m].depthWrite = false;
+            list[m].needsUpdate = true;
           }
         }
-        glowDone = g >= 1;
       }
+      const fadeScale = flight.dieScale * (0.88 + 0.12 * alpha);
+      for (let i = 0; i < flight.actors.length; i++) {
+        const a = flight.actors[i];
+        a.mesh.scale.setScalar(fadeScale);
+        const mats = a.mesh.material;
+        const list = Array.isArray(mats) ? mats : (mats ? [mats] : []);
+        for (let m = 0; m < list.length; m++) {
+          list[m].opacity = alpha;
+        }
+        if (a.shadowMesh?.material) {
+          a.shadowMesh.material.opacity = flight.baseShadowOpacity * alpha;
+        }
+      }
+      if (fadeT >= 1) {
+        flight.done = true;
+      }
+      return true;
+    }
 
+    const g = Math.min(1, (elapsed - flight.durationMs) / flight.glowDurationMs);
+    applyActorsHighlight(g);
+    if (g >= 1) {
+      flight.idle = true;
+      if (typeof flight.onComplete === 'function' && !flight.completedNotified) {
+        flight.completedNotified = true;
+        flight.onComplete();
+      }
+    }
+    return true;
+  },
+
+  tickFlights(now = performance.now()) {
+    let anyDirty = false;
+    const flights = [...(this.activeFlights || [])];
+    for (let i = 0; i < flights.length; i++) {
+      if (this.stepFlight(flights[i], now)) {
+        anyDirty = true;
+      }
+    }
+
+    const completed = (this.activeFlights || []).filter((f) => f.done);
+    for (let i = 0; i < completed.length; i++) {
+      const f = completed[i];
+      this.disposeFlight(f);
+      anyDirty = true;
+      if (typeof f.onComplete === 'function' && !f.completedNotified) {
+        f.completedNotified = true;
+        f.onComplete();
+      }
+    }
+
+    if (this.drainPendingQueue()) {
+      anyDirty = true;
+    }
+
+    this.syncCompatState();
+    if (anyDirty && this.renderer && this.scene && this.camera) {
       this.renderer.render(this.scene, this.camera);
+    }
 
-      if (!glowDone) {
-        this.animId = requestAnimationFrame(step);
-      } else {
-        this.animId = null;
+    const needsNextFrame = (this.activeFlights || []).some((f) => !f.idle) || (this.pendingQueue || []).length > 0;
+    if (needsNextFrame) {
+      this.animId = requestAnimationFrame((t) => this.tickFlights(t));
+    } else {
+      this.animId = null;
+      if ((this.activeFlights || []).length === 0 && this.canvas) {
+        this.canvas.classList.add('hidden');
+        this.canvas.style.opacity = '';
       }
-    };
-    step(startTime);
+    }
   }
 };

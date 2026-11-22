@@ -2,8 +2,8 @@
    COMBAT SERVICE: INICIATIVA INTERACTIVA, AGRUPACIÓN DE SECUNDARIOS Y TURNOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
 
 const createSingleCombatEntry = (t) => ({
   id: t.id,
@@ -14,6 +14,26 @@ const createSingleCombatEntry = (t) => ({
   init: 0,
   pending: true
 });
+
+const getEntryTokenIds = (entry) =>
+  Array.isArray(entry?.tokenIds) && entry.tokenIds.length
+    ? entry.tokenIds
+    : (entry?.tokenId ? [entry.tokenId] : []);
+
+const isEntryDefeatedEnemy = (entry, tokensById) => {
+  const tokens = getEntryTokenIds(entry).map((id) => tokensById.get(id)).filter(Boolean);
+  if (tokens.length === 0) return false;
+  return tokens.every((t) => t.isAlly === false && Number(t.maxHp) > 0 && (Number(t.hp) || 0) <= 0);
+};
+
+const pickEntryFocusTokenId = (entry, tokensById) => {
+  const ids = getEntryTokenIds(entry);
+  const alive = ids.find((id) => {
+    const t = tokensById.get(id);
+    return t && !(Number(t.maxHp) > 0 && (Number(t.hp) || 0) <= 0);
+  });
+  return alive || entry?.tokenId || ids[0] || null;
+};
 
 export const CombatServiceMethods = {
   getSystemInitiativeFormula() {
@@ -164,20 +184,213 @@ export const CombatServiceMethods = {
     this.notify();
   },
 
-  nextCombatTurn() {
+  sortCombatOrderPreservingTurn(c) {
+    if (!c || !Array.isArray(c.order)) return;
+    const activeEntry = c.turnIndex >= 0 && c.turnIndex < c.order.length ? c.order[c.turnIndex] : null;
+    const activeId = activeEntry ? activeEntry.id : null;
+    c.order = this.sortCombatOrder(c.order);
+    if (activeId !== null) {
+      const nextIdx = c.order.findIndex((e) => e.id === activeId);
+      c.turnIndex = nextIdx >= 0 ? nextIdx : Math.min(Math.max(0, c.turnIndex), Math.max(0, c.order.length - 1));
+    } else if (c.order.length === 0) {
+      c.turnIndex = 0;
+    } else if (c.turnIndex >= c.order.length) {
+      c.turnIndex = c.order.length - 1;
+    }
+  },
+
+  stepCombatTurn(delta) {
+    if (this.state.role !== 'gm') return;
     const c = this.state.combat;
     if (!c || !c.active || !c.order.length) return;
-    let nextIdx = c.turnIndex + 1;
-    let round = c.round || 1;
-    if (nextIdx >= c.order.length) {
-      nextIdx = 0;
-      round += 1;
+    const len = c.order.length;
+    const step = delta < 0 ? -1 : 1;
+    const tokensById = new Map((this.state.tokens || []).map((t) => [t.id, t]));
+    const startIdx = c.turnIndex >= 0 && c.turnIndex < len ? c.turnIndex : (step > 0 ? -1 : 0);
+
+    let idx = startIdx;
+    let round = Math.max(1, Math.trunc(Number(c.round) || 1));
+    let found = false;
+
+    for (let tried = 0; tried < len; tried++) {
+      idx += step;
+      if (idx >= len) {
+        idx = 0;
+        round += 1;
+      } else if (idx < 0) {
+        idx = len - 1;
+        round = Math.max(1, round - 1);
+      }
+      if (!isEntryDefeatedEnemy(c.order[idx], tokensById)) {
+        found = true;
+        break;
+      }
     }
-    c.turnIndex = nextIdx;
+
+    if (!found) {
+      idx = startIdx + step;
+      round = Math.max(1, Math.trunc(Number(c.round) || 1));
+      if (idx >= len) {
+        idx = 0;
+        round += 1;
+      } else if (idx < 0) {
+        idx = len - 1;
+        round = Math.max(1, round - 1);
+      }
+    }
+
+    c.turnIndex = idx;
     c.round = round;
-    const activeEntry = c.order[nextIdx];
-    if (activeEntry) this.state.selectedTokenId = activeEntry.tokenId;
+    const activeEntry = c.order[idx];
+    const focusId = pickEntryFocusTokenId(activeEntry, tokensById);
+    if (focusId) this.state.selectedTokenId = focusId;
+    this.syncWorldToPeers();
     this.notify();
+  },
+
+  nextCombatTurn() {
+    this.stepCombatTurn(1);
+  },
+
+  prevCombatTurn() {
+    this.stepCombatTurn(-1);
+  },
+
+  setCombatTurn(entryId) {
+    if (this.state.role !== 'gm') return;
+    const c = this.state.combat;
+    if (!c || !c.active || !Array.isArray(c.order) || !c.order.length) return;
+    const idx = c.order.findIndex((o) => o.id === entryId || o.tokenId === entryId);
+    if (idx < 0) return;
+    c.turnIndex = idx;
+    const tokensById = new Map((this.state.tokens || []).map((t) => [t.id, t]));
+    const focusId = pickEntryFocusTokenId(c.order[idx], tokensById);
+    if (focusId) this.state.selectedTokenId = focusId;
+    this.syncWorldToPeers();
+    this.notify();
+  },
+
+  updateEntryInitiative(entryId, initVal, displayLabel = '') {
+    if (this.state.role !== 'gm') return;
+    const c = this.state.combat;
+    if (!c || !c.active || !Array.isArray(c.order)) return;
+    const entry = c.order.find((o) => o.id === entryId || o.tokenId === entryId);
+    if (!entry) return;
+    entry.init = Number(initVal) || 0;
+    entry.pending = false;
+    if (displayLabel) entry.label = displayLabel;
+    else delete entry.label;
+    this.sortCombatOrderPreservingTurn(c);
+    if (Array.isArray(this.state.pendingRollRequests)) {
+      this.state.pendingRollRequests = this.state.pendingRollRequests.filter(
+        (q) => !(q.isInitiative && q.tokenId === entry.tokenId)
+      );
+    }
+    this.syncWorldToPeers();
+    this.notify();
+  },
+
+  reorderCombatEntry(entryId, dir) {
+    if (this.state.role !== 'gm') return;
+    const c = this.state.combat;
+    if (!c || !c.active || !Array.isArray(c.order) || c.order.length < 2) return;
+    const idx = c.order.findIndex((o) => o.id === entryId || o.tokenId === entryId);
+    const step = dir < 0 ? -1 : 1;
+    const targetIdx = idx + step;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= c.order.length) return;
+    const activeId = c.order[c.turnIndex]?.id ?? null;
+    const [moved] = c.order.splice(idx, 1);
+    c.order.splice(targetIdx, 0, moved);
+    if (activeId !== null) {
+      const nextIdx = c.order.findIndex((o) => o.id === activeId);
+      if (nextIdx >= 0) c.turnIndex = nextIdx;
+    }
+    this.syncWorldToPeers();
+    this.notify();
+  },
+
+  addTokenToCombat(tokenId, opts = {}) {
+    if (this.state.role !== 'gm') return null;
+    const c = this.state.combat;
+    if (!c || !c.active) return null;
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok) return null;
+    const already = c.order.find((o) => o.tokenId === tokenId || getEntryTokenIds(o).includes(tokenId));
+    if (already) return already;
+
+    const entry = createSingleCombatEntry(tok);
+    if (opts.init !== undefined && opts.init !== null && opts.init !== '') {
+      entry.init = Number(opts.init) || 0;
+      entry.pending = false;
+    } else if (opts.roll) {
+      const formula = this.getSystemInitiativeFormula();
+      const res = typeof this.rollFormula === 'function'
+        ? this.rollFormula(formula, tok, `${tok.name} · Iniciativa`, '', { silent: Boolean(opts.silent) })
+        : { total: Math.floor(Math.random() * 20) + 1 + (Number(tok.stats?.dex) || 0), isDeckRoll: false, headline: '' };
+      entry.init = Number(res?.total) || 0;
+      entry.pending = false;
+      if (res?.isDeckRoll && res.headline) entry.label = res.headline;
+    }
+    c.order.push(entry);
+    this.sortCombatOrderPreservingTurn(c);
+    this.syncWorldToPeers();
+    this.notify();
+    return entry;
+  },
+
+  removeCombatEntry(entryId, opts = {}) {
+    if (this.state.role !== 'gm' && !opts.silent) return;
+    const c = this.state.combat;
+    if (!c || !c.active || !Array.isArray(c.order)) return;
+    const idx = c.order.findIndex((o) => o.id === entryId || o.tokenId === entryId);
+    if (idx < 0) return;
+    const [removed] = c.order.splice(idx, 1);
+    const removedIds = new Set(getEntryTokenIds(removed));
+    if (Array.isArray(this.state.pendingRollRequests)) {
+      this.state.pendingRollRequests = this.state.pendingRollRequests.filter(
+        (q) => !(q.isInitiative && removedIds.has(q.tokenId))
+      );
+    }
+    if (c.order.length === 0) {
+      c.turnIndex = 0;
+    } else if (idx < c.turnIndex) {
+      c.turnIndex -= 1;
+    } else if (c.turnIndex >= c.order.length) {
+      c.turnIndex = 0;
+    }
+    if (!opts.silent) {
+      this.syncWorldToPeers();
+      this.notify();
+    }
+  },
+
+  removeTokenFromCombat(tokenId, opts = {}) {
+    const c = this.state.combat;
+    if (!c || !c.active || !Array.isArray(c.order)) return;
+    const idx = c.order.findIndex((o) => o.tokenId === tokenId || getEntryTokenIds(o).includes(tokenId));
+    if (idx < 0) return;
+    const entry = c.order[idx];
+    const remainingIds = getEntryTokenIds(entry).filter((id) => id !== tokenId);
+    if (remainingIds.length === 0) {
+      this.removeCombatEntry(entry.id, opts);
+      return;
+    }
+    const tokensById = new Map((this.state.tokens || []).map((t) => [t.id, t]));
+    entry.tokenIds = remainingIds;
+    entry.tokenId = remainingIds[0];
+    const firstTok = tokensById.get(remainingIds[0]);
+    if (remainingIds.length === 1) {
+      entry.isGroup = false;
+      if (firstTok?.name) entry.groupName = firstTok.name;
+    } else {
+      entry.isGroup = true;
+      const baseName = firstTok ? this.getNpcBaseName(firstTok) : String(entry.groupName || '').replace(/\s+×\d+$/, '').trim();
+      entry.groupName = `${baseName || 'Secundario'} ×${remainingIds.length}`;
+    }
+    if (!opts.silent) {
+      this.syncWorldToPeers();
+      this.notify();
+    }
   },
 
   setTokenInitiative(tokenId, initVal, displayLabel = '', opts = {}) {
@@ -202,7 +415,7 @@ export const CombatServiceMethods = {
       if (displayLabel) entry.label = displayLabel;
       c.order.push(entry);
     }
-    c.order = this.sortCombatOrder(c.order);
+    this.sortCombatOrderPreservingTurn(c);
     const resolvedId = existing ? existing.tokenId : tokenId;
     if (Array.isArray(this.state.pendingRollRequests)) {
       this.state.pendingRollRequests = this.state.pendingRollRequests.filter(
@@ -210,7 +423,7 @@ export const CombatServiceMethods = {
       );
     }
     if (!opts.skipBroadcast && this.state.role === 'gm') {
-      RealtimeBridge.send({ kind: 'WORLD_SYNC', world: Selector.extractSerializableWorld(this.state) });
+      this.syncWorldToPeers();
     }
     this.notify(opts.skipBroadcast ? { skipVaultSave: true } : undefined);
   },

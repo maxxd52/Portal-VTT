@@ -2,8 +2,8 @@
    SHEET RESOURCES VIEW: RECURSOS Y CONTADORES FLEXIBLES EN LA FICHA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
 
 export const SheetResourcesViewMethods = {
   bindSheetResourceEvents() {

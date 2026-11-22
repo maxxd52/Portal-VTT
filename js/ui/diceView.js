@@ -2,9 +2,9 @@
    DICE VIEW: DOCK, HISTORIAL, OVERLAY 3D Y PERSONALIZACIÓN DE DADOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261117b1';
-import { Service } from '../core/service.js?v=20261117b1';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261121a6';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261121a6';
 
 export const DiceViewMethods = {
   bindDiceEvents() {
@@ -31,8 +31,9 @@ export const DiceViewMethods = {
     }
     window.addEventListener('pointermove', (e) => {
       if (this.els.diceHandCursor && Array.isArray(Service.state.dice.hand) && Service.state.dice.hand.length > 0) {
-        const tx = Math.min(window.innerWidth - 76, e.clientX + 14);
-        const ty = Math.max(10, e.clientY - 36);
+        const scale = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
+        const tx = Math.min(window.innerWidth / scale - 76, e.clientX / scale + 14);
+        const ty = Math.max(10, e.clientY / scale - 36);
         this.els.diceHandCursor.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
       }
     });
@@ -66,7 +67,7 @@ export const DiceViewMethods = {
     this.els.btnCloseDice3d.addEventListener('click', () => {
       this.dismissedRoll = Service.state.dice.lastRoll || null;
       this.els.dice3dOverlay.classList.remove('is-open');
-      Dice3DEngine.clear();
+      Dice3DEngine.clear({ localOnly: true });
       if (Service.state.activeSequence || Service.state.activeRollRequest) {
         Service.clearActiveSequence();
       }
@@ -89,7 +90,7 @@ export const DiceViewMethods = {
     const dismissRollCard = () => {
       this.dismissedRoll = Service.state.dice.lastRoll || null;
       this.els.dice3dOverlay?.classList.remove('is-open');
-      Dice3DEngine.clear();
+      Dice3DEngine.clear({ localOnly: true });
       if (Service.state.activeSequence || Service.state.activeRollRequest) {
         Service.clearActiveSequence();
       }
@@ -493,19 +494,35 @@ export const DiceViewMethods = {
     }
 
     const seq = state.activeSequence;
+    if (!seq && state.activeRollRequest) {
+      const req = state.activeRollRequest;
+      this.els.lblDiceFormula.textContent = req.label || 'Tirada solicitada';
+      if (this.els.lblDiceBadge) {
+        this.els.lblDiceBadge.className = 'portal-roll-pill shrink-0';
+        this.els.lblDiceBadge.textContent = 'Solicitud';
+      }
+      this.els.lblDiceTotal.classList.add('hidden');
+      this.els.lblDiceDetail.classList.add('hidden');
+      this.els.diceRollChips?.classList.add('hidden');
+      this.els.diceRollActions?.classList.add('hidden');
+      this.els.lblDiceMessage?.classList.add('hidden');
+      this.els.dice3dOverlay.style.setProperty('--roll-glow', 'rgba(139, 92, 246, 0.22)');
+      this.els.dice3dOverlay.classList.add('is-open');
+      return;
+    }
     if (seq && seq.mode !== 'roll') {
       const curStep = Array.isArray(seq.steps) && seq.currentIndex >= 0 ? seq.steps[seq.currentIndex] : null;
       const modeTitle = curStep ? curStep.label || seq.itemName : seq.itemName;
       const prefix = seq.casterName ? `${seq.casterName} · ` : '';
       this.els.lblDiceFormula.textContent = `${prefix}${modeTitle}`;
       if (this.els.lblDiceBadge) {
-        const shapeNames = { circle: 'Círculo', cube: 'Cubo', cone: 'Cono', line: 'Línea', targets: 'Objetivos' };
-        const badgeLbl = seq.mode === 'area'
-          ? shapeNames[state.areaSelectConfig?.shape || curStep?.shape] || 'Área'
-          : seq.mode === 'save_request'
+        const shapeNames = { circle: 'Círculo', cube: 'Cubo', cone: 'Cono', line: 'Línea', targets: 'Objetivos', self: 'A sí mismo' };
+        const badgeLbl = seq.mode === 'targets' || seq.mode === 'area'
+          ? shapeNames[state.areaSelectConfig?.shape || curStep?.shape] || 'Objetivos'
+          : seq.mode === 'roll_request' || seq.mode === 'save_request'
             ? 'Solicitud'
-            : seq.mode === 'apply_hp'
-              ? 'Aplicar'
+            : seq.mode === 'modify' || seq.mode === 'apply_hp'
+              ? 'Modificar'
               : (Array.isArray(seq.steps) && seq.steps.length > 0 ? 'Presentación' : 'Descripción');
         this.els.lblDiceBadge.className = 'portal-roll-pill shrink-0';
         this.els.lblDiceBadge.textContent = badgeLbl;

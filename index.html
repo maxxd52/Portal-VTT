@@ -19,7 +19,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="css/styles.css?v=20261117b1" />
+  <link rel="stylesheet" href="css/styles.css?v=20261121a6" />
 </head>
 <body>
   <!-- ========================================================================
@@ -29,9 +29,11 @@
     <div id="worldTransformLayer">
       <canvas id="mapCanvas" width="2400" height="1600"></canvas>
       <img id="customMapImg" alt="" class="hidden" draggable="false" />
+      <canvas id="wallShadowCanvas" width="2400" height="1600"></canvas>
       <canvas id="gridCanvas" width="2400" height="1600"></canvas>
       <canvas id="drawCanvas" width="2400" height="1600"></canvas>
       <div id="tokensLayer"></div>
+      <div id="boardGrainLayer" aria-hidden="true"></div>
       <canvas id="fogCanvas" width="2400" height="1600"></canvas>
       <svg id="overlayVectorSvg" width="2400" height="1600" viewBox="0 0 2400 1600"></svg>
       <div id="mapNotesLayer" class="absolute inset-0 pointer-events-none"></div>
@@ -42,7 +44,7 @@
       id="dropModuleOverlay"
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none bg-black/40"
     >
-      <div class="portal-panel rounded-3xl p-8 max-w-md text-center border-2 border-dashed" style="border-color: var(--accent-primary);">
+      <div class="portal-ui-scaled-modal portal-panel rounded-3xl p-8 max-w-md text-center border-2 border-dashed" style="border-color: var(--accent-primary);">
         <div class="text-3xl mb-2">📦</div>
         <h2 class="text-base font-bold mb-1">Soltar Cartucho (.portal / .json) o Mapa</h2>
         <p class="text-xs opacity-80">Las imágenes se optimizan automáticamente a WebP y los cartuchos restauran toda la escena.</p>
@@ -51,9 +53,9 @@
   </main>
 
   <!-- ========================================================================
-       2. BARRA SUPERIOR FLOTANTE (SALA, ESTANTERÍA MÓDULOS, GRILLA, ROL, SYNC)
+       2. BARRA SUPERIOR FLOTANTE (SALA, PRESENCIA/COMBATE, FICHA, SYNC)
        ======================================================================== -->
-  <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+  <header class="portal-ui-scaled fixed top-3 left-3 right-3 z-30 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
     <!-- Bloque Izquierdo: Identidad, Sala Efímera, Selector de Mesas/SRD, Grilla y Rol -->
     <div class="portal-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto">
       <button
@@ -77,103 +79,6 @@
         <strong id="lblActiveRoomCode" style="color: var(--accent-primary);">MESA-01</strong>
       </button>
 
-      <!-- Botón Configuración Grilla -->
-      <div class="relative">
-        <button
-          type="button"
-          id="btnToggleGridPopover"
-          class="portal-subpanel portal-btn px-2 py-1 text-xs font-medium"
-          title="Configurar cuadrícula táctica"
-        >
-          <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <path d="M5.5 2.5v11M10.5 2.5v11M2.5 5.5h11M2.5 10.5h11" />
-          </svg>
-        </button>
-
-        <div
-          id="gridPopover"
-          class="portal-panel portal-pop absolute left-0 mt-2 w-64 rounded-2xl p-3 flex flex-col gap-3 text-xs z-40"
-        >
-          <div class="flex flex-col gap-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-semibold">Tamaño de celda</span>
-              <span id="lblGridSizeDetail" class="text-[11px] opacity-65 tabular-nums">80px · 1.5m</span>
-            </div>
-            <div class="portal-stepper justify-between w-full px-1 py-0.5">
-              <button type="button" id="btnGridSizeMinus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="-1px (Shift: -5px)">
-                <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
-              </button>
-              <div class="flex items-center gap-0.5">
-                <input type="number" id="inpGridSize" min="16" max="300" step="0.1" value="80" class="portal-num-input w-11 text-xs font-semibold" />
-                <span class="text-[10px] opacity-55">px</span>
-              </div>
-              <button type="button" id="btnGridSizePlus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="+1px (Shift: +5px)">
-                <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-semibold">Desfase</span>
-              <button type="button" id="btnGridResetOffset" class="text-[10px] opacity-60 hover:opacity-100 transition-opacity">Centrar</button>
-            </div>
-            <div class="grid grid-cols-2 gap-1.5">
-              <div class="portal-stepper justify-between px-1 py-0.5">
-                <button type="button" id="btnGridOffXMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Izquierda">
-                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
-                </button>
-                <div class="flex items-center gap-0.5">
-                  <span class="text-[10px] opacity-50">X</span>
-                  <input type="number" id="inpGridOffX" min="-300" max="300" step="1" value="0" class="portal-num-input w-8 text-[11px] font-semibold" />
-                </div>
-                <button type="button" id="btnGridOffXPlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Derecha">
-                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
-                </button>
-              </div>
-              <div class="portal-stepper justify-between px-1 py-0.5">
-                <button type="button" id="btnGridOffYMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Arriba">
-                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
-                </button>
-                <div class="flex items-center gap-0.5">
-                  <span class="text-[10px] opacity-50">Y</span>
-                  <input type="number" id="inpGridOffY" min="-300" max="300" step="1" value="0" class="portal-num-input w-8 text-[11px] font-semibold" />
-                </div>
-                <button type="button" id="btnGridOffYPlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Abajo">
-                  <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <span class="font-semibold">Ajustar al mapa (Cols × Filas)</span>
-            <div class="flex items-center gap-1.5">
-              <input type="number" id="inpGridCols" min="2" max="150" placeholder="Cols" class="portal-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
-              <span class="text-[10px] opacity-55">×</span>
-              <input type="number" id="inpGridRows" min="2" max="150" placeholder="Filas" class="portal-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
-              <button type="button" id="btnFitGridToMap" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-lg text-[11px] font-semibold ml-auto">Ajustar</button>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <div class="flex items-center justify-between">
-              <span class="font-semibold">Opacidad</span>
-              <span id="lblGridOpacity" class="text-[11px] opacity-65 tabular-nums">28%</span>
-            </div>
-            <input type="range" id="rngGridOpacity" min="0" max="80" step="1" value="28" class="portal-slider" />
-          </div>
-
-          <label class="flex items-center justify-between pt-2.5 border-t cursor-pointer" style="border-color: var(--hairline);">
-            <span class="font-medium">Imán a grilla</span>
-            <span class="portal-switch">
-              <input type="checkbox" id="chkGridSnap" checked class="portal-switch-input" />
-              <span class="portal-switch-track"></span>
-            </span>
-          </label>
-        </div>
-      </div>
-
       <!-- Selector Rol GM / Jugador -->
       <div id="roleSwitchGroup" class="portal-seg grid-cols-2 min-w-[120px]">
         <button type="button" id="btnRoleGM" class="portal-seg-btn is-active">GM</button>
@@ -181,16 +86,17 @@
       </div>
     </div>
 
-    <!-- Bloque Derecho: Combate, Ficha, Drive, Compendio, P2P y Tema -->
-    <div class="portal-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+    <!-- Bloque Central: Espadas Combate (izq) + Avatares Presencia (centro) + Chat (der) + Relojes Públicos -->
+    <div class="flex flex-wrap items-center justify-center gap-1.5 mx-auto pointer-events-none max-w-full">
+    <div id="tablePresenceBar" class="relative portal-panel rounded-full px-2.5 py-1 flex items-center gap-2 pointer-events-auto max-w-full">
       <button
         type="button"
         id="btnToggleCombat"
-        class="portal-subpanel portal-btn px-2 py-1 text-xs"
+        class="portal-subpanel portal-btn w-[34px] h-[34px] p-0 rounded-full flex items-center justify-center self-center shrink-0"
         title="Combate / Tracker de Iniciativa"
         aria-label="Combate"
       >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2" />
           <path d="M9.5 17.5L21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2" opacity="0.6" />
         </svg>
@@ -198,18 +104,132 @@
 
       <button
         type="button"
-        id="btnToggleSheet"
-        class="portal-subpanel portal-btn px-2 py-1 text-xs"
-        title="Ficha de Personaje [C]"
-        aria-label="Ficha de Personaje"
+        id="btnNextTurn"
+        class="hidden portal-subpanel portal-btn combat-next-pill-btn w-[34px] h-[34px] p-0 rounded-full items-center justify-center self-center shrink-0"
+        title="Siguiente turno"
+        aria-label="Siguiente turno"
       >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="3" width="16" height="18" rx="2.5" />
-          <circle cx="12" cy="10" r="2.5" />
-          <path d="M8.5 17a3.5 3.5 0 0 1 7 0" />
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5 5 15 12 5 19 5 5" fill="currentColor" stroke="none" />
+          <line x1="18" y1="6" x2="18" y2="18" />
         </svg>
       </button>
 
+      <div id="tableSeatsList" class="flex items-center gap-2 overflow-visible"></div>
+
+      <button
+        type="button"
+        id="btnToggleChatDrawer"
+        class="portal-subpanel portal-btn relative w-[34px] h-[34px] p-0 rounded-full flex items-center justify-center self-center shrink-0"
+        title="Chat de mesa y susurros"
+        aria-label="Chat de mesa"
+      >
+        <svg class="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+        <span id="lblChatUnread" class="hidden absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold leading-[14px] text-center">0</span>
+      </button>
+
+      <!-- Popover Perfil del Narrador (solo GM) -->
+      <div
+        id="profilePopover"
+        class="portal-panel portal-pop absolute left-0 top-full mt-2 w-64 rounded-2xl p-3 flex flex-col gap-2.5 text-xs z-40"
+      >
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">Perfil del Narrador</span>
+          <button type="button" id="btnCloseProfilePopover" class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70">✕</button>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <div id="profilePreviewAvatar" class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs text-white shrink-0 overflow-hidden border border-white/25"></div>
+          <input type="text" id="inpProfileName" maxlength="24" placeholder="Nombre del Narrador..." class="portal-input flex-1 min-w-0 px-2.5 py-1.5 text-xs font-semibold" />
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input type="url" id="inpProfileAvatarUrl" placeholder="URL de avatar (opcional)..." class="portal-input flex-1 min-w-0 px-2 py-1 text-[11px]" />
+          <label class="portal-btn portal-subpanel px-2 py-1 rounded-lg text-[11px] cursor-pointer shrink-0" title="Subir imagen desde tu equipo">
+            Subir
+            <input type="file" id="fileProfileAvatar" accept="image/*" class="hidden" />
+          </label>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-1 border-t" style="border-color: var(--hairline);">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] opacity-70">Color</span>
+            <input type="color" id="inpProfileColor" value="#8b5cf6" class="w-6 h-6 rounded-full border-0 bg-transparent cursor-pointer p-0" />
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button type="button" id="btnClearProfileAvatar" class="portal-btn portal-subpanel px-2 py-1 rounded-lg text-[11px]">Quitar foto</button>
+            <button type="button" id="btnSaveProfile" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-lg text-[11px] font-semibold">Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Popover Selector de Avatar Principal del Jugador (cuando tiene 2+ fichas) -->
+      <div
+        id="playerTokenPickerPopover"
+        class="portal-panel portal-pop absolute left-0 top-full mt-2 w-60 rounded-2xl p-2.5 flex flex-col gap-1.5 text-xs z-40"
+      >
+        <div class="flex items-center justify-between px-1">
+          <span class="font-semibold text-[11px]">Elegir ficha principal</span>
+          <button type="button" id="btnClosePlayerTokenPicker" class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70">✕</button>
+        </div>
+        <div id="playerTokenPickerList" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div>
+      </div>
+
+      <!-- Popover Tracker de Iniciativa Vertical -->
+      <div
+        id="combatTrackerPopover"
+        class="portal-panel portal-pop absolute left-0 top-full mt-2 w-72 max-w-[90vw] rounded-2xl p-2.5 flex flex-col gap-2 text-xs z-40"
+      >
+        <div class="flex items-center justify-between gap-2 pb-1.5 border-b" style="border-color: var(--hairline);">
+          <div class="flex items-center gap-1.5">
+            <span id="lblCombatRound" class="px-2 py-0.5 rounded-full text-[10.5px] font-bold tabular-nums portal-subpanel">Ronda 1</span>
+            <span class="text-[10.5px] opacity-65">Turnos</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button type="button" id="btnPrevTurn" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-80 hover:opacity-100" title="Turno anterior" aria-label="Turno anterior">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="6" y2="18"/><polygon points="19 5 9 12 19 19 19 5" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button type="button" id="btnToggleAddCombatant" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-80 hover:opacity-100" title="Añadir ficha al combate" aria-label="Añadir ficha al combate">
+              <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10" /></svg>
+            </button>
+            <button type="button" id="btnToggleCombatVisibility" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-85 hover:opacity-100" title="Visible para jugadores">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button type="button" id="btnEndCombat" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100" title="Finalizar combate">
+              <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+            </button>
+          </div>
+        </div>
+        <div id="combatAddList" class="hidden flex-col gap-1 pb-1.5 border-b max-h-36 overflow-y-auto" style="border-color: var(--hairline);"></div>
+        <div id="combatOrderList" class="flex flex-col gap-1 max-h-72 overflow-y-auto pr-0.5"></div>
+      </div>
+
+      <!-- Popover Chat de Mesa y Susurros por Avatar -->
+      <div
+        id="chatDrawer"
+        class="portal-panel portal-pop absolute right-0 top-full mt-2 w-80 max-w-[90vw] rounded-2xl p-3 flex flex-col gap-2 text-xs z-40"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <button type="button" id="btnChatChannelTable" class="portal-seg-btn is-active px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Mesa</button>
+            <span id="lblChatTargetBadge" class="hidden px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-400/30 truncate max-w-[140px]"></span>
+          </div>
+          <button type="button" id="btnCloseChatDrawer" class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70">✕</button>
+        </div>
+        <div id="chatTargetTokensRow" class="hidden flex-wrap items-center gap-1 pb-1.5 border-b" style="border-color: var(--hairline);"></div>
+        <div id="chatMessagesList" class="max-h-56 min-h-[96px] overflow-y-auto flex flex-col gap-1.5 pr-1"></div>
+        <form id="chatForm" class="flex items-center gap-1.5 pt-1 border-t" style="border-color: var(--hairline);">
+          <input type="text" id="inpChatMessage" maxlength="500" placeholder="Escribir en la mesa..." class="portal-input flex-1 min-w-0 px-2.5 py-1.5 text-xs" autocomplete="off" />
+          <button type="submit" class="portal-btn portal-btn-accent px-2.5 py-1.5 rounded-xl text-[11px] font-semibold shrink-0">Enviar</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Píldoras Públicas de Relojes / Contadores del Narrador -->
+    <div id="publicClocksBar" class="hidden portal-panel rounded-full px-2 py-1 items-center gap-1.5 pointer-events-auto max-w-full flex-wrap"></div>
+    </div>
+
+    <!-- Bloque Derecho: Drive, P2P, Tema y Opciones (sin paneles laterales) -->
+    <div class="portal-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto">
       <button
         type="button"
         id="btnOpenDriveModal"
@@ -220,19 +240,6 @@
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
         </svg>
-      </button>
-
-      <button
-        type="button"
-        id="btnToggleTokenDrawer"
-        class="portal-subpanel portal-btn px-2 py-1 text-xs gap-1.5"
-        title="Abrir/Cerrar Compendio Arrastrable"
-        aria-label="Compendio"
-      >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-        </svg>
-        <span id="lblActiveTokensCount" class="font-mono-tech text-[10px] px-1.5 py-0.2 rounded-full portal-btn-accent">4</span>
       </button>
 
       <button
@@ -301,7 +308,7 @@
         </button>
         <div
           id="optionsPopover"
-          class="portal-panel portal-pop absolute right-0 mt-2 w-56 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
+          class="portal-panel portal-pop absolute right-0 mt-2 w-60 rounded-2xl p-1.5 flex flex-col gap-0.5 text-xs z-40"
         >
           <span class="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider opacity-55">Opciones</span>
           <button type="button" id="btnOptOpenSystem" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2.5">
@@ -332,6 +339,47 @@
             <span>Sincronización P2P</span>
           </button>
           <div class="my-1 portal-hairline"></div>
+          <div class="px-2 py-1.5 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-semibold uppercase tracking-wider opacity-55">Interfaz</span>
+              <span id="lblUiScalePct" class="text-[10px] font-mono-tech opacity-65 tabular-nums">100%</span>
+            </div>
+            <div id="uiScaleSeg" class="portal-seg grid-cols-3 w-full">
+              <button type="button" data-ui-scale="normal" class="portal-seg-btn is-active" title="Tamaño estándar (100%)">Normal</button>
+              <button type="button" data-ui-scale="comfortable" class="portal-seg-btn" title="Tamaño cómodo (112%)">Cómodo</button>
+              <button type="button" data-ui-scale="large" class="portal-seg-btn" title="Tamaño grande (125%)">Grande</button>
+            </div>
+          </div>
+          <div class="px-2 py-1.5 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-semibold uppercase tracking-wider opacity-55">Paneles laterales</span>
+            </div>
+            <div id="railsSwapSeg" class="portal-seg grid-cols-2 w-full">
+              <button type="button" data-rails-swapped="false" class="portal-seg-btn is-active" title="Fichas/Pantalla a la izquierda · Diario/Baúl a la derecha">Estándar</button>
+              <button type="button" data-rails-swapped="true" class="portal-seg-btn" title="Diario/Baúl a la izquierda · Fichas/Pantalla a la derecha">Invertido</button>
+            </div>
+          </div>
+          <div class="px-2 py-1.5 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-semibold uppercase tracking-wider opacity-55">Sonido táctil</span>
+              <div class="flex items-center gap-1.5">
+                <span id="lblAudioVolumePct" class="text-[10px] font-mono-tech opacity-65 tabular-nums">75%</span>
+                <button type="button" id="btnToggleAudioMute" class="portal-subpanel portal-btn px-1.5 py-0.5 rounded-md text-[10px]" title="Silenciar o activar sonidos de mesa">Activo</button>
+              </div>
+            </div>
+            <input type="range" id="rngAudioVolume" min="0" max="100" step="5" value="75" class="w-full accent-[var(--accent-primary)] cursor-pointer h-1.5" aria-label="Volumen de sonido táctil" />
+          </div>
+          <div class="px-2 py-1.5 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-semibold uppercase tracking-wider opacity-55">Sombras por luz</span>
+            </div>
+            <div id="shadowModeSeg" class="portal-seg grid-cols-3 w-full">
+              <button type="button" data-shadow-mode="auto" class="portal-seg-btn is-active" title="Adapta sombras dinámicas automáticamente según tu equipo">Auto</button>
+              <button type="button" data-shadow-mode="on" class="portal-seg-btn" title="Siempre proyectar sombras según luces del mapa">Activas</button>
+              <button type="button" data-shadow-mode="off" class="portal-seg-btn" title="Solo sombra de contacto (máximo rendimiento)">Básico</button>
+            </div>
+          </div>
+          <div class="my-1 portal-hairline"></div>
           <button type="button" id="btnOptReturnLobby" class="portal-btn justify-start px-2.5 py-1.5 rounded-xl text-xs gap-2.5">
             <svg class="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -346,16 +394,96 @@
   </header>
 
   <!-- ========================================================================
+       2.5. GATILLOS LATERALES FLOTANTES (BORDES IZQUIERDO Y DERECHO)
+       ======================================================================== -->
+  <nav
+    id="leftEdgeRail"
+    aria-label="Acceso lateral izquierdo"
+    class="portal-ui-scaled portal-edge-rail portal-edge-rail-left fixed left-0 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-1.5"
+  >
+    <button
+      type="button"
+      id="btnToggleSheet"
+      class="portal-panel portal-edge-tab portal-edge-tab-left relative flex items-center justify-center"
+      title="Personajes / Fichas [C]"
+      aria-label="Personajes / Fichas"
+    >
+      <svg class="w-[22px] h-[22px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="3" width="16" height="18" rx="2.5" />
+        <circle cx="12" cy="10" r="2.5" />
+        <path d="M8.5 17a3.5 3.5 0 0 1 7 0" />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      id="btnToggleGmScreen"
+      class="portal-panel portal-edge-tab portal-edge-tab-left relative flex items-center justify-center"
+      title="Pantalla del Narrador (solo DJ)"
+      aria-label="Pantalla del Narrador"
+    >
+      <svg class="w-[22px] h-[22px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2V5z" />
+        <path d="M9 3v16M15 5v16" />
+      </svg>
+    </button>
+  </nav>
+
+  <nav
+    id="rightEdgeRail"
+    aria-label="Accesos laterales derechos"
+    class="portal-ui-scaled portal-edge-rail portal-edge-rail-right fixed right-0 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-1.5 items-end"
+  >
+    <button
+      type="button"
+      id="btnToggleJournal"
+      class="portal-panel portal-edge-tab portal-edge-tab-right relative flex items-center justify-center"
+      title="Diario [J]"
+      aria-label="Diario"
+    >
+      <svg class="w-[22px] h-[22px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+        <path d="M8 7h8M8 11h5" />
+      </svg>
+      <span
+        id="lblJournalUnread"
+        class="hidden absolute -top-1 left-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold leading-[14px] text-center"
+      >0</span>
+    </button>
+
+    <button
+      type="button"
+      id="btnToggleTokenDrawer"
+      class="portal-panel portal-edge-tab portal-edge-tab-right relative flex items-center justify-center"
+      title="Baúl (Personajes, Complementos, Escenarios)"
+      aria-label="Baúl"
+    >
+      <svg class="w-[22px] h-[22px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7h18v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+        <path d="M3 7l2.5-4h13L21 7" />
+        <path d="M10 12h4" />
+      </svg>
+      <span id="lblActiveTokensCount" class="absolute -top-1 left-1 min-w-[14px] h-[14px] px-1 rounded-full portal-btn-accent font-mono-tech text-[9px] font-bold leading-[14px] text-center">4</span>
+    </button>
+  </nav>
+
+  <!-- ========================================================================
        3. PANEL LATERAL IZQUIERDO: FICHA DE PERSONAJE ACTIVA
        ======================================================================== -->
   <aside
     id="characterSheetDrawer"
-    class="portal-panel portal-drawer-left fixed top-16 left-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-2.5 z-20 flex flex-col gap-2 overflow-y-auto"
+    class="portal-ui-scaled portal-panel portal-drawer-left fixed top-16 left-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-2.5 z-20 flex flex-col gap-2 overflow-y-auto"
     aria-label="Ficha de Personaje Activa"
   >
     <div class="flex items-center justify-between pb-1.5 border-b" style="border-color: var(--hairline);">
       <div class="flex items-center gap-2.5 min-w-0">
-        <div id="sheetPortraitBox" class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 overflow-hidden border border-white/25"></div>
+        <button
+          type="button"
+          id="sheetPortraitBox"
+          class="group relative w-11 h-11 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 overflow-hidden border border-white/25 cursor-pointer transition-transform hover:scale-105"
+          title="Editar imagen del token"
+          aria-label="Editar imagen del token"
+        ></button>
         <div class="min-w-0">
           <input
             type="text"
@@ -429,6 +557,22 @@
         <span class="opacity-65 font-medium">Vel.</span>
         <input type="text" id="inpSheetSpeed" value="30 ft" class="w-11 text-right text-[11px] font-semibold bg-transparent outline-none" placeholder="30 ft" />
       </label>
+    </div>
+
+    <!-- Alcance visual y Luz emitida de la ficha -->
+    <div id="sheetVisionLightRow" class="grid grid-cols-2 gap-1.5 text-[10px]">
+      <div id="sheetVisionBox" class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
+        <span class="opacity-65 font-medium shrink-0">Visión</span>
+        <div class="flex items-center gap-0.5 min-w-0">
+          <input type="number" id="inpSheetVision" min="0" max="200" step="0.5" placeholder="Base" class="portal-num-input w-11 text-right text-[11px] font-semibold bg-transparent outline-none" title="Alcance de visión propio (vacío = base del sistema)" />
+          <span id="lblSheetVisionUnit" class="text-[9.5px] opacity-55">m</span>
+          <button type="button" id="btnSheetVisionReset" class="hidden w-4 h-4 rounded-full portal-btn text-[10px] leading-none opacity-70 hover:opacity-100" title="Usar visión base del sistema">↺</button>
+        </div>
+      </div>
+      <div id="sheetLightBox" class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
+        <span class="opacity-65 font-medium shrink-0">Luz</span>
+        <button type="button" id="btnSheetLightCycle" class="portal-btn px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold truncate" title="Alternar fuente de luz emitida">Apagada</button>
+      </div>
     </div>
 
     <!-- Factores fijos de cabecera siempre visibles en Sistema Genérico -->
@@ -516,23 +660,51 @@
         id="sheetPaneInv"
         class="hidden flex-1 flex-col gap-1 min-h-0 rounded-lg border border-dashed p-1 transition-colors"
         style="border-color: var(--border-subtle);"
-        title="Arrastrá complementos desde el Compendio a esta pestaña"
+        title="Arrastra complementos desde el Baúl a esta pestaña"
       >
         <div id="sheetInventoryList" class="flex-1 flex flex-col gap-0.5 overflow-y-auto min-h-0"></div>
       </div>
     </div>
+
+    <!-- Doble Capa: Descripción Pública vs. Notas Privadas -->
+    <details id="sheetIdentityNotesCard" class="portal-subpanel rounded-xl px-2.5 py-1.5 text-[10.5px] shrink-0">
+      <summary class="cursor-pointer font-semibold opacity-80 hover:opacity-100 select-none flex items-center justify-between">
+        <span>Descripción y Notas</span>
+        <span class="text-[9.5px] opacity-60">Pública / Privada</span>
+      </summary>
+      <div class="flex flex-col gap-1.5 pt-1.5">
+        <label class="flex flex-col gap-0.5">
+          <span class="text-[9.5px] opacity-65">Descripción pública (visible en Tarjeta de Inspección)</span>
+          <textarea
+            id="inpSheetPublicDesc"
+            rows="2"
+            placeholder="Apariencia y rasgos visibles a simple vista..."
+            class="portal-input px-2 py-1 text-[10.5px] resize-y min-h-[38px] max-h-24"
+          ></textarea>
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-[9.5px] opacity-65">Notas privadas (solo DJ / dueño)</span>
+          <textarea
+            id="inpSheetPrivateNotes"
+            rows="2"
+            placeholder="Secretos, motivaciones o apuntes internos..."
+            class="portal-input px-2 py-1 text-[10.5px] resize-y min-h-[38px] max-h-24"
+          ></textarea>
+        </label>
+      </div>
+    </details>
   </aside>
 
   <!-- ========================================================================
-       4. PANEL LATERAL DERECHO: COMPENDIO ARRASTRABLE (PERSONAJES / OBJETOS / MAPAS)
+       4. PANEL LATERAL DERECHO: BAÚL ARRASTRABLE (PERSONAJES / OBJETOS / MAPAS)
        ======================================================================== -->
   <aside
     id="tokenDrawer"
-    class="portal-panel portal-drawer-right is-open fixed top-16 right-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
-    aria-label="Compendio Arrastrable"
+    class="portal-ui-scaled portal-panel portal-drawer-right fixed top-16 right-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
+    aria-label="Baúl"
   >
     <div class="flex items-center justify-between">
-      <span class="font-semibold text-xs tracking-tight">Compendio</span>
+      <span class="font-semibold text-xs tracking-tight">Baúl</span>
       <div class="flex items-center gap-1.5">
         <button
           type="button"
@@ -566,7 +738,7 @@
     <input
       type="search"
       id="inpCompendiumSearch"
-      placeholder="Buscar en el compendio..."
+      placeholder="Buscar en el baúl..."
       class="portal-input rounded-xl px-3 py-1.5 text-xs"
     />
 
@@ -628,16 +800,35 @@
           <input type="number" id="inpCustomCha" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
         </label>
       </div>
-      <div class="grid grid-cols-2 gap-1.5">
-        <div class="flex items-center gap-1 min-w-0">
-          <input type="text" id="inpCustomTokenImg" placeholder="URL imagen..." class="portal-input px-2 py-1 text-[11px] min-w-0 flex-1" />
-          <label for="fileCustomTokenImg" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir imagen local">
-            <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 12.5h10" /></svg>
-          </label>
-          <input type="file" id="fileCustomTokenImg" accept="image/*" class="hidden" />
+      <div class="portal-subpanel rounded-xl p-2 flex items-center gap-2.5">
+        <button
+          type="button"
+          id="btnCustomTokenPreview"
+          class="relative w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xs text-white shrink-0 border border-white/15 cursor-pointer transition-transform hover:scale-105"
+          title="Previsualizar o soltar imagen aquí"
+          aria-label="Previsualizar imagen del token"
+        ></button>
+        <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+          <div class="flex items-center gap-1 min-w-0">
+            <input type="text" id="inpCustomTokenImg" placeholder="URL imagen..." class="portal-input px-2 py-1 text-[11px] min-w-0 flex-1" />
+            <label for="fileCustomTokenImg" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir imagen local">
+              <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 12.5h10" /></svg>
+            </label>
+            <input type="file" id="fileCustomTokenImg" accept="image/*" class="hidden" />
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button type="button" id="btnOpenTokenStudioForm" class="portal-btn portal-subpanel px-2 py-0.5 rounded-lg text-[10px] font-semibold">Estudio de Token</button>
+            <button type="button" id="btnEditCustomTokenImg" class="hidden portal-btn portal-subpanel px-2 py-0.5 rounded-lg text-[10px] font-medium opacity-85 hover:opacity-100">Encuadrar</button>
+          </div>
         </div>
-        <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="portal-input px-2.5 py-1 text-[11px]" />
       </div>
+      <textarea
+        id="inpCustomTokenPublicDesc"
+        rows="2"
+        placeholder="Descripción pública (apariencia visible a simple vista)..."
+        class="portal-input px-2.5 py-1.5 text-[11px] resize-y min-h-[38px] max-h-20"
+      ></textarea>
+      <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="portal-input px-2.5 py-1 text-[11px]" />
       <div class="flex items-center justify-between gap-2">
         <div id="customTokenColorGrid" class="grid grid-cols-6 gap-1.5"></div>
         <button type="submit" id="btnCustomFormSubmit" class="portal-btn portal-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
@@ -670,26 +861,18 @@
       </div>
       <div class="flex flex-col gap-1">
         <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">Agregar bloque</span>
-        <div id="itemBlockPalette" class="grid grid-cols-5 gap-1">
-          <button type="button" data-add-block="roll" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Tirada de dados">
+        <div id="itemBlockPalette" class="grid grid-cols-3 gap-1">
+          <button type="button" data-add-block="roll" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Tirada propia o solicitar tirada a objetivos">
             <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg>
             <span>Tirada</span>
           </button>
-          <button type="button" data-add-block="passive" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Modificador pasivo">
-            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6l7-3z"/></svg>
-            <span>Pasivo</span>
-          </button>
-          <button type="button" data-add-block="area" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Seleccionar área u objetivos">
+          <button type="button" data-add-block="targets" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Seleccionar objetivos, a sí mismo o área">
             <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>
-            <span>Área</span>
+            <span>Objetivos</span>
           </button>
-          <button type="button" data-add-block="save_request" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Pedir tirada a jugadores">
-            <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>
-            <span>Pedir</span>
-          </button>
-          <button type="button" data-add-block="apply_hp" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Aplicar daño, curación o estado">
+          <button type="button" data-add-block="modify" class="portal-seg-btn portal-subpanel py-1 text-[10px] font-semibold gap-1" title="Daño, curación, estado, bono o efecto pasivo">
             <svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>
-            <span>Aplicar</span>
+            <span>Modificar</span>
           </button>
         </div>
       </div>
@@ -713,6 +896,13 @@
         </label>
         <input type="file" id="fileCustomMapImg" accept="image/*" class="hidden" />
       </div>
+      <div class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <span class="text-[10px] opacity-60 block">Grilla e iluminación</span>
+          <span id="lblCustomMapGridSummary" class="text-[11px] font-semibold truncate block">Cuadrada · 80px · Luz dinámica</span>
+        </div>
+        <button type="button" id="btnCustomMapGridConfig" class="portal-btn portal-panel px-2.5 py-1 rounded-lg text-[10.5px] font-semibold shrink-0">Configurar</button>
+      </div>
       <div class="flex items-center gap-1.5">
         <input type="text" id="inpCustomMapDesc" placeholder="Descripción breve..." class="portal-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
         <input type="text" id="inpCustomMapFolder" list="compendiumFolderList" placeholder="Carpeta" class="portal-input px-2 py-1 text-[11px] w-24" />
@@ -725,9 +915,91 @@
   </aside>
 
   <!-- ========================================================================
+       4.5. PANEL LATERAL IZQUIERDO: PANTALLA DEL NARRADOR (SOLO GM)
+       ======================================================================== -->
+  <aside
+    id="gmScreenDrawer"
+    class="portal-ui-scaled portal-panel portal-drawer-left fixed top-16 left-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
+    aria-label="Pantalla del Narrador"
+  >
+    <div class="flex items-center justify-between gap-2 shrink-0">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <svg class="w-3.5 h-3.5 shrink-0" style="color: var(--accent-primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2V5z" />
+          <path d="M9 3v16M15 5v16" />
+        </svg>
+        <span class="font-semibold text-xs tracking-tight truncate">Pantalla del Narrador</span>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button type="button" id="btnCloseGmScreen" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75" title="Cerrar">
+          <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="gmScreenTabsBar" class="portal-seg gap-0.5 shrink-0"></div>
+    <div id="gmScreenContent" class="flex-1 min-h-[160px] overflow-y-auto flex flex-col gap-2.5 pr-0.5"></div>
+  </aside>
+
+  <!-- ========================================================================
+       4.8. PANEL LATERAL DERECHO: DIARIO UNIFICADO (DJ Y JUGADORES)
+       ======================================================================== -->
+  <aside
+    id="journalDrawer"
+    class="portal-ui-scaled portal-panel portal-drawer-right fixed top-16 right-3 bottom-20 lg:bottom-4 w-80 max-w-[calc(100vw-24px)] rounded-2xl p-3 z-20 flex flex-col gap-2.5 overflow-y-auto"
+    aria-label="Diario"
+  >
+    <div class="flex items-center justify-between gap-2 shrink-0">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <svg class="w-3.5 h-3.5 shrink-0" style="color: var(--accent-primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+          <path d="M8 7h8M8 11h5" />
+        </svg>
+        <span class="font-semibold text-xs tracking-tight truncate">Diario</span>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          id="btnNewJournalFolder"
+          class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-80 hover:opacity-100"
+          title="Nueva carpeta en el Diario"
+          aria-label="Nueva carpeta"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /><path d="M8 7v3M6.5 8.5h3" /></svg>
+        </button>
+        <button
+          type="button"
+          id="btnNewJournalNote"
+          class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center"
+          title="Crear nota en el Diario"
+          aria-label="Crear nota"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10" /></svg>
+        </button>
+        <button
+          type="button"
+          id="btnCloseJournalDrawer"
+          class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75"
+          title="Cerrar Diario"
+          aria-label="Cerrar Diario"
+        >
+          <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
+    </div>
+
+    <form id="journalFolderForm" class="hidden portal-subpanel rounded-xl p-2 items-center gap-1.5 shrink-0">
+      <input type="text" id="inpNewJournalFolder" placeholder="Nombre de carpeta (PNJs, Pistas...)" required class="portal-input px-2.5 py-1 text-xs flex-1 min-w-0" />
+      <button type="submit" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0">Crear</button>
+    </form>
+
+    <div id="journalContent" class="flex-1 min-h-[160px] overflow-y-auto flex flex-col gap-2 pr-0.5"></div>
+  </aside>
+
+  <!-- ========================================================================
        5. BANDEJA INFERIOR DE DADOS 3D & VISOR THREE.JS
        ======================================================================== -->
-  <div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-none w-max max-w-[calc(100vw-24px)]">
+  <div id="diceDockContainer" class="portal-ui-scaled fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-none w-max max-w-[calc(100vw-24px)]">
     <!-- Visor Numérico Flotante de Tirada (Dynamic HUD) -->
     <div
       id="dice3dOverlay"
@@ -861,7 +1133,7 @@
   <!-- Popover de Historial de Tiradas -->
   <div
     id="diceHistoryPopover"
-    class="portal-panel portal-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
+    class="portal-ui-scaled portal-panel portal-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
   >
     <div class="flex items-center justify-between">
       <button type="button" id="btnClearDiceHistory" class="text-[11px] opacity-60 hover:opacity-100 transition-opacity">Limpiar</button>
@@ -876,7 +1148,7 @@
   <!-- Popover de Personalización de Dados (Estilo Curado) -->
   <div
     id="diceStylePopover"
-    class="portal-panel portal-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
+    class="portal-ui-scaled portal-panel portal-pop fixed bottom-16 left-0 right-0 mx-auto z-50 w-[332px] max-w-[94vw] rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs pointer-events-auto"
   >
     <div class="flex items-center justify-between">
       <button type="button" id="btnResetDiceStyle" class="text-[11px] opacity-60 hover:opacity-100 transition-opacity">Restablecer</button>
@@ -992,7 +1264,7 @@
        ======================================================================== -->
   <div
     id="contextIconMenu"
-    class="portal-panel portal-pop fixed z-50 rounded-2xl p-2 flex flex-col gap-2 min-w-[264px]"
+    class="portal-ui-scaled portal-panel portal-pop fixed z-50 rounded-2xl p-2 flex flex-col gap-2 min-w-[264px]"
     role="menu"
     aria-label="Paleta rápida de herramientas"
   >
@@ -1000,7 +1272,7 @@
     <div id="contextTokenHeader" class="hidden items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]" style="background: var(--bg-subpanel);"></div>
 
     <!-- Fila 1: Herramientas del mapa con iconos SVG (solo visible en clic derecho sobre el mapa) -->
-    <div id="contextToolsRow" class="grid grid-cols-6 gap-1">
+    <div id="contextToolsRow" class="grid grid-cols-5 gap-1">
       <button type="button" data-ctx-tool="select" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Mover / Seleccionar [V]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 2-3 7z"/></svg>
       </button>
@@ -1009,9 +1281,6 @@
       </button>
       <button type="button" data-ctx-tool="draw" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Marcador Táctico [P]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-      </button>
-      <button type="button" data-ctx-tool="fog" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Pincel Niebla Manual [F]">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
       </button>
       <button type="button" data-ctx-tool="wall" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Muros y Puertas (Luz Dinámica) [W]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v6M15 10v5M9 15v5"/></svg>
@@ -1028,25 +1297,10 @@
     <div id="contextSubOptionsRow" class="hidden items-center justify-between gap-1 pt-1 border-t" style="border-color: var(--border-subtle);"></div>
   </div>
 
-  <!-- Píldora flotante de Combate / Turnos (solo visible en combate activo) -->
-  <div
-    id="combatTrackerPill"
-    class="hidden portal-panel rounded-2xl px-2.5 py-1.5 fixed top-16 left-1/2 -translate-x-1/2 z-30 items-center gap-2 max-w-[92vw] pointer-events-auto"
-  >
-    <span id="lblCombatRound" class="text-[11px] font-semibold opacity-75 whitespace-nowrap px-1">Ronda 1</span>
-    <div id="combatOrderList" class="flex items-center gap-1 overflow-x-auto max-w-[52vw]"></div>
-    <button type="button" id="btnNextTurn" class="portal-btn portal-btn-accent rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">
-      Siguiente
-    </button>
-    <button type="button" id="btnEndCombat" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-70" title="Finalizar combate">
-      <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-    </button>
-  </div>
-
   <!-- Selector de plantilla de área para Regla (solo visible cuando tool === 'ruler') -->
   <div
     id="rulerShapePill"
-    class="hidden portal-panel rounded-full p-1 fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
+    class="portal-ui-scaled hidden portal-panel rounded-full p-1 fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
   >
     <div id="rulerShapeSeg" class="portal-seg grid-cols-4 min-w-[240px]">
       <button type="button" data-ruler-shape="line" class="portal-seg-btn is-active">Línea</button>
@@ -1058,7 +1312,7 @@
 
   <!-- Editor compacto de Nota / Pin en el mapa -->
   <div id="noteEditorModal" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center p-4">
-    <form id="noteEditorForm" class="portal-panel w-full max-w-xs rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs">
+    <form id="noteEditorForm" class="portal-ui-scaled-modal portal-panel w-full max-w-xs rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs" style="--modal-max-w: 20rem;">
       <div class="flex items-center justify-between">
         <span class="font-semibold text-xs">Nota en el escenario</span>
         <button type="button" id="btnCloseNoteModal" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75">
@@ -1084,7 +1338,7 @@
   <!-- Toast flotante de feedback -->
   <div
     id="vttActionToast"
-    class="portal-panel portal-toast fixed top-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
+    class="portal-ui-scaled portal-panel portal-toast fixed top-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
     style="overflow-wrap: anywhere;"
   ></div>
 
@@ -1092,7 +1346,7 @@
        7. MODAL SALAS EFÍMERAS, ESTANTERÍA SOLO LECTURA & CARTUCHOS (.PORTAL)
        ======================================================================== -->
   <div id="roomModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
+    <div class="portal-ui-scaled-modal portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
       <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
@@ -1103,7 +1357,7 @@
           </div>
           <div class="min-w-0">
             <h2 class="text-sm font-semibold tracking-tight leading-tight">Salas, Escena y Cartuchos</h2>
-            <p class="text-[11px] opacity-65 truncate mt-0.5">Invitaciones, escena activa, handouts y paquetes .portal</p>
+            <p class="text-[11px] opacity-65 truncate mt-0.5">Invitaciones, escena activa y paquetes .portal</p>
           </div>
         </div>
         <button type="button" id="btnCloseRoomModal" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">
@@ -1115,7 +1369,7 @@
 
       <div class="portal-seg grid-cols-3 gap-1 shrink-0">
         <button type="button" data-room-nav-tab="session" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold is-active">Sala e Invitación</button>
-        <button type="button" data-room-nav-tab="scene" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold">Escena y Handout</button>
+        <button type="button" data-room-nav-tab="scene" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold">Escena</button>
         <button type="button" data-room-nav-tab="cartridges" class="portal-seg-btn py-1.5 text-[11.5px] font-semibold">Cartuchos (.portal)</button>
       </div>
 
@@ -1142,7 +1396,7 @@
                 <div class="flex items-center justify-between gap-2">
                   <div class="min-w-0">
                     <span class="text-xs font-medium block">Enlaces de invitación (Jugadores)</span>
-                    <span class="text-[10.5px] opacity-60">Asigná Protagonistas a cada enlace o dejalo sin personaje como Espectador.</span>
+                    <span class="text-[10.5px] opacity-60">Asigná Protagonistas a cada enlace: viajan entre mapas y se guardan con el portal.</span>
                   </div>
                   <button type="button" id="btnAddPlayerInvite" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0">+ Nuevo enlace</button>
                 </div>
@@ -1229,27 +1483,6 @@
               </div>
             </div>
           </div>
-
-          <div id="handoutShareBox" class="flex flex-col gap-1.5">
-            <span class="portal-settings-label">Handout (proyectar imagen en mesa)</span>
-            <div class="portal-settings-group">
-              <div class="portal-settings-col">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-xs font-medium">Compartir imagen con todos los jugadores</span>
-                  <label class="portal-btn portal-panel px-2.5 py-1 rounded-lg text-[10.5px] font-semibold cursor-pointer gap-1.5 shrink-0">
-                    <svg class="w-3 h-3 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    <span>Subir imagen</span>
-                    <input type="file" id="inpHandoutFile" accept="image/*" class="hidden" />
-                  </label>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <input type="text" id="inpHandoutTitle" placeholder="Título (opcional)" class="portal-input px-2.5 py-1.5 text-[11px] w-1/3" />
-                  <input type="url" id="inpHandoutUrl" placeholder="URL de imagen o Drive..." class="portal-input px-2.5 py-1.5 text-[11px] flex-1" />
-                  <button type="button" id="btnShowHandout" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0">Mostrar</button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Pestaña 3: Cartuchos (.portal) -->
@@ -1267,7 +1500,7 @@
                 </div>
               </div>
               <div class="portal-settings-row">
-                <span class="text-[10.5px] opacity-65">También podés arrastrar un archivo sobre el tablero.</span>
+                <span class="text-[10.5px] opacity-65">También puedes arrastrar un archivo sobre el tablero.</span>
                 <label for="inpModuleFile" class="portal-btn portal-panel px-3 py-1.5 rounded-xl text-[11px] font-semibold cursor-pointer gap-1.5 shrink-0">
                   <svg class="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                   <span>Abrir .portal / .json</span>
@@ -1281,7 +1514,7 @@
             <span class="portal-settings-label">Estantería de mesas en solo lectura (BYOS)</span>
             <div class="portal-settings-group">
               <div class="portal-settings-col">
-                <span class="text-[10.5px] opacity-65">Subí tu <code>.portal</code> a Dropbox o GitHub, pegá el enlace público y cargalo desde el menú.</span>
+                <span class="text-[10.5px] opacity-65">Sube tu <code>.portal</code> a Dropbox o GitHub, pega el enlace público y cárgalo desde el menú.</span>
                 <form id="addShelfModuleForm" class="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-1.5">
                   <input type="text" id="inpShelfTitle" placeholder="Nombre (ej. Campaña CoS)" required class="portal-input px-2.5 py-1.5 text-xs" />
                   <input type="url" id="inpShelfUrl" placeholder="Enlace Dropbox o GitHub .portal" required class="portal-input px-2.5 py-1.5 font-mono-tech text-[11px]" />
@@ -1300,7 +1533,7 @@
        8. MODAL BIBLIOTECA GOOGLE DRIVE (CARPETAS E IMÁGENES)
        ======================================================================== -->
   <div id="driveModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
+    <div class="portal-ui-scaled-modal portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
       <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
@@ -1347,7 +1580,7 @@
        9. MODAL SINCRONIZACIÓN P2P WEBRTC & EVENT-LOG COMPACTION
        ======================================================================== -->
   <div id="syncModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
+    <div class="portal-ui-scaled-modal portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4 text-xs">
       <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
@@ -1400,7 +1633,7 @@
        9.2. MODAL CONFIGURACIÓN DE SISTEMA Y REGLAS DEL PORTAL
        ======================================================================== -->
   <div id="systemModal" class="fixed inset-0 bg-black/65 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div id="systemModalPanel" class="portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4">
+    <div id="systemModalPanel" class="portal-ui-scaled-modal portal-panel w-full max-w-2xl max-h-[85vh] rounded-2xl p-5 flex flex-col gap-4">
       <div class="flex items-center justify-between gap-3 pb-3 border-b shrink-0" style="border-color: var(--hairline);">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">
@@ -1437,7 +1670,7 @@
   <!-- Indicador de dados recogidos en mano (sigue al cursor) -->
   <div
     id="diceHandCursor"
-    class="portal-panel fixed top-0 left-0 z-50 pointer-events-none hidden items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono-tech shadow-xl border"
+    class="portal-ui-scaled portal-panel fixed top-0 left-0 z-50 pointer-events-none hidden items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono-tech shadow-xl border"
     style="border-color: var(--accent-primary);"
   >
     <span class="text-xs leading-none">🎲</span>
@@ -1454,7 +1687,7 @@
     aria-modal="true"
     aria-labelledby="portalLobbyTitle"
   >
-    <div class="portal-panel w-full max-w-2xl rounded-3xl p-6 md:p-7 flex flex-col gap-5 shadow-2xl border" style="border-color: var(--border-subtle);">
+    <div class="portal-ui-scaled-modal portal-panel w-full max-w-2xl rounded-3xl p-6 md:p-7 flex flex-col gap-5 shadow-2xl border" style="border-color: var(--border-subtle);">
       <!-- Encabezado de marca -->
       <div class="flex items-center justify-between gap-3 pb-3 border-b" style="border-color: var(--border-subtle);">
         <div class="flex items-center gap-3">
@@ -1493,6 +1726,7 @@
                 <option value="pbta">PbtA / Dungeon World (2d6 + stat)</option>
                 <option value="pool">Reserva de Dados (Éxitos d10)</option>
                 <option value="d100">Percentil / BRP (1d100)</option>
+                <option value="vieja_escuela">Vieja Escuela (OSR 1d20)</option>
                 <option value="free">Sistema Genérico (Personalizable)</option>
               </select>
             </label>
@@ -1575,11 +1809,11 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261117b1"></script>
+  <script type="module" src="js/main.js?v=20261121a6"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
-    <div class="portal-panel max-w-3xl w-full rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs max-h-[90vh]">
+    <div class="portal-ui-scaled-modal portal-panel max-w-3xl w-full rounded-2xl p-3.5 flex flex-col gap-2.5 text-xs max-h-[90vh]">
       <div class="flex items-center justify-between gap-2">
         <strong id="handoutModalTitle" class="text-sm font-semibold truncate">Handout</strong>
         <div class="flex items-center gap-1.5 shrink-0">
@@ -1587,8 +1821,360 @@
           <button type="button" id="btnCloseHandout" class="portal-btn portal-btn-accent px-2.5 py-1 text-[11px] font-semibold">Cerrar</button>
         </div>
       </div>
-      <div class="rounded-xl overflow-hidden bg-black/40 flex items-center justify-center max-h-[75vh]">
+      <div class="rounded-xl overflow-hidden bg-black/40 flex items-center justify-center max-h-[75vh] shrink-0">
         <img id="handoutModalImg" src="" alt="Handout" class="max-w-full max-h-[75vh] object-contain" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Tarjeta de Inspección de Token (Jugadores sin propiedad) -->
+  <div id="tokenInspectModal" class="fixed inset-0 bg-black/70 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="inspectTokenName">
+    <div class="portal-ui-scaled-modal portal-panel max-w-md w-full rounded-2xl p-4 flex flex-col gap-3.5 text-xs">
+      <div class="flex items-center justify-between gap-2 pb-2 border-b" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold portal-subpanel opacity-80">Inspección</span>
+          <strong id="inspectTokenName" class="text-sm font-bold tracking-tight truncate">Personaje</strong>
+        </div>
+        <button type="button" id="btnCloseTokenInspect" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100" title="Cerrar" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="inspectTokenMedia" class="rounded-2xl overflow-hidden bg-black/35 border flex items-center justify-center min-h-[180px] max-h-[300px] p-3" style="border-color: var(--border-subtle);"></div>
+      <div class="portal-subpanel rounded-xl p-3 flex flex-col gap-1 max-h-48 overflow-y-auto">
+        <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">Descripción a simple vista</span>
+        <p id="inspectTokenDesc" class="text-xs leading-relaxed opacity-90 whitespace-pre-wrap break-words">Sin descripción pública.</p>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button type="button" id="btnInspectSaveToJournal" class="portal-btn portal-btn-accent px-3.5 py-1.5 rounded-xl text-xs font-semibold gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M12 7v6M9 10h6"/></svg>
+          <span>Guardar en Diario</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visor de Presentación de Nota del Diario en Mesa -->
+  <div id="journalPresentationModal" class="fixed inset-0 bg-black/75 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="journalPresTitle">
+    <div class="portal-ui-scaled-modal portal-panel max-w-xl w-full rounded-2xl p-4 flex flex-col gap-3.5 text-xs max-h-[88vh]">
+      <div class="flex items-center justify-between gap-2 pb-2 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2 min-w-0">
+          <span id="journalPresFolderPill" class="px-2 py-0.5 rounded-full text-[10px] font-semibold portal-subpanel opacity-80">Diario</span>
+          <strong id="journalPresTitle" class="text-sm font-bold tracking-tight truncate">Nota revelada</strong>
+        </div>
+        <button type="button" id="btnCloseJournalPresTop" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="journalPresMediaWrap" class="hidden rounded-2xl overflow-hidden bg-black/40 border items-center justify-center max-h-[260px] shrink-0" style="border-color: var(--border-subtle);">
+        <img id="journalPresImg" src="" alt="" class="max-w-full max-h-[260px] object-contain" />
+      </div>
+      <div id="journalPresBlocks" class="flex-1 overflow-y-auto flex flex-col gap-2.5 pr-1"></div>
+      <div class="flex items-center justify-between gap-2 pt-2 border-t shrink-0" style="border-color: var(--hairline);">
+        <span class="text-[10.5px] opacity-70">Guardado automáticamente en el Diario</span>
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnClearJournalPresForAll" class="hidden portal-btn portal-subpanel px-2.5 py-1.5 rounded-xl text-[11px] font-medium">Quitar para todos</button>
+          <button type="button" id="btnOpenJournalFromPres" class="portal-btn portal-subpanel px-2.5 py-1.5 rounded-xl text-[11px] font-semibold">Abrir en Diario</button>
+          <button type="button" id="btnCloseJournalPres" class="portal-btn portal-btn-accent px-3 py-1.5 rounded-xl text-[11px] font-semibold">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Central: Mostrar Nota del Diario (Selector + Vista Previa Anti-Spoiler) -->
+  <div id="journalShareModal" class="fixed inset-0 bg-black/75 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="journalShareTitle">
+    <div class="portal-ui-scaled-modal portal-panel max-w-md w-full rounded-2xl p-4 flex flex-col gap-3 text-xs max-h-[86vh]" style="--modal-max-w: 448px;">
+      <div class="flex items-center justify-between gap-2 pb-2 border-b shrink-0" style="border-color: var(--hairline);">
+        <div class="flex items-center gap-2 min-w-0">
+          <svg class="w-4 h-4 shrink-0" style="color: var(--accent-primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>
+          <strong id="journalShareTitle" class="text-sm font-bold tracking-tight truncate">Mostrar a la mesa</strong>
+        </div>
+        <button type="button" id="btnCloseJournalShareTop" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100 shrink-0" title="Cerrar" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="journalShareBody" class="flex-1 overflow-y-auto flex flex-col gap-3 pr-0.5"></div>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t shrink-0" style="border-color: var(--hairline);">
+        <button type="button" id="btnCancelJournalShare" class="portal-btn portal-subpanel px-3 py-1.5 rounded-xl text-[11px] font-semibold">Cancelar</button>
+        <button type="button" id="btnConfirmJournalShare" class="portal-btn portal-btn-accent px-3.5 py-1.5 rounded-xl text-[11px] font-semibold disabled:opacity-40 disabled:pointer-events-none">Mostrar ahora</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Estudio rápido de Token (estilo Apple) -->
+  <div id="tokenEditorModal" class="fixed inset-0 bg-black/70 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Editor de Token">
+    <div class="portal-ui-scaled-modal portal-panel max-w-[360px] w-full rounded-2xl p-4 flex flex-col gap-3 text-xs" style="--modal-max-w: 360px;">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <strong class="text-sm font-semibold tracking-tight">Token</strong>
+          <span id="lblTokenEditorBadge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-semibold portal-subpanel opacity-85"></span>
+        </div>
+        <button type="button" id="btnCloseTokenEditor" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100" title="Cerrar">
+          <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
+
+      <div class="flex justify-center">
+        <div id="tokenEditorStage" class="token-editor-stage portal-checkerboard flex items-center justify-center">
+          <canvas id="tokenEditorCanvas" width="448" height="448" class="w-full h-full cursor-grab active:cursor-grabbing"></canvas>
+          <input type="file" id="fileTokenEditorInput" accept="image/*" class="hidden" />
+          <label
+            id="tokenEditorDropEmpty"
+            for="fileTokenEditorInput"
+            class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center cursor-pointer transition-opacity hover:opacity-95"
+          >
+            <svg class="w-7 h-7 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span class="font-semibold text-[11px]">Elige, suelta o pega una imagen</span>
+            <span class="text-[10px] opacity-60">PNG transparente o retrato completo</span>
+          </label>
+          <div class="absolute top-2 right-2 flex items-center gap-1">
+            <label for="fileTokenEditorInput" id="btnTokenEditorPickFile" class="portal-btn portal-panel px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer shadow-sm">Cambiar</label>
+            <button type="button" id="btnTokenEditorReset" class="hidden portal-btn portal-panel px-2 py-0.5 rounded-full text-[10px] font-medium shadow-sm" title="Centrar encuadre">Centrar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tokenEditorZoomRow" class="flex items-center gap-2 px-0.5">
+        <button type="button" id="btnTokenEditorZoomOut" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full text-xs font-bold shrink-0" title="Alejar">−</button>
+        <input type="range" id="rngTokenEditorZoom" class="portal-slider flex-1" min="0.6" max="3.5" step="0.02" value="1" />
+        <button type="button" id="btnTokenEditorZoomIn" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full text-xs font-bold shrink-0" title="Acercar">+</button>
+        <span id="lblTokenEditorZoom" class="w-10 text-right font-mono-tech text-[10px] opacity-75 shrink-0">100%</span>
+      </div>
+
+      <div id="tokenEditorFrameSeg" class="portal-seg grid-cols-4">
+        <button type="button" data-token-frame="none" class="portal-seg-btn is-active">Original</button>
+        <button type="button" data-token-frame="circle" class="portal-seg-btn">Círculo</button>
+        <button type="button" data-token-frame="square" class="portal-seg-btn">Cuadrado</button>
+        <button type="button" data-token-frame="hex" class="portal-seg-btn">Hexágono</button>
+      </div>
+
+      <div id="tokenEditorColorRow" class="hidden items-center justify-between gap-2 pt-0.5">
+        <div id="tokenEditorColorGrid" class="flex items-center flex-wrap gap-1.5 flex-1"></div>
+        <label class="portal-swatch portal-swatch-custom shrink-0" title="Color personalizado">
+          <input type="color" id="inpTokenEditorColor" value="#8b5cf6" class="sr-only" />
+          <span>+</span>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 pt-1 border-t" style="border-color: var(--hairline);">
+        <div>
+          <button type="button" id="btnTokenEditorRemove" class="hidden portal-btn portal-subpanel px-2.5 py-1.5 rounded-full text-[11px] font-medium text-rose-400">Quitar</button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnCancelTokenEditor" class="portal-btn portal-subpanel px-3 py-1.5 rounded-full text-[11px] font-medium">Cancelar</button>
+          <button type="button" id="btnApplyTokenEditor" class="portal-btn portal-btn-accent px-3.5 py-1.5 rounded-full text-[11px] font-semibold disabled:opacity-45 disabled:pointer-events-none" disabled>Aplicar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuración unificada de Escenario (Grilla y Escala + Iluminación) -->
+  <div id="mapGridModal" class="fixed inset-0 bg-black/70 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Configurar escenario">
+    <div class="portal-ui-scaled-modal portal-panel w-full rounded-2xl p-4 flex flex-col gap-3 text-xs" style="--modal-max-w: 720px;">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <strong class="text-sm font-semibold tracking-tight">Escenario</strong>
+          <span id="lblMapGridTitle" class="px-2 py-0.5 rounded-full text-[10px] font-semibold portal-subpanel opacity-85 truncate max-w-[200px]">Escenario</span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <div id="sceneEditorTabSeg" class="portal-seg grid-cols-2">
+            <button type="button" data-scene-tab="grid" class="portal-seg-btn is-active px-2.5">Grilla</button>
+            <button type="button" data-scene-tab="lighting" class="portal-seg-btn px-2.5">Iluminación</button>
+          </div>
+          <button type="button" id="btnCloseMapGrid" class="portal-btn portal-subpanel w-6 h-6 p-0 rounded-full flex items-center justify-center opacity-75 hover:opacity-100" title="Cerrar">
+            <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-[1fr_248px] gap-3 items-start">
+        <div id="mapGridStage" class="map-grid-stage relative aspect-[3/2] w-full rounded-xl overflow-hidden bg-slate-950/80">
+          <canvas id="mapGridCanvas" width="900" height="600" class="w-full h-full block"></canvas>
+          <div class="absolute top-2 right-2 flex items-center gap-1">
+            <span id="lblMapGridViewZoom" class="portal-panel px-2 py-0.5 rounded-full font-mono-tech text-[10px]">1.0×</span>
+            <button type="button" id="btnMapGridResetView" class="hidden portal-btn portal-panel px-2 py-0.5 rounded-full text-[10px] font-medium">1×</button>
+          </div>
+          <div id="lblMapGridStageHint" class="absolute bottom-2 left-2 portal-panel px-2.5 py-0.5 rounded-full text-[10px] opacity-85 pointer-events-none">
+            Arrastra para alinear · Rueda para acercar
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2.5">
+          <!-- Pestaña 1: Grilla y Escala -->
+          <div id="scenePaneGrid" class="flex flex-col gap-2.5">
+            <div class="flex flex-col gap-1.5">
+              <span class="font-semibold">Forma</span>
+              <div id="mapGridTypeSeg" class="portal-seg grid-cols-3">
+                <button type="button" data-grid-type-mode="none" class="portal-seg-btn">Sin grilla</button>
+                <button type="button" data-grid-type-mode="square" class="portal-seg-btn is-active">Cuadrada</button>
+                <button type="button" data-grid-type-mode="hex" class="portal-seg-btn">Hex</button>
+              </div>
+              <div id="mapGridHexOrientRow" class="hidden portal-seg grid-cols-2">
+                <button type="button" data-grid-hex-orient="hex-v" class="portal-seg-btn is-active">Punta arriba</button>
+                <button type="button" data-grid-hex-orient="hex-h" class="portal-seg-btn">Lado arriba</button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center justify-between">
+                <span id="lblMapGridSizeTitle" class="font-semibold">Tamaño de celda</span>
+                <span id="lblMapGridSizeDetail" class="text-[10.5px] opacity-65 tabular-nums">80px · 1.5m</span>
+              </div>
+              <div class="portal-stepper justify-between w-full px-1 py-0.5">
+                <button type="button" id="btnMapGridSizeMinus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="-1px (Shift: -5px)">
+                  <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                </button>
+                <div class="flex items-center gap-0.5">
+                  <input type="number" id="inpMapGridSize" min="16" max="300" step="0.1" value="80" class="portal-num-input w-12 text-xs font-semibold" />
+                  <span class="text-[10px] opacity-55">px</span>
+                </div>
+                <button type="button" id="btnMapGridSizePlus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="+1px (Shift: +5px)">
+                  <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold">Escala (1 ficha)</span>
+                <span class="text-[10px] opacity-55">Para regla y luz</span>
+              </div>
+              <div class="portal-stepper justify-between w-full px-1 py-0.5">
+                <button type="button" id="btnMapScaleMinus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="Reducir escala">
+                  <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                </button>
+                <div class="flex items-center gap-0.5">
+                  <input type="number" id="inpMapScaleVal" min="0.5" max="150" step="0.5" value="1.5" class="portal-num-input w-12 text-xs font-semibold" />
+                  <span id="lblMapScaleUnit" class="text-[10px] opacity-55">m</span>
+                </div>
+                <button type="button" id="btnMapScalePlus" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center" title="Aumentar escala">
+                  <svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                </button>
+              </div>
+            </div>
+
+            <div id="mapGridOnlyControls" class="flex flex-col gap-2.5">
+              <div class="flex flex-col gap-1.5">
+                <span class="font-semibold">Ajustar al mapa (Cols × Filas)</span>
+                <div class="flex items-center gap-1.5">
+                  <input type="number" id="inpMapGridCols" min="2" max="150" placeholder="Cols" class="portal-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
+                  <span class="text-[10px] opacity-55">×</span>
+                  <input type="number" id="inpMapGridRows" min="2" max="150" placeholder="Filas" class="portal-input px-2 py-1 text-[11px] font-semibold w-14 text-center" />
+                  <button type="button" id="btnFitMapGrid" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-lg text-[11px] font-semibold ml-auto">Ajustar</button>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold">Desfase</span>
+                  <button type="button" id="btnMapGridResetOffset" class="text-[10px] opacity-60 hover:opacity-100 transition-opacity">Centrar</button>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="portal-stepper justify-between px-1 py-0.5">
+                    <button type="button" id="btnMapGridOffXMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Izquierda">
+                      <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                    </button>
+                    <div class="flex items-center gap-0.5">
+                      <span class="text-[10px] opacity-50">X</span>
+                      <input type="number" id="inpMapGridOffX" min="-300" max="300" step="1" value="0" class="portal-num-input w-8 text-[11px] font-semibold" />
+                    </div>
+                    <button type="button" id="btnMapGridOffXPlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Derecha">
+                      <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                    </button>
+                  </div>
+                  <div class="portal-stepper justify-between px-1 py-0.5">
+                    <button type="button" id="btnMapGridOffYMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Arriba">
+                      <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                    </button>
+                    <div class="flex items-center gap-0.5">
+                      <span class="text-[10px] opacity-50">Y</span>
+                      <input type="number" id="inpMapGridOffY" min="-300" max="300" step="1" value="0" class="portal-num-input w-8 text-[11px] font-semibold" />
+                    </div>
+                    <button type="button" id="btnMapGridOffYPlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Abajo">
+                      <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold">Opacidad y contraste</span>
+                  <span id="lblMapGridOpacity" class="text-[10.5px] opacity-65 tabular-nums">28%</span>
+                </div>
+                <input type="range" id="rngMapGridOpacity" min="0" max="85" step="1" value="28" class="portal-slider" />
+                <div id="mapGridColorSeg" class="portal-seg grid-cols-3">
+                  <button type="button" data-grid-color="auto" class="portal-seg-btn is-active">Auto</button>
+                  <button type="button" data-grid-color="light" class="portal-seg-btn">Clara</button>
+                  <button type="button" data-grid-color="dark" class="portal-seg-btn">Oscura</button>
+                </div>
+              </div>
+
+              <label class="flex items-center justify-between pt-2 border-t cursor-pointer" style="border-color: var(--hairline);">
+                <span class="font-medium">Imán a grilla</span>
+                <span class="portal-switch">
+                  <input type="checkbox" id="chkMapGridSnap" checked class="portal-switch-input" />
+                  <span class="portal-switch-track"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Pestaña 2: Iluminación y Referencia de Visión -->
+          <div id="scenePaneLighting" class="hidden flex-col gap-2.5">
+            <div class="flex flex-col gap-1.5">
+              <span class="font-semibold">Iluminación del escenario</span>
+              <div id="sceneLightingModeSeg" class="portal-seg grid-cols-2">
+                <button type="button" data-scene-light-mode="ambient" class="portal-seg-btn">Ambiental</button>
+                <button type="button" data-scene-light-mode="dynamic" class="portal-seg-btn is-active">Dinámica</button>
+              </div>
+              <p class="text-[10px] opacity-60 leading-snug">Ambiental muestra todo el mapa; Dinámica proyecta oscuridad y sombras desde muros y fichas.</p>
+            </div>
+
+            <label class="flex items-center justify-between gap-2 pt-2 border-t cursor-pointer" style="border-color: var(--hairline);">
+              <span class="flex flex-col min-w-0">
+                <span class="font-medium">Recordar área descubierta</span>
+                <span class="text-[10px] opacity-60 leading-tight">Conserva la penumbra explorada en este mapa</span>
+              </span>
+              <span class="portal-switch shrink-0">
+                <input type="checkbox" id="chkSceneRememberExplored" checked class="portal-switch-input" />
+                <span class="portal-switch-track"></span>
+              </span>
+            </label>
+
+            <div id="sceneExploredCard" class="portal-subpanel rounded-xl p-2 flex flex-col gap-1.5">
+              <div class="flex items-center justify-between">
+                <span class="font-medium">Área descubierta</span>
+                <span id="lblSceneExploredStatus" class="text-[10px] opacity-65">Sin explorar</span>
+              </div>
+              <button type="button" id="btnSceneResetExplored" class="portal-btn portal-panel w-full py-1.5 rounded-lg text-[11px] font-medium">↺ Resetear área descubierta</button>
+            </div>
+
+            <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1.5">
+              <div class="flex items-center justify-between gap-1">
+                <span class="font-medium">Referencia en vista previa</span>
+                <span class="text-[10px] opacity-60">Arrastra "PJ"</span>
+              </div>
+              <span id="lblSceneVisionSummary" class="text-[10px] opacity-75">Base: 9 m · Antorcha: 6 m · Linterna: 12 m</span>
+              <div class="flex items-center justify-between gap-1.5 pt-0.5">
+                <span class="text-[10px] opacity-65 shrink-0">1 ficha =</span>
+                <div class="portal-stepper justify-between flex-1 px-1 py-0.5">
+                  <button type="button" id="btnLightingScaleMinus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Reducir escala">
+                    <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 8h9" /></svg>
+                  </button>
+                  <div class="flex items-center gap-0.5">
+                    <input type="number" id="inpLightingScaleVal" min="0.5" max="150" step="0.5" value="1.5" class="portal-num-input w-10 text-[11px] font-semibold" />
+                    <span id="lblLightingScaleUnit" class="text-[9.5px] opacity-55">m</span>
+                  </div>
+                  <button type="button" id="btnLightingScalePlus" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center" title="Aumentar escala">
+                    <svg class="w-2 h-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                  </button>
+                </div>
+              </div>
+              <button type="button" id="btnSceneOpenSystemVision" class="text-left text-[10.5px] font-medium hover:underline pt-0.5" style="color: var(--accent-primary);">Ajustar visión base del sistema →</button>
+            </div>
+
+            <button type="button" id="btnSceneDrawWalls" class="portal-btn portal-panel w-full py-1.5 rounded-xl text-[11px] font-medium">🧱 Dibujar muros y puertas [W]</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-1.5 pt-1 border-t" style="border-color: var(--hairline);">
+        <button type="button" id="btnCancelMapGrid" class="portal-btn portal-subpanel px-3 py-1.5 rounded-full text-[11px] font-medium">Cancelar</button>
+        <button type="button" id="btnApplyMapGrid" class="portal-btn portal-btn-accent px-3.5 py-1.5 rounded-full text-[11px] font-semibold">Aplicar</button>
       </div>
     </div>
   </div>

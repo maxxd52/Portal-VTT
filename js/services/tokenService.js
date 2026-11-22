@@ -2,9 +2,14 @@
    TOKEN SERVICE: FICHAS, INVENTARIO, STATS, HABILIDADES Y VISIBILIDAD
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261117b1';
+import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261121a6';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261117b1';
+import { Selector } from '../core/selector.js?v=20261121a6';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
+import {
+  formatDistance,
+  legacyLightPxToMeters
+} from '../utils/lightingModel.js?v=20261121a6';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {
@@ -15,25 +20,45 @@ export const TokenServiceMethods = {
     this.state.selectedTokenId = tokenId;
     if (tokenId && openSheet) {
       this.state.sheetOpen = true;
+      this.state.gmScreenOpen = false;
     }
     this.notify();
   },
 
-  moveToken(tokenId, wx, wy, commit = true) {
+  focusToken(tokenId) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok) return;
+    const zoom = Number(this.state.camera?.zoom) || 1;
+    this.state.camera.x = Math.round(window.innerWidth / 2 - tok.x * zoom);
+    this.state.camera.y = Math.round(window.innerHeight / 2 - tok.y * zoom);
+    this.notify();
+  },
+
+  moveToken(tokenId, wx, wy, commit = true, rawPath = null) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok || !this.canControlToken(tok)) return;
+    this.cancelTokenGlide?.(tokenId);
     const pos = commit ? Selector.snapPosition(this.state, wx, wy, tok.size) : { x: wx, y: wy };
     tok.x = Math.max(40, Math.min(2360, pos.x));
     tok.y = Math.max(40, Math.min(1560, pos.y));
     if (commit) {
-      this.recordEvent('MOVER_FICHA', `${tok.name} -> (${Math.round(tok.x)}, ${Math.round(tok.y)})`);
+      const path = Array.isArray(rawPath) && rawPath.length >= 2
+        ? Selector.simplifyMovePath(rawPath, { x: tok.x, y: tok.y }, 12)
+        : null;
+      const payload = { kind: 'TOKEN_MOVE', tokenId: tok.id, x: tok.x, y: tok.y };
+      if (path) payload.path = path;
+      this.recordEvent('MOVER_FICHA', `${tok.name} -> (${Math.round(tok.x)}, ${Math.round(tok.y)})`, { broadcast: false });
+      RealtimeBridge.send(payload);
+      this.notify({ skipPeerSync: true });
+    } else {
+      this.notify({ tokensOnly: true, skipVaultSave: true });
     }
-    this.notify({ skipVaultSave: !commit });
   },
 
   async spawnActorFromTemplate(tpl, wx, wy) {
     const snapped = Selector.snapPosition(this.state, wx, wy, tpl.size || 1);
     const directImg = DriveUrlHelper.toDirectImageUrl(tpl.imageUrl || '');
+    const mediaId = directImg ? (this.registerMediaAsset?.(directImg, { label: tpl.name, kind: 'token' }) || '') : '';
     const starterInv = Array.isArray(tpl.starterItems)
       ? tpl.starterItems
           .map((k, idx) => {
@@ -60,22 +85,28 @@ export const TokenServiceMethods = {
       });
     }
 
-    const sysBlocks = Array.isArray(this.state.systemConfig?.sheetBlocks) ? this.state.systemConfig.sheetBlocks : null;
+    const sysBlocks = Array.isArray(this.state.systemConfig?.sheetBlocks)
+      ? Selector.getSystemSheetBlocks(this.state)
+      : null;
     const hpBlock = sysBlocks ? sysBlocks.find((b) => b.kind === 'resource' && b.key === 'hp') : null;
-    const defHp = Number(tpl.hp) || Number(hpBlock?.max) || 16;
+    const calcHpMax = hpBlock ? Selector.resolveResourceMax(this.state, { stats: initialStats, maxHp: Number(tpl.hp) || 16 }, hpBlock) : 16;
+    const defHp = Number(tpl.hp) || calcHpMax || 16;
     const seedResList = Array.isArray(tpl.resources)
       ? tpl.resources.map((r) => ({ ...r }))
       : sysBlocks
         ? sysBlocks
             .filter((b) => b.kind === 'resource' && b.key !== 'hp')
-            .map((b) => ({
-              id: b.id,
-              name: b.label,
-              cur: Number(b.max) > 0 ? Number(b.max) : 0,
-              max: Number(b.max) || 0,
-              color: b.color || '#8b5cf6',
-              kind: b.resStyle === 'pips' || b.resStyle === 'bar' ? b.resStyle : Number(b.max) > 0 && Number(b.max) <= 6 ? 'pips' : 'bar'
-            }))
+            .map((b) => {
+              const effMax = Selector.resolveResourceMax(this.state, { stats: initialStats, maxHp: defHp }, b);
+              return {
+                id: b.id,
+                name: b.label,
+                cur: effMax > 0 ? effMax : 0,
+                max: effMax,
+                color: b.color || '#8b5cf6',
+                kind: b.resStyle === 'pips' || b.resStyle === 'bar' ? b.resStyle : effMax > 0 && effMax <= 6 ? 'pips' : 'bar'
+              };
+            })
         : (this.state.systemConfig?.resourceSchema || []).map((r) => ({
             id: r.id || `res-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 4)}`,
             name: r.name,
@@ -92,8 +123,15 @@ export const TokenServiceMethods = {
       role: tpl.role || 'Aventurero',
       color: tpl.color || '#8b5cf6',
       isAlly: tpl.isAlly !== false,
-      visionRadius: Number(tpl.visionRadius) || 520,
+      visionMeters:
+        tpl.visionMeters !== null && tpl.visionMeters !== undefined && tpl.visionMeters !== '' && Number.isFinite(Number(tpl.visionMeters))
+          ? Math.max(0, Math.min(60, Number(tpl.visionMeters)))
+          : null,
+      lightMeters: Math.max(0, Math.min(60, Number(tpl.lightMeters) || 0)),
       imageUrl: directImg,
+      mediaId,
+      publicDescription: String(tpl.publicDescription || ''),
+      privateNotes: String(tpl.privateNotes || ''),
       size: tpl.size || 1,
       x: snapped.x,
       y: snapped.y,
@@ -116,6 +154,7 @@ export const TokenServiceMethods = {
     this.state.tokens.push(token);
     this.state.selectedTokenId = token.id;
     this.state.sheetOpen = true;
+    this.state.gmScreenOpen = false;
     this.recordEvent('INVOCAR_FICHA', token.name);
     this.notify({ redrawFog: true });
     return token;
@@ -152,10 +191,6 @@ export const TokenServiceMethods = {
         tok.stats[target] = (Number(tok.stats[target]) || 0) + delta;
       }
     });
-    if (item.lightRadius > 0) {
-      const base = Number(tok.visionRadius) || 520;
-      tok.visionRadius = sign > 0 ? base + item.lightRadius : Math.max(240, base - item.lightRadius);
-    }
   },
 
   equipItemToToken(tokenId, itemTpl) {
@@ -176,6 +211,7 @@ export const TokenServiceMethods = {
       statBonus: itemTpl.statBonus !== undefined ? Number(itemTpl.statBonus) || 0 : Number(itemTpl.acBonus) || 0,
       acBonus: Number(itemTpl.acBonus) || 0,
       heal: Number(itemTpl.heal) || 0,
+      lightMeters: Number(itemTpl.lightMeters) || 0,
       lightRadius: Number(itemTpl.lightRadius) || 0,
       passives: Array.isArray(itemTpl.passives) ? JSON.parse(JSON.stringify(itemTpl.passives)) : undefined,
       steps: Array.isArray(itemTpl.steps) ? JSON.parse(JSON.stringify(itemTpl.steps)) : undefined,
@@ -186,6 +222,7 @@ export const TokenServiceMethods = {
     this.applyTokenPassiveBonus(tok, invEntry, 1);
     this.state.selectedTokenId = tok.id;
     this.state.sheetOpen = true;
+    this.state.gmScreenOpen = false;
     this.recordEvent('EQUIPAR_OBJETO', `${invEntry.name} -> ${tok.name}`);
     this.notify({ redrawFog: true });
     return { token: tok, item: invEntry };
@@ -282,8 +319,11 @@ export const TokenServiceMethods = {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok) return;
     this.pushUndoSnapshot();
-    tok.hp = Math.max(0, Math.min(tok.maxHp, tok.hp + delta));
-    this.recordEvent('HP_FICHA', `${tok.name}: ${tok.hp}/${tok.maxHp}`);
+    const hpBlk = Selector.getSystemSheetBlocks(this.state).find((b) => b.kind === 'resource' && b.key === 'hp');
+    const effMax = hpBlk ? Selector.resolveResourceMax(this.state, tok, hpBlk) : (Number(tok.maxHp) || 999);
+    const upper = effMax === 0 ? 999 : Math.max(1, effMax);
+    tok.hp = Math.max(0, Math.min(upper, (Number(tok.hp) || 0) + delta));
+    this.recordEvent('HP_FICHA', `${tok.name}: ${effMax > 0 ? `${tok.hp}/${upper}` : tok.hp}`);
     this.notify();
   },
 
@@ -363,6 +403,26 @@ export const TokenServiceMethods = {
     this.notify();
   },
 
+  toggleTokenBlockCheck(tokenId, key) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const cleanKey = Selector.normalizeStatKey(key);
+    if (!tok || !cleanKey) return;
+    if (!tok.blockChecks || typeof tok.blockChecks !== 'object') tok.blockChecks = {};
+    tok.blockChecks[cleanKey] = !tok.blockChecks[cleanKey];
+    this.notify();
+  },
+
+  setTokenBlockDie(tokenId, key, sides) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    const cleanKey = Selector.normalizeStatKey(key);
+    const validDice = [4, 6, 8, 10, 12, 20];
+    const chosen = validDice.includes(Number(sides)) ? Number(sides) : 6;
+    if (!tok || !cleanKey) return;
+    if (!tok.stats || typeof tok.stats !== 'object') tok.stats = {};
+    tok.stats[cleanKey] = chosen;
+    this.notify();
+  },
+
   toggleTokenSaveProf(tokenId, statKey) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok) return;
@@ -429,16 +489,107 @@ export const TokenServiceMethods = {
     this.notify();
   },
 
+  updateTokenImage(tokenId, imageUrl = '') {
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok || !this.canControlToken(tok)) return null;
+    this.pushUndoSnapshot();
+    const raw = String(imageUrl || '').trim();
+    const clean = raw ? (DriveUrlHelper.toDirectImageUrl(raw) || raw) : '';
+    tok.imageUrl = clean;
+    tok.mediaId = clean ? (this.registerMediaAsset?.(clean, { label: tok.name, kind: 'token' }) || '') : '';
+    this.pruneUnusedMediaAssets?.();
+    this.recordEvent('IMAGEN_FICHA', tok.name);
+    this.notify();
+    return tok;
+  },
+
+  updateTokenPublicDescription(tokenId, description = '') {
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok || !this.canControlToken(tok)) return null;
+    tok.publicDescription = String(description || '');
+    this.notify();
+    return tok;
+  },
+
+  updateTokenPrivateNotes(tokenId, notes = '') {
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok || !this.canControlToken(tok)) return null;
+    tok.privateNotes = String(notes || '');
+    this.notify();
+    return tok;
+  },
+
+  openTokenInspection(tokenId) {
+    const tok = (this.state.tokens || []).find((t) => t && t.id === tokenId);
+    if (!tok) return false;
+    if (this.state.role === 'player' && tok.hidden) return false;
+    this.state.inspectTokenId = tok.id;
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return true;
+  },
+
+  closeTokenInspection() {
+    if (!this.state.inspectTokenId) return false;
+    this.state.inspectTokenId = null;
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return true;
+  },
+
   cycleTokenLight(tokenId) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
-    if (!tok) return 0;
-    const steps = [0, 180, 360];
-    const cur = Number(tok.lightRadius) || 0;
-    const next = steps[(steps.indexOf(cur) + 1) % steps.length];
-    tok.lightRadius = next;
-    this.recordEvent('LUZ_FICHA', `${tok.name}: ${next ? next + 'px' : 'Apagada'}`);
+    if (!tok || !this.canControlToken(tok)) return 0;
+    const visionCfg = Selector.getSystemVisionConfig(this.state);
+    const steps = [0];
+    if (!steps.includes(visionCfg.torchMeters)) steps.push(visionCfg.torchMeters);
+    if (!steps.includes(visionCfg.lanternMeters)) steps.push(visionCfg.lanternMeters);
+    const cur =
+      tok.lightMeters !== null && tok.lightMeters !== undefined && Number.isFinite(Number(tok.lightMeters))
+        ? Math.max(0, Number(tok.lightMeters))
+        : legacyLightPxToMeters(tok.lightRadius);
+    const idx = steps.indexOf(cur);
+    const next = steps[(idx >= 0 ? idx + 1 : 1) % steps.length];
+    tok.lightMeters = next;
+    tok.lightRadius = 0;
+    this.recordEvent(
+      'LUZ_FICHA',
+      `${tok.name}: ${next > 0 ? formatDistance(next, visionCfg.distanceUnit) : 'Apagada'}`
+    );
     this.notify({ redrawFog: true });
     return next;
+  },
+
+  setTokenVision(tokenId, metersOrNull) {
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok || !this.canControlToken(tok)) return null;
+    if (metersOrNull === null || metersOrNull === '' || metersOrNull === undefined) {
+      tok.visionMeters = null;
+    } else {
+      const n = Number(metersOrNull);
+      if (!Number.isFinite(n)) return null;
+      tok.visionMeters = Math.round(Math.max(0, Math.min(60, n)) * 100) / 100;
+    }
+    this.recordEvent(
+      'VISION_FICHA',
+      `${tok.name}: ${tok.visionMeters === null ? 'Base del sistema' : `${tok.visionMeters} m`}`
+    );
+    this.notify({ redrawFog: true });
+    return tok.visionMeters;
+  },
+
+  setTokenLight(tokenId, meters) {
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok || !this.canControlToken(tok)) return 0;
+    const n = Number(meters);
+    const clamped = Number.isFinite(n) ? Math.round(Math.max(0, Math.min(60, n)) * 100) / 100 : 0;
+    tok.lightMeters = clamped;
+    tok.lightRadius = 0;
+    const visionCfg = Selector.getSystemVisionConfig(this.state);
+    this.recordEvent(
+      'LUZ_FICHA',
+      `${tok.name}: ${clamped > 0 ? formatDistance(clamped, visionCfg.distanceUnit) : 'Apagada'}`
+    );
+    this.notify({ redrawFog: true });
+    return clamped;
   },
 
   cycleTokenAura(tokenId) {
@@ -530,6 +681,8 @@ export const TokenServiceMethods = {
     if (this.state.selectedTokenId === tokenId) {
       this.state.selectedTokenId = this.state.tokens[0] ? this.state.tokens[0].id : null;
     }
+    this.removeTokenFromCombat?.(tokenId, { silent: true });
+    this.pruneUnusedMediaAssets?.();
     this.recordEvent('ELIMINAR_FICHA', tok.name);
     this.notify();
   },
@@ -561,44 +714,105 @@ export const TokenServiceMethods = {
     const res = tok?.resources?.find((r) => r.id === resId);
     if (!res) return 0;
     const d = Math.trunc(Number(delta) || 0);
-    const maxLim = Number(res.max) > 0 ? Number(res.max) : 999;
+    const resBlk = Selector.getSystemSheetBlocks(this.state).find(
+      (b) => b.kind === 'resource' && (b.id === resId || b.key === Selector.normalizeStatKey(res.name))
+    );
+    const effMax = resBlk ? Selector.resolveResourceMax(this.state, tok, resBlk, res) : (Number(res.max) || 0);
+    const maxLim = effMax > 0 ? effMax : 999;
     res.cur = Math.max(0, Math.min(maxLim, (Number(res.cur) || 0) + d));
     this.notify();
     return res.cur;
+  },
+
+  adjustTokenResourceByKey(tokenId, keyOrId, delta) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok) return 0;
+    const cleanKey = Selector.normalizeStatKey(keyOrId);
+    if (!cleanKey || cleanKey === 'hp') {
+      this.adjustTokenHp(tokenId, delta);
+      return tok.hp;
+    }
+    if (!Array.isArray(tok.resources)) tok.resources = [];
+    const blk = Selector.getSystemSheetBlocks(this.state).find(
+      (b) => b.kind === 'resource' && (b.id === keyOrId || b.key === cleanKey)
+    );
+    let res = tok.resources.find(
+      (r) => r.id === keyOrId || (blk && r.id === blk.id) || Selector.normalizeStatKey(r.name) === cleanKey
+    );
+    if (!res && blk) {
+      const effMax = Selector.resolveResourceMax(this.state, tok, blk);
+      res = {
+        id: blk.id,
+        name: blk.label,
+        cur: effMax > 0 ? effMax : 0,
+        max: effMax,
+        color: blk.color || '#8b5cf6',
+        kind: blk.resStyle === 'pips' || blk.resStyle === 'bar' ? blk.resStyle : effMax > 0 && effMax <= 6 ? 'pips' : 'bar'
+      };
+      tok.resources.push(res);
+    }
+    if (!res) return 0;
+    return this.adjustTokenResource(tokenId, res.id, delta);
   },
 
   setTokenResourceValue(tokenId, resId, val) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     const res = tok?.resources?.find((r) => r.id === resId);
     if (!res) return;
-    const maxLim = Number(res.max) > 0 ? Number(res.max) : 999;
+    const resBlk = Selector.getSystemSheetBlocks(this.state).find(
+      (b) => b.kind === 'resource' && (b.id === resId || b.key === Selector.normalizeStatKey(res.name))
+    );
+    const effMax = resBlk ? Selector.resolveResourceMax(this.state, tok, resBlk, res) : (Number(res.max) || 0);
+    const maxLim = effMax > 0 ? effMax : 999;
     res.cur = Math.max(0, Math.min(maxLim, Math.trunc(Number(val) || 0)));
     this.notify();
   },
 
   cycleTokenResourcePip(tokenId, resId, pipIdx, maxStates = 1, maxPips = 0) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
-    const res = tok?.resources?.find((r) => r.id === resId);
-    if (!res) return;
+    if (!tok) return;
     const states = [1, 2, 3].includes(Number(maxStates)) ? Number(maxStates) : 1;
     const idx = Math.max(0, Math.trunc(Number(pipIdx) || 0));
+    const blk = Selector.getSystemSheetBlocks(this.state).find(
+      (b) => b.kind === 'resource' && (b.id === resId || b.key === resId)
+    );
+    const nextPipArray = (existing, len, prevCur) => {
+      const arr = Array.from({ length: len }, (_, i) => {
+        if (Array.isArray(existing) && i < existing.length) {
+          return Math.max(0, Math.min(states, Number(existing[i]) || 0));
+        }
+        return !Array.isArray(existing) && i < prevCur ? states : 0;
+      });
+      arr[idx] = ((arr[idx] || 0) + 1) % (states + 1);
+      return arr;
+    };
+
+    if (blk?.key === 'hp' || resId === 'blk_hp') {
+      const effMax = blk ? Selector.resolveResourceMax(this.state, tok, blk) : Math.max(1, Number(tok.maxHp) || 18);
+      if (states <= 1) {
+        const targetVal = idx + 1;
+        const curVal = Number(tok.hp) || 0;
+        const nextVal = targetVal === curVal ? targetVal - 1 : targetVal;
+        tok.hp = Math.max(0, Math.min(effMax || 999, nextVal));
+      } else {
+        const len = Math.max(idx + 1, effMax || Number(maxPips) || 1);
+        tok.hpPips = nextPipArray(tok.hpPips, len, Math.max(0, Number(tok.hp) || 0));
+        tok.hp = tok.hpPips.filter((v) => v > 0).length;
+      }
+      this.notify();
+      return;
+    }
+
+    const res = tok.resources?.find((r) => r.id === resId);
+    if (!res) return;
+    const effMax = blk ? Selector.resolveResourceMax(this.state, tok, blk, res) : (Number(res.max) || 0);
     if (states <= 1) {
       const targetVal = idx + 1;
       const curVal = Number(res.cur) || 0;
       return this.setTokenResourceValue(tokenId, resId, targetVal === curVal ? targetVal - 1 : targetVal);
     }
-    const len = Math.max(idx + 1, Number(res.max) || Number(maxPips) || 1);
-    if (!Array.isArray(res.pips) || res.pips.length !== len) {
-      const prevCur = Math.max(0, Number(res.cur) || 0);
-      res.pips = Array.from({ length: len }, (_, i) => {
-        if (Array.isArray(res.pips) && i < res.pips.length) {
-          return Math.max(0, Math.min(states, Number(res.pips[i]) || 0));
-        }
-        return !Array.isArray(res.pips) && i < prevCur ? states : 0;
-      });
-    }
-    const curCell = Math.max(0, Math.min(states, Number(res.pips[idx]) || 0));
-    res.pips[idx] = (curCell + 1) % (states + 1);
+    const len = Math.max(idx + 1, effMax || Number(maxPips) || 1);
+    res.pips = nextPipArray(res.pips, len, Math.max(0, Number(res.cur) || 0));
     res.cur = res.pips.filter((v) => v > 0).length;
     this.notify();
   },
