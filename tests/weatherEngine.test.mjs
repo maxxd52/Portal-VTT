@@ -105,7 +105,7 @@ test('syncWeatherOverlay does not freeze explicitly enabled weather on prefers-r
   const fs = await import('node:fs');
   const path = await import('node:path');
   const src = fs.readFileSync(path.resolve(import.meta.dirname, '../js/ui/canvasView.js'), 'utf8');
-  const match = src.match(/syncWeatherOverlay\(state\)\s*\{[\s\S]*?\n  \},/);
+  const match = src.match(/syncWeatherOverlay\(state[^)]*\)\s*\{[\s\S]*?\n  \},/);
   assert.ok(match, 'syncWeatherOverlay must exist in canvasView.js');
   assert.doesNotMatch(match[0], /prefers-reduced-motion/);
 });

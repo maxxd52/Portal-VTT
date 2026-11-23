@@ -66,8 +66,8 @@ export function buildDiceDieMenuSpec(dieKey, { modifier = 0, deckRemaining = 54 
       header: { title: 'Baraja', subtitle: `${deckRemaining}/54` },
       sections: [
         [
-          { id: 'draw-card', icon: '🃏', label: 'Sacar 1 carta ahora' },
-          { id: 'shuffle-deck', icon: '🔀', label: 'Mezclar baraja' }
+          { id: 'draw-card', icon: 'cards', label: 'Sacar 1 carta ahora' },
+          { id: 'shuffle-deck', icon: 'shuffle', label: 'Mezclar baraja' }
         ]
       ]
     };
@@ -78,8 +78,8 @@ export function buildDiceDieMenuSpec(dieKey, { modifier = 0, deckRemaining = 54 
       header: { title: 'Dado Fudge (dF)', subtitle: modSuffix.trim() || 'Fate' },
       sections: [
         [
-          { id: 'roll-fudge-4', icon: '🎲', label: `Tirar 4dF ahora${modSuffix}` },
-          { id: 'add-one', icon: '＋', label: 'Añadir 1 dF a la mano' }
+          { id: 'roll-fudge-4', icon: 'dice', label: `Tirar 4dF ahora${modSuffix}` },
+          { id: 'add-one', icon: 'plus', label: 'Añadir 1 dF a la mano' }
         ]
       ]
     };
@@ -91,8 +91,8 @@ export function buildDiceDieMenuSpec(dieKey, { modifier = 0, deckRemaining = 54 
       header: { title: 'Moneda', subtitle: 'Cara / Cruz' },
       sections: [
         [
-          { id: 'roll-coin', icon: '🪙', label: 'Lanzar moneda ahora' },
-          { id: 'add-two', icon: '＋', label: 'Añadir ×2 a la mano' }
+          { id: 'roll-coin', icon: 'coin', label: 'Lanzar moneda ahora' },
+          { id: 'add-two', icon: 'plus', label: 'Añadir ×2 a la mano' }
         ]
       ]
     };
@@ -102,12 +102,12 @@ export function buildDiceDieMenuSpec(dieKey, { modifier = 0, deckRemaining = 54 
     header: { title: `Dado d${sides}`, subtitle: modSuffix.trim() },
     sections: [
       [
-        { id: 'roll-now', icon: '🎲', label: `Tirar 1d${sides} ahora${modSuffix}` },
-        { id: 'roll-adv', icon: '▲', label: `Ventaja (2d${sides} Máx)` },
-        { id: 'roll-dis', icon: '▼', label: `Desventaja (2d${sides} Mín)` }
+        { id: 'roll-now', icon: 'dice', label: `Tirar 1d${sides} ahora${modSuffix}` },
+        { id: 'roll-adv', icon: 'arrow-up', label: `Ventaja (2d${sides} Máx)` },
+        { id: 'roll-dis', icon: 'arrow-down', label: `Desventaja (2d${sides} Mín)` }
       ],
       [
-        { id: 'add-two', icon: '＋', label: `Añadir 2d${sides} a la mano` }
+        { id: 'add-two', icon: 'plus', label: `Añadir 2d${sides} a la mano` }
       ]
     ]
   };
@@ -127,7 +127,7 @@ export function buildDiceBarMenuSpec({
   if (handCount > 0) {
     quickResetSection.push({
       id: 'clear-hand',
-      icon: '✋',
+      icon: 'hand',
       label: 'Vaciar mano',
       value: `${handCount}`
     });
@@ -135,7 +135,7 @@ export function buildDiceBarMenuSpec({
   if (modNum !== 0) {
     quickResetSection.push({
       id: 'reset-mod',
-      icon: '↺',
+      icon: 'rotate-ccw',
       label: 'Restablecer modificador',
       value: '+0'
     });
@@ -145,23 +145,23 @@ export function buildDiceBarMenuSpec({
   sections.push([
     {
       id: 'vis-public',
-      icon: '🌐',
+      icon: 'globe',
       label: 'Tiradas públicas',
       checked: visibility !== 'private'
     },
     {
       id: 'vis-private',
-      icon: '🔒',
+      icon: 'lock',
       label: 'Tiradas privadas',
       checked: visibility === 'private'
     }
   ]);
 
   sections.push([
-    { id: 'open-customize', icon: '🎨', label: 'Personalizar dados…' },
+    { id: 'open-customize', icon: 'palette', label: 'Personalizar dados…' },
     {
       id: 'open-history',
-      icon: '🕘',
+      icon: 'clock',
       label: 'Historial de tiradas',
       value: historyCount > 0 ? String(historyCount) : ''
     }
@@ -169,7 +169,7 @@ export function buildDiceBarMenuSpec({
 
   if (historyCount > 0) {
     sections.push([
-      { id: 'clear-history', icon: '🗑️', label: 'Limpiar historial', danger: true }
+      { id: 'clear-history', icon: 'trash', label: 'Limpiar historial', danger: true }
     ]);
   }
 
@@ -193,14 +193,14 @@ export function buildMapMenuSpec({
   }
   if (role !== 'gm') {
     const primary = [
-      { id: 'ping-here', icon: '📡', label: 'Ping aquí', shortcut: 'G' },
-      { id: 'measure-here', icon: '📏', label: 'Medir desde aquí', shortcut: 'R' }
+      { id: 'ping-here', icon: 'radio', label: 'Ping aquí', shortcut: 'G' },
+      { id: 'measure-here', icon: 'ruler', label: 'Medir desde aquí', shortcut: 'R' }
     ];
     const camera = [];
     if (hasOwnedToken) {
-      camera.push({ id: 'focus-my-token', icon: '🎯', label: 'Centrar en mi ficha' });
+      camera.push({ id: 'focus-my-token', icon: 'crosshair', label: 'Centrar en mi ficha' });
     }
-    camera.push({ id: 'reset-zoom', icon: '🔍', label: 'Restablecer zoom' });
+    camera.push({ id: 'reset-zoom', icon: 'search', label: 'Restablecer zoom' });
     return {
       showToolsRow: false,
       sections: [primary, camera]
@@ -211,18 +211,18 @@ export function buildMapMenuSpec({
     showToolsRow: true,
     sections: [
       [
-        { id: 'ping-here', icon: '📡', label: 'Ping aquí', shortcut: 'G' },
-        { id: 'add-note', icon: '📌', label: 'Fijar nota aquí…' },
-        { id: 'spawn-here', icon: '➕', label: 'Invocar ficha aquí' }
+        { id: 'ping-here', icon: 'radio', label: 'Ping aquí', shortcut: 'G' },
+        { id: 'add-note', icon: 'pin', label: 'Fijar nota aquí…' },
+        { id: 'spawn-here', icon: 'plus', label: 'Invocar ficha aquí' }
       ],
       [
         {
           id: 'toggle-dynlight',
-          icon: '💡',
+          icon: 'bulb',
           label: 'Luz dinámica',
           checked: Boolean(dynamicLighting)
         },
-        { id: 'open-grid', icon: '⚙️', label: 'Escenario (Grilla y Luz)…' }
+        { id: 'open-grid', icon: 'sliders', label: 'Escenario (Grilla y Luz)…' }
       ]
     ]
   };
@@ -279,20 +279,20 @@ export function buildTokenMenuSpec({
   const isAlly = token?.isAlly !== false;
 
   const quickActions = [
-    { id: 'open-sheet', label: '📋', title: 'Abrir Ficha' }
+    { id: 'open-sheet', label: 'file-text', title: 'Abrir Ficha' }
   ];
 
   const sections = [];
   if (isGm) {
     const actionsSection = [
-      { id: 'toggle-hide', icon: '👁️', label: token?.hidden ? 'Mostrar ficha' : 'Ocultar ficha' }
+      { id: 'toggle-hide', icon: token?.hidden ? 'eye' : 'eye-off', label: token?.hidden ? 'Mostrar ficha' : 'Ocultar ficha' }
     ];
     if (!isAlly) {
-      actionsSection.push({ id: 'dup-tok', icon: '⧉', label: 'Duplicar ficha' });
+      actionsSection.push({ id: 'dup-tok', icon: 'copy', label: 'Duplicar ficha' });
     }
     sections.push(actionsSection);
     sections.push([
-      { id: 'del-tok', icon: '🗑️', label: 'Eliminar ficha', danger: true }
+      { id: 'del-tok', icon: 'trash', label: 'Eliminar ficha', danger: true }
     ]);
   }
 
@@ -324,11 +324,11 @@ export function buildWallMenuSpec(walls = []) {
     : '';
 
   const typeSection = [
-    { id: 'kind-wall', icon: '🧱', label: 'Muro sólido', checked: uniformKind === 'wall' },
-    { id: 'kind-terrain', icon: '🏛', label: 'Pilar / Terreno', checked: uniformKind === 'terrain' },
-    { id: 'kind-invisible', icon: '🪟', label: 'Invisible / Reja', checked: uniformKind === 'invisible' },
-    { id: 'kind-door', icon: '🚪', label: 'Puerta', checked: uniformKind === 'door' },
-    { id: 'kind-secret', icon: '🔮', label: 'Puerta secreta', checked: uniformKind === 'secret' }
+    { id: 'kind-wall', icon: 'brick', label: 'Muro sólido', checked: uniformKind === 'wall' },
+    { id: 'kind-terrain', icon: 'columns', label: 'Pilar / Terreno', checked: uniformKind === 'terrain' },
+    { id: 'kind-invisible', icon: 'grid', label: 'Invisible / Reja', checked: uniformKind === 'invisible' },
+    { id: 'kind-door', icon: 'door-open', label: 'Puerta', checked: uniformKind === 'door' },
+    { id: 'kind-secret', icon: 'sparkles', label: 'Puerta secreta', checked: uniformKind === 'secret' }
   ];
 
   const sections = [typeSection];
@@ -339,15 +339,15 @@ export function buildWallMenuSpec(walls = []) {
     const toggleLabel = allOpen ? 'Cerrar puerta' : allClosed ? 'Abrir puerta' : 'Alternar apertura';
     const lockLabel = allLocked ? 'Desbloquear puerta' : 'Bloquear puerta';
     sections.push([
-      { id: 'toggle-open', icon: '🚪', label: toggleLabel },
-      { id: 'toggle-lock', icon: allLocked ? '🔓' : '🔒', label: lockLabel, checked: allLocked }
+      { id: 'toggle-open', icon: 'door-open', label: toggleLabel },
+      { id: 'toggle-lock', icon: allLocked ? 'unlock' : 'lock', label: lockLabel, checked: allLocked }
     ]);
   }
 
   sections.push([
     {
       id: 'duplicate-walls',
-      icon: '⧉',
+      icon: 'copy',
       label: count > 1 ? `Duplicar ${count} muros` : 'Duplicar muro',
       shortcut: 'Ctrl+C/V'
     }
@@ -356,7 +356,7 @@ export function buildWallMenuSpec(walls = []) {
   sections.push([
     {
       id: 'delete-walls',
-      icon: '🗑️',
+      icon: 'trash',
       label: count > 1 ? `Eliminar ${count} muros` : 'Eliminar muro',
       shortcut: 'Supr',
       danger: true
@@ -401,24 +401,24 @@ export function buildMultiTokenMenuSpec({ role = 'gm', tokens = [] } = {}) {
   ];
 
   const stateSection = [
-    { id: 'light', icon: '💡', label: 'Alternar luz' },
-    { id: 'aura', icon: '⭕', label: 'Alternar aura' }
+    { id: 'light', icon: 'bulb', label: 'Alternar luz' },
+    { id: 'aura', icon: 'circle-dot', label: 'Alternar aura' }
   ];
 
   const actionsSection = [
-    { id: 'init', icon: '⚡', label: 'Tirar Iniciativa', value: `${count}` }
+    { id: 'init', icon: 'zap', label: 'Tirar Iniciativa', value: `${count}` }
   ];
   if (isGm) {
     actionsSection.push(
-      { id: 'toggle-hide', icon: '👁️', label: allHidden ? 'Mostrar fichas' : 'Ocultar fichas' },
-      { id: 'dup-toks', icon: '⧉', label: 'Duplicar fichas' }
+      { id: 'toggle-hide', icon: allHidden ? 'eye' : 'eye-off', label: allHidden ? 'Mostrar fichas' : 'Ocultar fichas' },
+      { id: 'dup-toks', icon: 'copy', label: 'Duplicar fichas' }
     );
   }
 
   const sections = [stateSection, actionsSection];
   if (isGm) {
     sections.push([
-      { id: 'del-toks', icon: '🗑️', label: `Eliminar ${count} fichas`, danger: true }
+      { id: 'del-toks', icon: 'trash', label: `Eliminar ${count} fichas`, danger: true }
     ]);
   }
 

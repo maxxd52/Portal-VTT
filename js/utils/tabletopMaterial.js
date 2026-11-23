@@ -203,18 +203,23 @@ export function computeActiveMapBounds(imgWidth, imgHeight, worldWidth = 2400, w
 
 /**
  * Computes the sharpest adaptive max camera zoom for the active map based on
- * its native pixel density inside the 2400x1600 board bounds (range 1.35x-1.85x;
- * preset procedural maps default to 1.65x).
+ * its native pixel density inside the 2400x1600 board bounds and the active
+ * grid cellSize so dense tactical grids can still zoom in comfortably (up to 5.0x).
  */
-export function computeAdaptiveMaxZoom(imgWidth, imgHeight, worldWidth = 2400, worldHeight = 1600) {
+export function computeAdaptiveMaxZoom(imgWidth, imgHeight, worldWidth = 2400, worldHeight = 1600, cellSize = 0) {
+  const MAX_ADAPTIVE_ZOOM = 5.0;
+  const TARGET_CELL_SCREEN_PX = 132;
   const iw = Number(imgWidth);
   const ih = Number(imgHeight);
-  if (!Number.isFinite(iw) || !Number.isFinite(ih) || iw <= 0 || ih <= 0) {
-    return 1.65;
+  let baseZoom = 1.65;
+  if (Number.isFinite(iw) && Number.isFinite(ih) && iw > 0 && ih > 0) {
+    const bounds = computeActiveMapBounds(iw, ih, worldWidth, worldHeight);
+    const nativeRatio = bounds.width > 0 ? iw / bounds.width : 1;
+    baseZoom = Math.max(1.35, nativeRatio * 1.05);
   }
-  const bounds = computeActiveMapBounds(iw, ih, worldWidth, worldHeight);
-  const nativeRatio = bounds.width > 0 ? iw / bounds.width : 1;
-  const clamped = Math.min(1.85, Math.max(1.35, nativeRatio * 1.05));
+  const cs = Number(cellSize);
+  const gridZoom = Number.isFinite(cs) && cs > 0 ? TARGET_CELL_SCREEN_PX / cs : 0;
+  const clamped = Math.min(MAX_ADAPTIVE_ZOOM, Math.max(baseZoom, gridZoom));
   return Math.round(clamped * 100) / 100;
 }
 

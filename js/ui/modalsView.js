@@ -105,7 +105,7 @@ export const ModalsViewMethods = {
         const webpDataUrl = await WebPConverter.fileToWebPDataUrl(file, WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
         const kbSize = Math.round((webpDataUrl.length * 0.75) / 1024);
         Service.loadExternalMapImage(webpDataUrl);
-        await Service.changeMap('custom', webpDataUrl);
+        await Service.registerAndActivateDirectMap(webpDataUrl, file.name);
         this.showRoomToast(`Mapa "${file.name}" optimizado a WebP (${kbSize} KB).`);
       } catch (err) {
         this.showRoomToast(err.message || 'Error al convertir imagen.');

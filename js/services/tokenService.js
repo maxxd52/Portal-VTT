@@ -1029,7 +1029,7 @@ export const TokenServiceMethods = {
     this.removeTokenFromCombat?.(tokenId, { silent: true });
     this.pruneUnusedMediaAssets?.();
     this.recordEvent('ELIMINAR_FICHA', tok.name);
-    this.notify();
+    this.notify({ flushVault: true });
   },
 
   addTokenResource(tokenId, { name = '', cur = null, max = 4, color = '#8b5cf6', kind = 'auto' } = {}) {

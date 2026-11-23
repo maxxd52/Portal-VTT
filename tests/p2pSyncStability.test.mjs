@@ -266,3 +266,59 @@ test('SEATS-2: Host GM visual Player preview keeps GM seat self/online, never po
     RealtimeBridge.send = origSend;
   }
 });
+
+test('P2P-8: extractSerializableWorld marks redacted wire payloads with _redactedWorld: true while full GM snapshots omit it', () => {
+  const state = resetService('gm', true);
+  state.customMaps = [{ key: 'cmap-1', name: 'Mapa 4K', imageUrl: 'data:image/webp;base64,AAA' }];
+
+  const wireWorld = Selector.extractSerializableWorld(state);
+  assert.equal(wireWorld._redactedWorld, true);
+  assert.deepEqual(wireWorld.customMaps, []);
+
+  const fullWorld = Selector.extractSerializableWorld(state, { includePrivateGm: true });
+  assert.equal(fullWorld._redactedWorld, undefined);
+  assert.equal(fullWorld.customMaps.length, 1);
+});
+
+test('P2P-9: Host GM (even in visual player preview) rejects redacted WORLD_SYNC and preserves customMaps/actors/items/folders', () => {
+  const origSend = RealtimeBridge.send;
+  RealtimeBridge.send = () => {};
+  try {
+    const state = resetService('gm', true);
+    state.customMaps = [{ key: 'cmap-1', name: 'Mapa 4K', imageUrl: 'data:image/webp;base64,AAA' }];
+    state.customActors = [{ key: 'cact-1', name: 'Heroe' }];
+    state.customItems = [{ key: 'citem-1', name: 'Espada' }];
+    state.compendiumFolders = { actors: ['F1'], items: [], maps: ['M1'] };
+
+    const redacted = Selector.extractSerializableWorld(state);
+    assert.equal(redacted._redactedWorld, true);
+
+    Service.applyFullWorldState(redacted, true);
+    assert.equal(state.customMaps.length, 1, 'GM must keep customMaps');
+    assert.equal(state.customActors.length, 1, 'GM must keep customActors');
+    assert.equal(state.customItems.length, 1, 'GM must keep customItems');
+    assert.deepEqual(state.compendiumFolders.maps, ['M1']);
+
+    // Also when Host GM is in visual player preview
+    Service.setRole('player');
+    assert.equal(Service.isHostNetwork(), true);
+    Service.applyFullWorldState(redacted, true);
+    assert.equal(state.customMaps.length, 1, 'Host GM in visual preview must still reject redacted world');
+  } finally {
+    RealtimeBridge.send = origSend;
+  }
+});
+
+test('P2P-10: View.handleRealtimeMessage uses Service.isHostNetwork() for hostOnly, spectatorOnly, WORLD_SYNC, and PUBLIC_CLOCKS_SYNC', () => {
+  const viewSrc = fs.readFileSync(path.resolve('js/core/view.js'), 'utf8');
+  const fnStart = viewSrc.indexOf('handleRealtimeMessage(msg)');
+  const fnEnd = viewSrc.indexOf('cacheElements()', fnStart);
+  assert.ok(fnStart >= 0 && fnEnd > fnStart, 'handleRealtimeMessage block must be found');
+  const block = viewSrc.slice(fnStart, fnEnd);
+
+  assert.match(block, /const netIsGm = Service\.isHostNetwork\(\)/);
+  assert.match(block, /msg\.spectatorOnly && \(netIsGm \|\|/);
+  assert.match(block, /msg\.hostOnly && !netIsGm/);
+  assert.match(block, /msg\.kind === 'WORLD_SYNC'[\s\S]*if \(netIsGm\) return;/);
+  assert.match(block, /msg\.kind === 'PUBLIC_CLOCKS_SYNC'[\s\S]*if \(!netIsGm\)/);
+});

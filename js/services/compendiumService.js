@@ -127,7 +127,7 @@ export const CompendiumServiceMethods = {
 
     if (folder) this.ensureCompendiumFolder('actors', folder, true);
     this.recordEvent('COMPENDIO', `Personaje guardado: ${entry.name}`);
-    this.notify({ redrawFog: liveUpdated });
+    this.notify({ redrawFog: liveUpdated, flushVault: true });
     return entry;
   },
 
@@ -135,7 +135,7 @@ export const CompendiumServiceMethods = {
     if (!Array.isArray(this.state.customActors)) return;
     this.state.customActors = this.state.customActors.filter((a) => a.key !== key);
     this.pruneUnusedMediaAssets?.();
-    this.notify();
+    this.notify({ flushVault: true });
   },
 
   saveCustomItem(tpl) {
@@ -203,14 +203,14 @@ export const CompendiumServiceMethods = {
     this.state.customItems = list;
     if (folder) this.ensureCompendiumFolder('items', folder, true);
     this.recordEvent('COMPENDIO', `Complemento guardado: ${entry.name}`);
-    this.notify();
+    this.notify({ flushVault: true });
     return entry;
   },
 
   deleteCustomItem(key) {
     if (!Array.isArray(this.state.customItems)) return;
     this.state.customItems = this.state.customItems.filter((i) => i.key !== key);
-    this.notify();
+    this.notify({ flushVault: true });
   },
 
   saveCustomMap(tpl) {
@@ -293,7 +293,7 @@ export const CompendiumServiceMethods = {
     }
     if (folder) this.ensureCompendiumFolder('maps', folder, true);
     this.recordEvent('COMPENDIO', `Escenario guardado: ${entry.name}`);
-    this.notify({ redrawGrid: isActive, redrawFog: isActive });
+    this.notify({ redrawGrid: isActive, redrawFog: isActive, flushVault: true });
     return entry;
   },
 
@@ -301,7 +301,7 @@ export const CompendiumServiceMethods = {
     if (!Array.isArray(this.state.customMaps)) return;
     this.state.customMaps = this.state.customMaps.filter((m) => m.key !== key);
     this.pruneUnusedMediaAssets?.();
-    this.notify();
+    this.notify({ flushVault: true });
   },
 
   async activateMapTemplate(tpl) {
@@ -311,6 +311,20 @@ export const CompendiumServiceMethods = {
     } else {
       await this.changeMap(tpl.key, '', tpl.key);
     }
+  },
+
+  async registerAndActivateDirectMap(imageUrl, rawFileName = '') {
+    const cleanUrl = String(imageUrl || '').trim();
+    if (!cleanUrl) return null;
+    const baseName = String(rawFileName || '').replace(/\.[^.]+$/, '').trim() || 'Mapa personalizado';
+    const entry = this.saveCustomMap({
+      name: baseName,
+      desc: 'Escenario personalizado',
+      imageUrl: cleanUrl,
+      sceneMode: 'tactical'
+    });
+    await this.activateMapTemplate(entry);
+    return entry;
   },
 
   ensureCompendiumFolder(tab, folderName, silent = false) {
@@ -329,6 +343,77 @@ export const CompendiumServiceMethods = {
     return false;
   },
 
+  moveCompendiumEntryToFolder(tab, key, targetFolder = '') {
+    if (!['actors', 'items', 'maps'].includes(tab) || !key) return false;
+    const cleanFolder = String(targetFolder || '').trim();
+    const mapField = tab === 'actors' ? 'customActors' : tab === 'items' ? 'customItems' : 'customMaps';
+    const customList = Array.isArray(this.state[mapField]) ? this.state[mapField] : [];
+    const customEntry = customList.find((e) => e && e.key === key);
+
+    if (cleanFolder) {
+      this.ensureCompendiumFolder(tab, cleanFolder, true);
+    }
+
+    if (customEntry) {
+      if (String(customEntry.folder || '') === cleanFolder) return false;
+      customEntry.folder = cleanFolder;
+    } else {
+      if (!this.state.compendiumFolderOverrides || typeof this.state.compendiumFolderOverrides !== 'object') {
+        this.state.compendiumFolderOverrides = { actors: {}, items: {}, maps: {} };
+      }
+      if (!this.state.compendiumFolderOverrides[tab] || typeof this.state.compendiumFolderOverrides[tab] !== 'object') {
+        this.state.compendiumFolderOverrides[tab] = {};
+      }
+      const prev = String(this.state.compendiumFolderOverrides[tab][key] || '');
+      if (prev === cleanFolder) return false;
+      if (cleanFolder) {
+        this.state.compendiumFolderOverrides[tab][key] = cleanFolder;
+      } else {
+        delete this.state.compendiumFolderOverrides[tab][key];
+      }
+    }
+
+    this.notify({ flushVault: true });
+    return true;
+  },
+
+  renameCompendiumFolder(tab, oldName, newName) {
+    if (!['actors', 'items', 'maps'].includes(tab)) return false;
+    const prev = String(oldName || '').trim();
+    const next = String(newName || '').trim();
+    if (!prev || !next || prev === next) return false;
+
+    if (!this.state.compendiumFolders) {
+      this.state.compendiumFolders = { actors: [], items: [], maps: [] };
+    }
+    const list = Array.isArray(this.state.compendiumFolders[tab]) ? this.state.compendiumFolders[tab] : [];
+    const nextList = [];
+    let replaced = false;
+    for (const f of list) {
+      const candidate = f === prev ? next : f;
+      if (f === prev) replaced = true;
+      if (candidate && !nextList.includes(candidate)) nextList.push(candidate);
+    }
+    if (!replaced && !nextList.includes(next)) nextList.push(next);
+    this.state.compendiumFolders[tab] = nextList;
+
+    const mapField = tab === 'actors' ? 'customActors' : tab === 'items' ? 'customItems' : 'customMaps';
+    if (Array.isArray(this.state[mapField])) {
+      this.state[mapField].forEach((entry) => {
+        if (entry && entry.folder === prev) entry.folder = next;
+      });
+    }
+    const ov = this.state.compendiumFolderOverrides?.[tab];
+    if (ov && typeof ov === 'object') {
+      for (const [k, v] of Object.entries(ov)) {
+        if (v === prev) ov[k] = next;
+      }
+    }
+
+    this.notify({ flushVault: true });
+    return true;
+  },
+
   deleteCompendiumFolder(tab, folderName) {
     if (this.state.compendiumFolders?.[tab]) {
       this.state.compendiumFolders[tab] = this.state.compendiumFolders[tab].filter((f) => f !== folderName);
@@ -339,7 +424,13 @@ export const CompendiumServiceMethods = {
         if (entry.folder === folderName) entry.folder = '';
       });
     }
-    this.notify();
+    const ov = this.state.compendiumFolderOverrides?.[tab];
+    if (ov && typeof ov === 'object') {
+      for (const [k, v] of Object.entries(ov)) {
+        if (v === folderName) delete ov[k];
+      }
+    }
+    this.notify({ flushVault: true });
   },
 
   async loadModulePackage(pkg) {

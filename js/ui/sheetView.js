@@ -671,19 +671,19 @@ export const SheetViewMethods = {
         const tot = getSkillTotal(sk);
         this.openListContextMenu(cx, cy, sk.name, 'Habilidad', [
           {
-            icon: '🎲',
+            icon: 'dice',
             label: `Tirar ${sysCfg.rollFormula || '1d20+@stat'} (${tot >= 0 ? `+${tot}` : tot})`,
             onClick: () => {
               Service.rollSheetCheck(tok, `${tok.name} · ${sk.name}`, tot);
             }
           },
           {
-            icon: '🔄',
+            icon: 'refresh-cw',
             label: 'Cambiar competencia',
             onClick: () => Service.cycleTokenSkillProf(tok.id, sk.id)
           },
           {
-            icon: '🗑️',
+            icon: 'trash',
             label: 'Quitar habilidad',
             danger: true,
             onClick: () => Service.removeTokenSkill(tok.id, sk.id)
@@ -732,7 +732,7 @@ export const SheetViewMethods = {
         if (!tr) return;
         this.openListContextMenu(cx, cy, tr.title, 'Rasgo', [
           {
-            icon: '🗑️',
+            icon: 'trash',
             label: 'Quitar rasgo',
             danger: true,
             onClick: () => Service.removeTokenTrait(tok.id, tr.id)

@@ -1337,6 +1337,9 @@ export const Selector = {
         customItems: JSON.parse(JSON.stringify(state.customItems || [])),
         customMaps: JSON.parse(JSON.stringify(state.customMaps || [])),
         compendiumFolders: JSON.parse(JSON.stringify(state.compendiumFolders || { actors: [], items: [], maps: [] })),
+        compendiumFolderOverrides: JSON.parse(
+          JSON.stringify(state.compendiumFolderOverrides || { actors: {}, items: {}, maps: {} })
+        ),
         tokens: JSON.parse(JSON.stringify(state.tokens || [])),
         strokes: JSON.parse(JSON.stringify(state.strokes || [])),
         publicClocks: this.getPublicClocks(state),
@@ -1380,6 +1383,7 @@ export const Selector = {
     }
 
     const wireWorld = {
+      _redactedWorld: true,
       moduleTitle: state.room.moduleTitle,
       playerInvites: JSON.parse(JSON.stringify(this.getPlayerInvites(state))),
       ruleset: state.ruleset || 'dnd55',
@@ -1404,6 +1408,7 @@ export const Selector = {
       customItems: [],
       customMaps: [],
       compendiumFolders: { actors: [], items: [], maps: [] },
+      compendiumFolderOverrides: { actors: {}, items: {}, maps: {} },
       tokens: redactedTokens,
       strokes: JSON.parse(JSON.stringify(state.strokes || [])),
       publicClocks: this.getPublicClocks(state),

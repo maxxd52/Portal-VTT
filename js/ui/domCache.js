@@ -74,6 +74,9 @@ export function collectViewElements() {
     narrativeBackdropLayer: byId('narrativeBackdropLayer'),
     narrativeBackdropImg: byId('narrativeBackdropImg'),
     weatherCanvas: byId('weatherCanvas'),
+    sceneTransitionCurtain: byId('sceneTransitionCurtain'),
+    sceneTransitionTitle: byId('sceneTransitionTitle'),
+    sceneTransitionSubtitle: byId('sceneTransitionSubtitle'),
     mapCanvas: byId('mapCanvas'),
     customMapImg: byId('customMapImg'),
     wallShadowCanvas: byId('wallShadowCanvas'),
@@ -87,6 +90,7 @@ export function collectViewElements() {
 
     // Barra superior
     btnOpenRoomModal: byId('btnOpenRoomModal'),
+    vaultSaveBadge: byId('vaultSaveBadge'),
     roomPresenceList: byId('roomPresenceList'),
     handoutModal: byId('handoutModal'),
     handoutModalTitle: byId('handoutModalTitle'),

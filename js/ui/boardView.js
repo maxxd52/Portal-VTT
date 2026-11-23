@@ -14,6 +14,7 @@ import {
   resolveWallDrawPoint
 } from '../utils/wallGeometry.js?v=20261123a7';
 import { findTokensInRect } from '../utils/contextMenuModel.js?v=20261123a7';
+import { resolveDropAction } from '../utils/compendiumDragModel.js?v=20261123a7';
 import { Selector } from '../core/selector.js?v=20261123a7';
 import { Service } from '../core/service.js?v=20261123a7';
 
@@ -688,6 +689,7 @@ export const BoardViewMethods = {
       this._isInternalDrag = true;
       const card = e.target?.closest?.('[data-drag-spec]');
       if (card && e.dataTransfer) {
+        this._activeDragSpec = card.dataset.dragSpec;
         e.dataTransfer.setData('text/plain', card.dataset.dragSpec);
         e.dataTransfer.setData('application/x-portal-drag', card.dataset.dragSpec);
       }
@@ -695,6 +697,7 @@ export const BoardViewMethods = {
 
     window.addEventListener('dragend', () => {
       this._isInternalDrag = false;
+      this._activeDragSpec = '';
       this.els.dropModuleOverlay?.classList.add('hidden');
     });
 
@@ -721,6 +724,7 @@ export const BoardViewMethods = {
       e.preventDefault();
       const wasInternal = Boolean(this._isInternalDrag);
       this._isInternalDrag = false;
+      this._activeDragSpec = '';
       this.els.dropModuleOverlay.classList.add('hidden');
       if (this.els.tokenEditorModal?.classList.contains('is-open') || this.els.mapGridModal?.classList.contains('is-open')) return;
 
@@ -729,11 +733,31 @@ export const BoardViewMethods = {
         ? (e.dataTransfer.getData('application/x-portal-drag') || e.dataTransfer.getData('text/plain') || '')
         : '';
       if (dragSpec.startsWith('actor:') || dragSpec.startsWith('map:') || dragSpec.startsWith('item:')) {
-        const worldPt = Selector.screenToWorld(Service.state, e.clientX, e.clientY);
-        if (dragSpec.startsWith('actor:')) {
-          const key = dragSpec.replace('actor:', '');
+        const target = e.target;
+        const inTokenDrawer = Boolean(target?.closest?.('#tokenDrawer'));
+        const inUiChrome = Boolean(
+          target?.closest?.('#tokenDrawer, #characterSheetDrawer, #gmScreenDrawer, #journalDrawer, header, .portal-modal, .portal-context-menu')
+        );
+        const inStage = Boolean(target?.closest?.('#vttStage')) && !inUiChrome;
+        const tokEl = target?.closest?.('[data-token-id]');
+        const resolved = resolveDropAction({
+          dragSpec,
+          inStage,
+          inTokenDrawer,
+          tokenId: tokEl?.dataset?.tokenId || '',
+          inCharacterSheet: Boolean(target?.closest?.('#characterSheetDrawer')),
+          inMapNote: Boolean(target?.closest?.('[data-map-note]'))
+        });
+
+        if (resolved.action === 'activate_map') {
+          const allMaps = [...(Service.state.customMaps || []), ...COMPENDIUM_MAPS];
+          const mapTpl = allMaps.find((m) => m.key === resolved.key);
+          await Service.activateMapTemplate(mapTpl || { key: resolved.key });
+          this.showActionToast('Escenario cambiado.');
+        } else if (resolved.action === 'spawn_actor') {
+          const worldPt = Selector.screenToWorld(Service.state, e.clientX, e.clientY);
           const allActors = [...(Service.state.customActors || []), ...COMPENDIUM_ACTORS];
-          const tpl = allActors.find((a) => a.key === key);
+          const tpl = allActors.find((a) => a.key === resolved.key);
           if (tpl) {
             const existedBefore =
               tpl.isAlly !== false &&
@@ -745,19 +769,10 @@ export const BoardViewMethods = {
                 : `${spawned?.name || tpl.name} desplegado en el tablero.`
             );
           }
-        } else if (dragSpec.startsWith('map:')) {
-          const key = dragSpec.replace('map:', '');
-          const allMaps = [...(Service.state.customMaps || []), ...COMPENDIUM_MAPS];
-          const mapTpl = allMaps.find((m) => m.key === key);
-          await Service.activateMapTemplate(mapTpl || { key });
-          this.showActionToast('Escenario cambiado.');
-        } else if (dragSpec.startsWith('item:')) {
-          const key = dragSpec.replace('item:', '');
+        } else if (resolved.action === 'equip_item' || resolved.action === 'equip_item_selected') {
+          const targetId = resolved.action === 'equip_item' ? resolved.tokenId : Service.state.selectedTokenId;
           const allItems = [...(Service.state.customItems || []), ...COMPENDIUM_ITEMS];
-          const itemTpl = allItems.find((i) => i.key === key);
-          if (e.target.closest('[data-map-note]')) return;
-          const tokEl = e.target.closest('[data-token-id]');
-          const targetId = tokEl ? tokEl.dataset.tokenId : Service.state.selectedTokenId;
+          const itemTpl = allItems.find((i) => i.key === resolved.key);
           if (itemTpl && targetId) {
             this.activeSheetTab = this.getItemCategory(itemTpl.kind);
             const res = Service.equipItemToToken(targetId, itemTpl);
@@ -787,7 +802,7 @@ export const BoardViewMethods = {
         try {
           const webpUrl = await WebPConverter.fileToWebPDataUrl(file, WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
           Service.loadExternalMapImage(webpUrl);
-          await Service.changeMap('custom', webpUrl);
+          await Service.registerAndActivateDirectMap(webpUrl, file.name);
           this.showActionToast(`Mapa "${file.name}" optimizado a WebP.`);
         } catch (err) {
           this.showActionToast(err.message || 'Error al procesar imagen WebP.');
@@ -798,6 +813,7 @@ export const BoardViewMethods = {
 
     // Dropzone directa en la Ficha Izquierda
     this.els.sheetInventoryDropzone.addEventListener('dragover', (e) => {
+      if (!String(this._activeDragSpec || '').startsWith('item:')) return;
       e.preventDefault();
       this.els.sheetInventoryDropzone.classList.add('sheet-drop-active');
     });
@@ -994,6 +1010,7 @@ export const BoardViewMethods = {
           </div>
         `;
         el.addEventListener('dragover', (e) => {
+          if (!String(this._activeDragSpec || '').startsWith('item:')) return;
           e.preventDefault();
           el.classList.add('is-drop-hover');
         });

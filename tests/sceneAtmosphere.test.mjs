@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+if (!globalThis.window) {
+  globalThis.window = { location: { search: '' }, innerWidth: 1280, innerHeight: 720 };
+}
+
 const {
   DEFAULT_DICE_SHADOW_DIR,
   DEFAULT_BOARD_SHADOW_DIR,
@@ -10,6 +14,7 @@ const {
   stepCameraInertia,
   stepSmoothZoom
 } = await import('../js/utils/sceneAtmosphere.js?v=20261123a7');
+const { TokenPhysicsViewMethods } = await import('../js/ui/tokenPhysicsView.js?v=20261123a7');
 
 test('resolveSceneAtmosphere returns distinct atmospheric palettes for presets and aligns board/dice shadow direction', () => {
   const tavern = resolveSceneAtmosphere('tavern');
@@ -106,9 +111,55 @@ test('stepSmoothZoom interpolates toward clamped target zoom while keeping world
   assert.ok(Math.abs(worldAfter.x - worldBefore.x) < 0.05, 'world X under cursor must remain pinned');
   assert.ok(Math.abs(worldAfter.y - worldBefore.y) < 0.05, 'world Y under cursor must remain pinned');
 
-  // Target zoom clamps to [0.35, 2.2]
-  const clampedHigh = stepSmoothZoom({ x: 0, y: 0, zoom: 2.199 }, 5.0, 0, 0, 0.2);
-  assert.equal(clampedHigh.zoom, 2.2);
+  // Target zoom clamps to [0.35, 5.0] by default and respects opts.maxZoom
+  const clampedHigh = stepSmoothZoom({ x: 0, y: 0, zoom: 4.999 }, 8.0, 0, 0, 0.2);
+  assert.equal(clampedHigh.zoom, 5);
+  const clampedCustom = stepSmoothZoom({ x: 0, y: 0, zoom: 1.789 }, 3.0, 0, 0, 0.2, { maxZoom: 1.79 });
+  assert.equal(clampedCustom.zoom, 1.79);
   const clampedLow = stepSmoothZoom({ x: 0, y: 0, zoom: 0.351 }, 0.05, 0, 0, 0.2);
   assert.equal(clampedLow.zoom, 0.35);
+});
+
+test('TokenPhysicsViewMethods uses subtle capped camera pan inertia and keeps token drag tilt at 0deg with pickup lift', () => {
+  const vars = new Map();
+  const classes = new Set();
+  const mockEl = {
+    style: {
+      setProperty: (k, v) => vars.set(k, v),
+      removeProperty: (k) => vars.delete(k)
+    },
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c)
+    }
+  };
+  const worldClasses = new Set(['is-camera-zooming']);
+  const view = Object.assign({}, TokenPhysicsViewMethods, {
+    _findTokenDomNode: () => mockEl,
+    els: { worldLayer: { classList: { add: (c) => worldClasses.add(c), remove: (c) => worldClasses.delete(c) } } }
+  });
+  view.stopCameraMotion();
+  assert.equal(worldClasses.has('is-camera-zooming'), false, 'stopCameraMotion must clear is-camera-zooming class');
+
+  // Slow/tiny pan below threshold does not trigger inertia
+  view.recordCameraPanSample(100, 100);
+  view.recordCameraPanSample(100.1, 100);
+  view.releaseCameraPanInertia();
+  assert.equal(view._tokenPhys.camInertia, null, 'Tiny pan must not trigger inertia');
+
+  // Brisk pan triggers subtle, capped inertia (<= 950 px/s)
+  view.recordCameraPanSample(100, 100);
+  view.recordCameraPanSample(360, 220);
+  view.releaseCameraPanInertia();
+  assert.ok(view._tokenPhys.camInertia, 'Brisk pan must trigger subtle inertia');
+  const speed = Math.hypot(view._tokenPhys.camInertia.vx, view._tokenPhys.camInertia.vy);
+  assert.ok(speed > 0 && speed <= 950.001, `Expected subtle capped speed in (0, 950], got ${speed}`);
+
+  view.beginTokenDragPhysics('tok-1', 100, 100);
+  view.updateTokenDragPhysics('tok-1', 300, 120);
+  view.applyTokenPhysicsToElement(mockEl, 'tok-1');
+  assert.equal(vars.get('--drag-tilt'), '0deg', 'Token drag tilt must remain 0deg');
+  assert.equal(vars.get('--lift-y'), '0px', 'Token must not shift vertically off cursor during drag');
+  assert.ok(parseFloat(vars.get('--phys-scale')) > 1, 'Token Z-elevation scale must remain active');
+  assert.ok(parseFloat(vars.get('--shadow-y')) > 3, 'Token Z-elevation shadow must remain active');
 });

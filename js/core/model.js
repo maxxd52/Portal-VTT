@@ -270,6 +270,7 @@ export function createInitialState() {
     customItems: [],
     customMaps: [],
     compendiumFolders: { actors: [], items: [], maps: [] },
+    compendiumFolderOverrides: { actors: {}, items: {}, maps: {} },
     sheetOpen: false,
     drawerOpen: false,
     gmScreenOpen: false,

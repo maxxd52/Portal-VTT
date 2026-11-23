@@ -18,6 +18,7 @@ import {
   stepPresetValue
 } from '../utils/contextMenuModel.js?v=20261123a7';
 import { WEATHER_META, normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
+import { renderUiLineIcon, hasUiLineIcon } from '../utils/uiIcons.js?v=20261123a7';
 
 export const ContextMenuViewMethods = {
   positionContextMenu(clientX, clientY) {
@@ -66,7 +67,7 @@ export const ContextMenuViewMethods = {
             ${item.title ? `title="${this.escapeHtml(item.title)}"` : ''}
           >
             <span class="portal-ctx-item-left">
-              <span class="portal-ctx-icon" aria-hidden="true">${item.icon || '•'}</span>
+              <span class="portal-ctx-icon" aria-hidden="true">${hasUiLineIcon(item.icon) ? renderUiLineIcon(item.icon, 'w-3.5 h-3.5') : this.escapeHtml(item.icon || '•')}</span>
               <span class="portal-ctx-label">${this.escapeHtml(item.label || '')}</span>
             </span>
             ${rightMeta.length > 0 ? `<span class="portal-ctx-meta">${rightMeta.join('')}</span>` : ''}
@@ -128,7 +129,7 @@ export const ContextMenuViewMethods = {
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0 font-mono-tech text-[10px]">
           <span class="opacity-75">CA ${tok.ac}</span>
-          <button type="button" data-ctx-focus-tok class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-md" title="Centrar cámara en ficha">🎯</button>
+          <button type="button" data-ctx-focus-tok class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-md flex items-center justify-center" title="Centrar cámara en ficha">${renderUiLineIcon('crosshair', 'w-3 h-3')}</button>
         </div>
       `;
       const focusBtn = this.els.contextTokenHeader.querySelector('[data-ctx-focus-tok]');
@@ -187,13 +188,16 @@ export const ContextMenuViewMethods = {
 
     const triLeft = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="10.5,3.5 4.5,8 10.5,12.5"/></svg>';
     const triRight = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="5.5,3.5 11.5,8 5.5,12.5"/></svg>';
-    const renderStepper = (propKey, icon, label, valTxt) => `
-      <div class="flex items-center justify-between gap-2">
-        <span class="opacity-70 font-medium shrink-0 flex items-center gap-1.5"><span>${icon}</span><span>${label}</span></span>
-        <div class="portal-subpanel rounded-full px-1 py-0.5 flex items-center gap-1 min-w-[94px] justify-between">
-          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="-1" class="portal-btn w-4 h-4 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Reducir ${label}">${triLeft}</button>
-          <span class="font-mono-tech text-[10px] font-semibold tabular-nums px-0.5 select-none">${this.escapeHtml(valTxt)}</span>
-          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="1" class="portal-btn w-4 h-4 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Aumentar ${label}">${triRight}</button>
+    const renderStepper = (propKey, iconKey, label, valTxt) => `
+      <div class="portal-subpanel rounded-xl px-2 py-1.5 flex flex-col gap-1">
+        <span class="opacity-75 font-medium flex items-center gap-1.5 text-[10px] leading-none">
+          ${renderUiLineIcon(iconKey, 'w-3 h-3 shrink-0')}
+          <span class="truncate">${label}</span>
+        </span>
+        <div class="flex items-center justify-between gap-1">
+          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="-1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Reducir ${label}">${triLeft}</button>
+          <span class="font-mono-tech text-[10px] font-semibold tabular-nums select-none truncate">${this.escapeHtml(valTxt)}</span>
+          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Aumentar ${label}">${triRight}</button>
         </div>
       </div>
     `;
@@ -209,7 +213,7 @@ export const ContextMenuViewMethods = {
           </div>
           <button type="button" data-ctx-hp-step="1" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 hover:bg-white/10" title="+1 HP (Shift: +5)">+</button>
         </div>
-        <button type="button" data-ctx-quick="open-sheet" class="portal-subpanel portal-btn w-7 h-7 p-0 rounded-full flex items-center justify-center text-xs shrink-0" title="Abrir Ficha">📋</button>
+        <button type="button" data-ctx-quick="open-sheet" class="portal-subpanel portal-btn w-7 h-7 p-0 rounded-full flex items-center justify-center shrink-0" title="Abrir Ficha">${renderUiLineIcon('file-text', 'w-3.5 h-3.5')}</button>
       </div>
       <div class="grid grid-cols-5 gap-1 pt-1 border-t" style="border-color: var(--hairline);">
         ${statusDefs
@@ -227,13 +231,13 @@ export const ContextMenuViewMethods = {
           })
           .join('')}
       </div>
-      <div class="flex flex-col gap-1.5 pt-1.5 border-t text-[10.5px]" style="border-color: var(--hairline);">
-        ${renderStepper('light', '💡', 'Luz', lightValTxt)}
-        ${isGm ? renderStepper('size', '📐', 'Tamaño', `${curSize}×${curSize}`) : ''}
-        ${isAlly ? renderStepper('vision', '👁', 'Visión', visValTxt) : ''}
-        ${renderStepper('aura', '⭕', 'Aura', auraValTxt)}
+      <div class="grid grid-cols-2 gap-1.5 pt-1.5 border-t text-[10.5px]" style="border-color: var(--hairline);">
+        ${renderStepper('light', 'bulb', 'Luz', lightValTxt)}
+        ${isGm ? renderStepper('size', 'maximize', 'Tamaño', `${curSize}×${curSize}`) : ''}
+        ${isAlly ? renderStepper('vision', 'eye', 'Visión', visValTxt) : ''}
+        ${renderStepper('aura', 'circle-dot', 'Aura', auraValTxt)}
         ${hasTempOverride ? `
-        <button type="button" data-ctx-reset-temp class="portal-btn portal-subpanel w-full py-1 rounded-lg text-[9.5px] opacity-85 hover:opacity-100" title="Restaurar tamaño, luz y visión fijos del personaje">↺ Restablecer a valores fijos</button>
+        <button type="button" data-ctx-reset-temp class="col-span-2 portal-btn portal-subpanel w-full py-1 rounded-lg text-[9.5px] opacity-85 hover:opacity-100 flex items-center justify-center gap-1" title="Restaurar tamaño, luz y visión fijos del personaje">${renderUiLineIcon('rotate-ccw', 'w-3 h-3')}<span>Restablecer a valores fijos</span></button>
         ` : ''}
       </div>
     `;
@@ -554,9 +558,10 @@ export const ContextMenuViewMethods = {
 
     if (state.role === 'gm' && this.els.contextSubOptionsRow) {
       const curWeather = normalizeWeatherType(state.sceneWeather);
+      const weatherIconMap = { none: 'ban', rain: 'cloud-rain', snow: 'snowflake', embers: 'flame', mist: 'wind' };
       const pills = WEATHER_META.map(
         (w) =>
-          `<button type="button" data-ctx-weather="${w.id}" class="portal-seg-btn py-1 px-1.5 text-[10px] font-semibold flex items-center justify-center gap-0.5 ${curWeather === w.id ? 'is-active' : ''}" title="Clima: ${w.label}"><span>${w.icon}</span></button>`
+          `<button type="button" data-ctx-weather="${w.id}" class="portal-seg-btn py-1 px-1.5 text-[10px] font-semibold flex items-center justify-center gap-0.5 ${curWeather === w.id ? 'is-active' : ''}" title="Clima: ${w.label}">${renderUiLineIcon(weatherIconMap[w.id] || 'ban', 'w-3.5 h-3.5')}</button>`
       ).join('');
       this.els.contextSubOptionsRow.className = 'pt-1.5 border-t flex flex-col gap-1';
       this.els.contextSubOptionsRow.style.borderColor = 'var(--hairline)';

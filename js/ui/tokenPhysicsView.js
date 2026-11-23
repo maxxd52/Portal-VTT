@@ -6,7 +6,6 @@ import {
   PICKUP_LIFT_PX,
   PICKUP_SCALE,
   DROP_BOUNCE_DURATION_MS,
-  computeDragTilt,
   computePickupShadow,
   sampleDropBounce,
   computeHeavyLandingShake
@@ -57,6 +56,7 @@ export const TokenPhysicsViewMethods = {
   },
 
   stopCameraMotion() {
+    this.els?.worldLayer?.classList?.remove('is-camera-zooming');
     const store = this._tokenPhys;
     if (!store) return;
     store.camPanSample = null;
@@ -90,13 +90,12 @@ export const TokenPhysicsViewMethods = {
     if (!store?.camPanSample) return;
     const sample = store.camPanSample;
     store.camPanSample = null;
-    // Only glide if pointer was still moving just before release
-    if (nowMs() - sample.t > 75) return;
+    if (nowMs() - sample.t > 65) return;
     const speed = Math.hypot(sample.vx, sample.vy);
-    if (speed < 45) return;
-    const cap = 2200;
-    const scale = speed > cap ? cap / speed : 1;
-    store.camInertia = { vx: sample.vx * scale, vy: sample.vy * scale };
+    if (speed < 80) return;
+    const dampedSpeed = Math.min(950, speed * 0.55);
+    const ratio = dampedSpeed / speed;
+    store.camInertia = { vx: sample.vx * ratio, vy: sample.vy * ratio };
     this._scheduleTokenPhysicsLoop();
   },
 
@@ -111,6 +110,7 @@ export const TokenPhysicsViewMethods = {
     const maxZoom = typeof Service.getMaxCameraZoom === 'function' ? Service.getMaxCameraZoom() : 1.65;
     const nextTarget = Math.min(maxZoom, Math.max(0.35, baseZoom * factor));
     store.camZoom = { targetZoom: nextTarget, anchorX, anchorY };
+    this.els?.worldLayer?.classList?.add('is-camera-zooming');
     this._scheduleTokenPhysicsLoop();
   },
 
@@ -264,8 +264,8 @@ export const TokenPhysicsViewMethods = {
     if (store?.drag && store.drag.tokenId === tokenId) {
       const d = store.drag;
       el.classList.remove('is-dropping');
-      el.style.setProperty('--lift-y', `${d.liftPx.toFixed(2)}px`);
-      el.style.setProperty('--drag-tilt', `${d.tiltDeg.toFixed(2)}deg`);
+      el.style.setProperty('--lift-y', '0px');
+      el.style.setProperty('--drag-tilt', '0deg');
       el.style.setProperty('--phys-scale', d.scale.toFixed(4));
       this._applyShadowVars(el, computePickupShadow(d.liftPx));
       return;
@@ -274,7 +274,7 @@ export const TokenPhysicsViewMethods = {
     const drop = store?.drops?.get(tokenId);
     if (drop) {
       el.classList.add('is-dropping');
-      el.style.setProperty('--lift-y', `${drop.liftPx.toFixed(2)}px`);
+      el.style.setProperty('--lift-y', '0px');
       el.style.setProperty('--drag-tilt', '0deg');
       el.style.setProperty('--phys-scale', drop.scale.toFixed(4));
       this._applyShadowVars(el, drop.shadow);
@@ -315,24 +315,10 @@ export const TokenPhysicsViewMethods = {
       el.classList.add('is-dragging');
       this.applyTokenPhysicsToElement(el, tokenId);
     }
-    this._scheduleTokenPhysicsLoop();
   },
 
-  updateTokenDragPhysics(tokenId, clientX, clientY) {
-    const store = this._tokenPhys;
-    if (!store?.drag || store.drag.tokenId !== tokenId) return;
-    const d = store.drag;
-    const t = nowMs();
-    const dtSec = Math.max(0.004, Math.min(0.08, (t - d.lastSampleMs) / 1000));
-    const instVx = (clientX - d.lastClientX) / dtSec;
-    const instVy = (clientY - d.lastClientY) / dtSec;
-    // Smooth velocity slightly to absorb discrete mouse polling jitter
-    d.vx = d.vx * 0.45 + instVx * 0.55;
-    d.vy = d.vy * 0.45 + instVy * 0.55;
-    d.lastClientX = clientX;
-    d.lastClientY = clientY;
-    d.lastSampleMs = t;
-    this._scheduleTokenPhysicsLoop();
+  updateTokenDragPhysics() {
+    // Drag tilt disabled for clean tactical clarity; pickup lift/shadow stays active.
   },
 
   finishTokenDragPhysics(tokenId, tokenSize = 1, { wasDragged = true } = {}) {
@@ -383,26 +369,7 @@ export const TokenPhysicsViewMethods = {
       store.lastFrameMs = now;
       let active = false;
 
-      // 1. Active drag tilt update + automatic settle when pointer pauses
-      if (store.drag) {
-        const d = store.drag;
-        const idleMs = now - d.lastSampleMs;
-        if (idleMs > 28) {
-          const decay = Math.exp(-dtSec * 22);
-          d.vx *= decay;
-          d.vy *= decay;
-          if (Math.hypot(d.vx, d.vy) < 8) {
-            d.vx = 0;
-            d.vy = 0;
-          }
-        }
-        d.tiltDeg = computeDragTilt(d.vx, d.vy, d.tiltDeg, dtSec);
-        const el = this._findTokenDomNode(d.tokenId);
-        if (el) this.applyTokenPhysicsToElement(el, d.tokenId);
-        active = true;
-      }
-
-      // 2. Active drop micro-bounces
+      // 1. Active drop micro-bounces
       if (store.drops.size > 0) {
         for (const [tokenId, drop] of [...store.drops.entries()]) {
           const sample = sampleDropBounce(now - drop.startedAt, {
@@ -441,29 +408,36 @@ export const TokenPhysicsViewMethods = {
         }
       }
 
-      // 4. Organic camera pan inertia
+      // 3. Subtle tightly-damped camera pan inertia
       if (store.camInertia) {
-        const res = stepCameraInertia(store.camInertia.vx, store.camInertia.vy, dtSec);
+        const res = stepCameraInertia(store.camInertia.vx, store.camInertia.vy, dtSec, {
+          friction: 16,
+          minSpeedPxPerSec: 38
+        });
         Service.state.camera.x += res.dx;
         Service.state.camera.y += res.dy;
-        this.applyWorldCameraTransform?.(Service.state);
         if (res.done) {
+          Service.state.camera.x = Math.round(Service.state.camera.x);
+          Service.state.camera.y = Math.round(Service.state.camera.y);
           store.camInertia = null;
         } else {
           store.camInertia.vx = res.vx;
           store.camInertia.vy = res.vy;
           active = true;
         }
+        this.applyWorldCameraTransform?.(Service.state);
       }
 
-      // 5. Smooth anchored wheel zoom
+      // 4. Smooth anchored wheel zoom
       if (store.camZoom) {
+        const maxZoom = typeof Service.getMaxCameraZoom === 'function' ? Service.getMaxCameraZoom() : 5.0;
         const next = stepSmoothZoom(
           Service.state.camera,
           store.camZoom.targetZoom,
           store.camZoom.anchorX,
           store.camZoom.anchorY,
-          dtSec
+          dtSec,
+          { maxZoom }
         );
         Service.state.camera.x = next.x;
         Service.state.camera.y = next.y;
@@ -471,6 +445,7 @@ export const TokenPhysicsViewMethods = {
         this.applyWorldCameraTransform?.(Service.state);
         if (next.done) {
           store.camZoom = null;
+          this.els?.worldLayer?.classList?.remove('is-camera-zooming');
         } else {
           active = true;
         }

@@ -120,6 +120,7 @@ test('S1: extractWorldForSeat redacts combat order when combatTrackerPublic is f
 
   // applyFullWorldState preserves turnIndex = -1 on player client
   state.role = 'player';
+  state.isHostGm = false;
   Service.applyFullWorldState(wireHidden);
   assert.equal(Service.state.combat.turnIndex, -1);
 });

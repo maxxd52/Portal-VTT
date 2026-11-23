@@ -6,7 +6,7 @@ export const DEFAULT_DICE_SHADOW_DIR = Object.freeze({ x: -0.28, y: -0.36 });
 export const DEFAULT_BOARD_SHADOW_DIR = Object.freeze({ x: -0.28, y: 0.36 });
 
 const MIN_ZOOM = 0.35;
-const MAX_ZOOM = 2.2;
+const MAX_ZOOM = 5.0;
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
@@ -175,10 +175,11 @@ export function stepCameraInertia(vx, vy, dtSec, opts = {}) {
  * Smoothly eases camera zoom toward clamped targetZoom while pinning the world point under (anchorX, anchorY).
  */
 export function stepSmoothZoom(camera, targetZoom, anchorX, anchorY, dtSec, opts = {}) {
+  const maxZoom = Math.max(MIN_ZOOM, Number(opts.maxZoom) || MAX_ZOOM);
   const curX = Number(camera?.x) || 0;
   const curY = Number(camera?.y) || 0;
-  const curZoom = clamp(Number(camera?.zoom) || 1, MIN_ZOOM, MAX_ZOOM);
-  const goal = clamp(Number(targetZoom) || curZoom, MIN_ZOOM, MAX_ZOOM);
+  const curZoom = clamp(Number(camera?.zoom) || 1, MIN_ZOOM, maxZoom);
+  const goal = clamp(Number(targetZoom) || curZoom, MIN_ZOOM, maxZoom);
   const dt = Math.max(0, Math.min(0.08, Number(dtSec) || 0));
   const speed = Math.max(2, Number(opts.speed) || 16);
 

@@ -179,3 +179,18 @@ test('Options menu provides local railsSwapped toggle persisted locally without 
     globalThis.localStorage = prevStorage;
   }
 });
+
+test('S2-OPT: View.render skips re-rendering collapsed side drawers and re-renders immediately when a drawer opens or closes', () => {
+  const viewPath = path.resolve(import.meta.dirname, '..', 'js', 'core', 'view.js');
+  const viewSrc = fs.readFileSync(viewPath, 'utf8');
+  const renderStart = viewSrc.indexOf('render(state, opts = {})');
+  const renderEnd = viewSrc.indexOf('renderHudControls(state) {', renderStart);
+  assert.ok(renderStart >= 0 && renderEnd > renderStart);
+  const block = viewSrc.slice(renderStart, renderEnd);
+
+  assert.match(block, /_prevDrawerOpenState/);
+  assert.match(block, /if\s*\(state\.sheetOpen \|\| prevDrawers\.sheet\)\s*this\.renderCharacterSheet\(state\)/);
+  assert.match(block, /if\s*\(state\.drawerOpen \|\| prevDrawers\.drawer\)\s*this\.renderCompendium\(state\)/);
+  assert.match(block, /if\s*\(state\.gmScreenOpen \|\| prevDrawers\.gmScreen\)\s*this\.renderGmScreen\(state\)/);
+  assert.match(block, /if\s*\(state\.journalOpen \|\| prevDrawers\.journal\)\s*this\.renderJournal\?\.\(state\)/);
+});

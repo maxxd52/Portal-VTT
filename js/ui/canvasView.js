@@ -1,6 +1,11 @@
 import { Selector } from '../core/selector.js?v=20261123a7';
 import { Service } from '../core/service.js?v=20261123a7';
-import { fillFogMist } from '../utils/fogShader.js?v=20261123a7';
+import { fillFogMist, getFogMistCanvas } from '../utils/fogShader.js?v=20261123a7';
+import { COMPENDIUM_MAPS } from '../data/compendium.js?v=20261123a7';
+import {
+  resolveSceneTransitionMeta,
+  computeTransitionTimings
+} from '../utils/sceneTransitionModel.js?v=20261123a7';
 import { drawGridOverlay, measureGridDistance, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
 import { formatDistance } from '../utils/lightingModel.js?v=20261123a7';
 import {
@@ -262,7 +267,10 @@ export const CanvasViewMethods = {
     const rev = Number(state.exploredRev) || 0;
     const mask = String(state.exploredMask || '');
     const sameScene = key === this._loadedExploredKey && rev === this._loadedExploredRev;
-    if (sameScene && (!mask || this._exploredHasPixels)) return;
+    if (sameScene && (!mask || this._exploredHasPixels)) {
+      if (!this._exploredLoadPromise) this._exploredLoadPromise = Promise.resolve();
+      return this._exploredLoadPromise;
+    }
 
     if (!sameScene) {
       if (this._saveExploredTimer) {
@@ -277,16 +285,26 @@ export const CanvasViewMethods = {
 
     const seq = (this._exploredLoadSeq = (this._exploredLoadSeq || 0) + 1);
     if (mask && (mask.startsWith('data:image/') || mask.startsWith('blob:'))) {
-      const img = new Image();
-      img.onload = () => {
-        if (seq !== this._exploredLoadSeq || !this.exploredCanvas) return;
-        const ectx = this.getExploredContext();
-        ectx.drawImage(img, 0, 0, EXPLORED_W, EXPLORED_H);
-        this._exploredHasPixels = true;
-        this.drawFogCanvas(Service.state);
-      };
-      img.src = mask;
+      this._exploredLoadPromise = new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          if (seq !== this._exploredLoadSeq || !this.exploredCanvas) {
+            resolve();
+            return;
+          }
+          const ectx = this.getExploredContext();
+          ectx.drawImage(img, 0, 0, EXPLORED_W, EXPLORED_H);
+          this._exploredHasPixels = true;
+          this.drawFogCanvas(Service.state);
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = mask;
+      });
+      return this._exploredLoadPromise;
     }
+    this._exploredLoadPromise = Promise.resolve();
+    return this._exploredLoadPromise;
   },
 
   scheduleSaveExploredMask() {
@@ -457,7 +475,227 @@ export const CanvasViewMethods = {
     this.syncWeatherOverlay?.(state);
   },
 
-  syncWeatherOverlay(state) {
+  async prewarmActiveScene(state, decodeTimeoutMs = 700) {
+    if (!state) return;
+    const isNarrative = Selector.isNarrativeScene(state);
+    const raceTimeout = (promise, ms) =>
+      Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+
+    const decodeImgElement = (imgEl) => {
+      if (!imgEl || !imgEl.getAttribute('src')) return Promise.resolve();
+      if (typeof imgEl.decode === 'function') {
+        return raceTimeout(imgEl.decode().catch(() => {}), decodeTimeoutMs);
+      }
+      return Promise.resolve();
+    };
+
+    if (this._visPolyCache instanceof Map) {
+      this._visPolyCache.clear();
+    }
+
+    const mapImg = isNarrative ? this.els?.narrativeBackdropImg : this.els?.customMapImg;
+    const mapDecodePromise = state.mapId === 'custom' ? decodeImgElement(mapImg) : Promise.resolve();
+    const fadeInPrewarmPromise =
+      state.mapId === 'custom' &&
+      this._prewarmMapDecodeUrl === state.customMapUrl &&
+      this._prewarmMapDecodePromise
+        ? raceTimeout(this._prewarmMapDecodePromise, decodeTimeoutMs)
+        : Promise.resolve();
+    const exploredMaskPromise = this._exploredLoadPromise
+      ? raceTimeout(this._exploredLoadPromise, decodeTimeoutMs)
+      : Promise.resolve();
+
+    // Pre-decode unique token portraits in parallel (capped at 16 for low-spec CPUs)
+    const uniqueTokenUrls = [];
+    const seen = new Set();
+    for (const tok of Array.isArray(state.tokens) ? state.tokens : []) {
+      const url = String(tok?.imageUrl || '').trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      uniqueTokenUrls.push(url);
+      if (uniqueTokenUrls.length >= 16) break;
+    }
+
+    const tokenDecodes =
+      typeof Image !== 'undefined'
+        ? uniqueTokenUrls.map((url) =>
+            raceTimeout(
+              new Promise((resolve) => {
+                const im = new Image();
+                im.onload = () => (typeof im.decode === 'function' ? im.decode().then(resolve, resolve) : resolve());
+                im.onerror = resolve;
+                im.src = url;
+              }),
+              decodeTimeoutMs
+            )
+          )
+        : [];
+
+    await Promise.all([mapDecodePromise, fadeInPrewarmPromise, exploredMaskPromise, ...tokenDecodes]);
+
+    if (
+      state.mapId === 'custom' &&
+      this._prewarmMapDecodeUrl === state.customMapUrl &&
+      this._prewarmMapImg?.naturalWidth > 0 &&
+      !Service.loadedMapImage?.naturalWidth
+    ) {
+      Service.loadedMapImage = this._prewarmMapImg;
+    }
+
+    // Single consolidated offscreen & tactical layer draw pass behind the curtain
+    this.ensureBoardGrainLayer?.();
+    if (!isNarrative) {
+      getFogMistCanvas(512);
+      const baseOpacity = state.role === 'gm' ? 0.45 : 0.85;
+      this.getFogBaseCanvas?.(state.theme || 'slate', baseOpacity);
+      this.syncBoardBoundsToDom?.(state);
+      this.drawWallShadowCanvas?.(state);
+      this.drawGridCanvas?.(state);
+      this.drawFogCanvas?.(state);
+    }
+    this.syncSceneAtmosphere?.(state);
+    this.syncWeatherOverlay?.(state, { prewarmSteps: 45 });
+  },
+
+  _getTransitionTimings(isInitialLoad = false) {
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return computeTransitionTimings({ reducedMotion, isInitialLoad });
+  },
+
+  _prepareTransitionTitle(curtain, stateMetaSource) {
+    const meta = resolveSceneTransitionMeta(stateMetaSource, COMPENDIUM_MAPS);
+    if (this.els.sceneTransitionTitle) {
+      this.els.sceneTransitionTitle.textContent = meta.title;
+    }
+    if (this.els.sceneTransitionSubtitle) {
+      this.els.sceneTransitionSubtitle.textContent = meta.subtitle;
+    }
+    curtain.classList.remove('is-title-in', 'is-title-out');
+    curtain.classList.add('is-title-reset');
+    void curtain.offsetWidth;
+    curtain.classList.remove('is-title-reset');
+  },
+
+  async beginSceneDarken(nextStatePreview) {
+    const curtain = this.els?.sceneTransitionCurtain;
+    if (!curtain) return;
+
+    if (this._sceneTransitionWatchdog) {
+      clearTimeout(this._sceneTransitionWatchdog);
+      this._sceneTransitionWatchdog = null;
+    }
+    if (this._prewarmMapTimer) {
+      clearTimeout(this._prewarmMapTimer);
+      this._prewarmMapTimer = null;
+    }
+
+    const seq = (this._sceneTransitionSeq = (this._sceneTransitionSeq || 0) + 1);
+    this._pendingTransitionSeq = seq;
+    const timings = this._getTransitionTimings(false);
+    this._prepareTransitionTitle(curtain, nextStatePreview);
+
+    if (
+      nextStatePreview?.mapId === 'custom' &&
+      nextStatePreview?.customMapUrl &&
+      typeof Image !== 'undefined'
+    ) {
+      const targetUrl = nextStatePreview.customMapUrl;
+      this._prewarmMapDecodeUrl = targetUrl;
+      this._prewarmMapDecodePromise = new Promise((resolve) => {
+        this._prewarmMapTimer = setTimeout(() => {
+          this._prewarmMapTimer = null;
+          if (seq !== this._sceneTransitionSeq) {
+            resolve();
+            return;
+          }
+          const im = new Image();
+          this._prewarmMapImg = im;
+          im.onload = () => (typeof im.decode === 'function' ? im.decode().then(resolve, resolve) : resolve());
+          im.onerror = resolve;
+          im.src = targetUrl;
+        }, 90);
+      });
+    } else {
+      this._prewarmMapDecodeUrl = '';
+      this._prewarmMapDecodePromise = null;
+      this._prewarmMapImg = null;
+    }
+
+    curtain.classList.add('is-backdrop-visible');
+    const titleDelay = Math.round(timings.fadeInMs * 0.35);
+    setTimeout(() => {
+      if (seq === this._sceneTransitionSeq) {
+        curtain.classList.add('is-title-in');
+      }
+    }, titleDelay);
+
+    // Safety watchdog: never allow the curtain to remain stuck if render doesn't follow
+    this._sceneTransitionWatchdog = setTimeout(() => {
+      if (seq === this._sceneTransitionSeq) {
+        this._pendingTransitionSeq = 0;
+        curtain.classList.remove('is-backdrop-visible', 'is-title-in', 'is-title-out');
+      }
+    }, timings.fadeInMs + 1500);
+
+    await new Promise((resolve) => setTimeout(resolve, timings.fadeInMs));
+  },
+
+  async triggerSceneTransition(state, { isInitialLoad = false } = {}) {
+    const curtain = this.els?.sceneTransitionCurtain;
+    if (!curtain) return;
+
+    if (this._sceneTransitionWatchdog) {
+      clearTimeout(this._sceneTransitionWatchdog);
+      this._sceneTransitionWatchdog = null;
+    }
+
+    const timings = this._getTransitionTimings(isInitialLoad);
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    let seq = 0;
+    if (this._pendingTransitionSeq && this._pendingTransitionSeq === this._sceneTransitionSeq) {
+      seq = this._pendingTransitionSeq;
+      this._pendingTransitionSeq = 0;
+    } else {
+      seq = (this._sceneTransitionSeq = (this._sceneTransitionSeq || 0) + 1);
+      this._pendingTransitionSeq = 0;
+      this._prepareTransitionTitle(curtain, state);
+      curtain.classList.add('is-backdrop-visible');
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+          if (seq === this._sceneTransitionSeq) {
+            curtain.classList.add('is-title-in');
+          }
+        });
+      } else {
+        curtain.classList.add('is-title-in');
+      }
+    }
+
+    await Promise.all([this.prewarmActiveScene(state, timings.decodeTimeoutMs), delay(timings.minHoldMs)]);
+
+    if (typeof requestAnimationFrame === 'function') {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    if (seq !== this._sceneTransitionSeq) return;
+
+    curtain.classList.remove('is-backdrop-visible');
+    await delay(timings.backdropFadeOutMs + timings.titleLingerMs);
+
+    if (seq !== this._sceneTransitionSeq) return;
+    curtain.classList.remove('is-title-in');
+    curtain.classList.add('is-title-out');
+
+    await delay(timings.titleFadeOutMs + 40);
+    if (seq === this._sceneTransitionSeq) {
+      curtain.classList.remove('is-title-out');
+    }
+  },
+
+  syncWeatherOverlay(state, { prewarmSteps = 0 } = {}) {
     const canvas = this.els?.weatherCanvas;
     if (!canvas || typeof window === 'undefined') return;
     const weather = normalizeWeatherType(state?.sceneWeather);
@@ -501,6 +739,12 @@ export const CanvasViewMethods = {
     if (this._weatherSimKey !== simKey || !this._weatherSim) {
       this._weatherSimKey = simKey;
       this._weatherSim = createWeatherSimulation({ weather, mode, width: w, height: h });
+      if (prewarmSteps > 0) {
+        const steps = Math.min(60, Math.max(0, Math.trunc(prewarmSteps)));
+        for (let i = 0; i < steps; i += 1) {
+          stepWeatherSimulation(this._weatherSim, 1 / 30);
+        }
+      }
     }
 
     if (!this._weatherRafId) {

@@ -40,7 +40,7 @@ export const SheetInventoryViewMethods = {
       if (!item) return;
       this.openListContextMenu(cx, cy, item.name, item.badge || 'Objeto', [
         {
-          icon: '⚡',
+          icon: 'zap',
           label: 'Usar / Tirar',
           onClick: () => {
             const msg = Service.useTokenInventoryItem(tok.id, item.uid);
@@ -48,7 +48,7 @@ export const SheetInventoryViewMethods = {
           }
         },
         {
-          icon: '🗑️',
+          icon: 'trash',
           label: 'Quitar del inventario',
           danger: true,
           onClick: () => Service.removeTokenInventoryItem(tok.id, item.uid)

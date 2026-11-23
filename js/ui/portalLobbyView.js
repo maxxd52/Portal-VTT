@@ -1,5 +1,6 @@
 import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
 import { CartridgePacker } from '../services/cartridgePacker.js?v=20261123a7';
+import { GmHostLock } from '../services/gmHostLock.js?v=20261123a7';
 import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
 import { Service } from '../core/service.js?v=20261123a7';
 
@@ -31,6 +32,12 @@ export const PortalLobbyViewMethods = {
 
   async showPortalLobby() {
     if (!this.els.portalLobby) return;
+    GmHostLock.release();
+    if (this._presenceTimer) {
+      clearInterval(this._presenceTimer);
+      this._presenceTimer = null;
+    }
+    RealtimeBridge.disconnect();
     Service.state.sheetOpen = false;
     Service.state.drawerOpen = false;
     Service.state.gmScreenOpen = false;
@@ -80,8 +87,15 @@ export const PortalLobbyViewMethods = {
     box.querySelectorAll('[data-open-portal]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const code = btn.dataset.openPortal;
+        const locked = await GmHostLock.acquire(code);
+        if (!locked) {
+          this.showActionToast(
+            `El portal ${code} ya está abierto como GM en otra pestaña. Ciérrala o únete como Jugador/Espectador.`
+          );
+          return;
+        }
         await Service.openPortal(code, 'gm');
-        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => (Service.isHostNetwork() ? 'gm' : 'player'));
         this.startPresenceHeartbeat();
         this.syncUrlWithPortal(code, 'gm');
         this.hidePortalLobby();
@@ -121,7 +135,8 @@ export const PortalLobbyViewMethods = {
           dynamicLighting,
           showGrid
         });
-        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+        await GmHostLock.acquire(code);
+        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => (Service.isHostNetwork() ? 'gm' : 'player'));
         this.startPresenceHeartbeat();
         this.syncUrlWithPortal(code, 'gm');
         this.hidePortalLobby();
@@ -135,8 +150,17 @@ export const PortalLobbyViewMethods = {
         const code = this.parsePortalInput(this.els.inpJoinPortalCode?.value);
         if (!code) return;
         const role = this.els.selJoinPortalRole?.value === 'gm' ? 'gm' : 'player';
+        if (role === 'gm') {
+          const locked = await GmHostLock.acquire(code);
+          if (!locked) {
+            this.showActionToast(
+              `El portal ${code} ya está abierto como GM en otra pestaña. Ciérrala o únete como Jugador/Espectador.`
+            );
+            return;
+          }
+        }
         await Service.openPortal(code, role);
-        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+        RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => (Service.isHostNetwork() ? 'gm' : 'player'));
         this.startPresenceHeartbeat();
         this.syncUrlWithPortal(code, role);
         this.hidePortalLobby();
@@ -155,8 +179,9 @@ export const PortalLobbyViewMethods = {
             title: parsed.world?.moduleTitle || file.name.replace(/\.[^.]+$/, ''),
             ruleset: parsed.world?.ruleset || 'dnd55'
           });
+          await GmHostLock.acquire(code);
           await Service.loadModulePackage(parsed);
-          RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => Service.state.role);
+          RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => (Service.isHostNetwork() ? 'gm' : 'player'));
           this.startPresenceHeartbeat();
           this.syncUrlWithPortal(code, 'gm');
           this.hidePortalLobby();

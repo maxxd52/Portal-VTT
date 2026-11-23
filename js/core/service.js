@@ -660,7 +660,8 @@ export const Service = {
       redrawMap: true,
       redrawGrid: true,
       redrawDraw: true,
-      redrawFog: true
+      redrawFog: true,
+      skipVaultSave: true
     });
     return code;
   },
@@ -694,6 +695,7 @@ export const Service = {
 
   applyFullWorldState(world, silent = false) {
     if (!world) return;
+    if (world._redactedWorld && this.isHostNetwork()) return;
     this.cancelAllTokenGlides();
     if (world.moduleTitle) this.state.room.moduleTitle = world.moduleTitle;
     if (world.ruleset) this.state.ruleset = world.ruleset;
@@ -759,6 +761,14 @@ export const Service = {
         actors: Array.isArray(world.compendiumFolders.actors) ? world.compendiumFolders.actors : [],
         items: Array.isArray(world.compendiumFolders.items) ? world.compendiumFolders.items : [],
         maps: Array.isArray(world.compendiumFolders.maps) ? world.compendiumFolders.maps : []
+      };
+    }
+    if (world.compendiumFolderOverrides && typeof world.compendiumFolderOverrides === 'object') {
+      const ov = world.compendiumFolderOverrides;
+      this.state.compendiumFolderOverrides = {
+        actors: ov.actors && typeof ov.actors === 'object' ? { ...ov.actors } : {},
+        items: ov.items && typeof ov.items === 'object' ? { ...ov.items } : {},
+        maps: ov.maps && typeof ov.maps === 'object' ? { ...ov.maps } : {}
       };
     }
     if (Array.isArray(world.tokens)) {
@@ -1060,9 +1070,10 @@ export const Service = {
         exploredMask: clean,
         exploredRev: this.state.exploredRev
       });
-      BrowserVault.saveRoom(
+      BrowserVault.scheduleRoomSave(
         this.state.room.code,
-        Selector.extractSerializableWorld(this.state, { includePrivateGm: true })
+        () => Selector.extractSerializableWorld(this.state, { includePrivateGm: true }),
+        { immediate: true }
       );
     }
   },
@@ -1230,11 +1241,27 @@ export const Service = {
 
   async changeMap(mapId, customUrl = '', sceneKey = '') {
     this.cancelAllTokenGlides();
+    const nextKey = sceneKey || (mapId === 'custom' && customUrl ? `url:${customUrl}` : mapId);
+    const isSameScene =
+      nextKey === this.getActiveSceneKey() &&
+      mapId === this.state.mapId &&
+      String(customUrl || '') === String(this.state.customMapUrl || '');
+    const customMapPreview = (this.state.customMaps || []).find((m) => m.key === nextKey);
+    const nextModePreview = customMapPreview?.sceneMode === 'narrative' ? 'narrative' : 'tactical';
+    if (!isSameScene && typeof this.onBeforeSceneChange === 'function') {
+      await this.onBeforeSceneChange({
+        activeMapKey: nextKey,
+        mapId,
+        customMapUrl: mapId === 'custom' ? String(customUrl || '') : '',
+        sceneMode: nextModePreview,
+        customMaps: this.state.customMaps,
+        room: this.state.room
+      });
+    }
     const prevTokens = Array.isArray(this.state.tokens) ? JSON.parse(JSON.stringify(this.state.tokens)) : [];
     const prevSelectedId = this.state.selectedTokenId;
     this.saveActiveMapGrid();
     this.saveActiveSceneLayers();
-    const nextKey = sceneKey || (mapId === 'custom' && customUrl ? `url:${customUrl}` : mapId);
     this.state.mapId = mapId;
     this.state.activeMapKey = nextKey;
     const savedLayers = this.state.sceneLayers && this.state.sceneLayers[nextKey];
@@ -1781,13 +1808,14 @@ export const Service = {
   },
 
   getMaxCameraZoom() {
+    const cellSize = Number(this.state?.grid?.cellSize) || 0;
     if (this.state?.mapId === 'custom') {
       const img = this.loadedMapImage;
       const iw = img?.naturalWidth || img?.width || 0;
       const ih = img?.naturalHeight || img?.height || 0;
-      return computeAdaptiveMaxZoom(iw, ih, 2400, 1600);
+      return computeAdaptiveMaxZoom(iw, ih, 2400, 1600, cellSize);
     }
-    return computeAdaptiveMaxZoom(0, 0, 2400, 1600);
+    return computeAdaptiveMaxZoom(0, 0, 2400, 1600, cellSize);
   },
 
   setZoom(nextZoom, anchorX = window.innerWidth / 2, anchorY = window.innerHeight / 2) {

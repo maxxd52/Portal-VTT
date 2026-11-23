@@ -214,8 +214,8 @@ test('VAULT-4: loadExternalMapImage skips crossOrigin on data: URLs, retries wit
   }
 });
 
-test('QUALITY-1: WebPConverter decodes WebP data URLs losslessly without canvas and adapts quality for 4K maps', () => {
-  assert.equal(WebPConverter.MAP_MAX_DIM, 4096, 'Unified map max dimension must be 4096px');
+test('QUALITY-1: WebPConverter decodes WebP data URLs losslessly without canvas and adapts quality for 8K maps', () => {
+  assert.equal(WebPConverter.MAP_MAX_DIM, 8192, 'Unified map max dimension must be 8192px');
   assert.equal(typeof WebPConverter.dataUrlToWebPBytes, 'function', 'dataUrlToWebPBytes helper must exist');
   assert.equal(typeof WebPConverter.resolveAdaptiveQuality, 'function', 'resolveAdaptiveQuality helper must exist');
 
@@ -227,8 +227,9 @@ test('QUALITY-1: WebPConverter decodes WebP data URLs losslessly without canvas 
   assert.equal(WebPConverter.dataUrlToWebPBytes('https://example.com/a.webp'), null, 'External HTTP URL must return null');
 
   assert.equal(WebPConverter.MAP_QUALITY, 0.85, 'Unified map quality must be 0.85');
-  assert.equal(WebPConverter.resolveAdaptiveQuality(1920, 1080, 0.85), 0.85, '<=2400px uses crisp 0.85 quality');
-  assert.equal(WebPConverter.resolveAdaptiveQuality(4096, 2730, 0.85), 0.85, '>2400px keeps 0.85 perceptual sweet spot');
+  assert.equal(WebPConverter.resolveAdaptiveQuality(1920, 1080, 0.85), 0.85, '<=4096px uses crisp 0.85 quality');
+  assert.equal(WebPConverter.resolveAdaptiveQuality(4096, 2730, 0.85), 0.85, '4K map keeps 0.85 quality');
+  assert.equal(WebPConverter.resolveAdaptiveQuality(8192, 5570, 0.85), 0.82, '>4096px uses 0.82 perceptual sweet spot');
 });
 
 test('QUALITY-2: CartridgePacker exports WebP maps with zero re-encoding and deduplicates active map against Baúl customMaps', async () => {
@@ -276,21 +277,87 @@ test('QUALITY-2: CartridgePacker exports WebP maps with zero re-encoding and ded
   }
 });
 
-test('ZOOM-1: Adaptive max zoom matches map native pixel density (1.35x-1.85x) and setZoom skips redundant vault saves', () => {
+test('ZOOM-1: Adaptive max zoom matches map native pixel density and grid cellSize (up to 5.0x) and setZoom skips redundant vault saves', () => {
   assert.equal(typeof TabletopMaterial.computeAdaptiveMaxZoom, 'function', 'computeAdaptiveMaxZoom must be exported');
   assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(0, 0), 1.65, 'Preset maps default to 1.65x max zoom');
   assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(2048, 2048), 1.35, '2K square map floors at 1.35x');
   assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(4096, 2730), 1.79, '4K 3:2 map allows ~1.79x (1:1 sharpness + 5%)');
-  assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(8000, 4000), 1.85, 'Huge map caps cleanly at 1.85x');
+  assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(8000, 4000), 3.5, '8K map native density scales up to 3.5x');
+  assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(16000, 8000), 5, 'Huge map caps cleanly at 5.0x');
+  assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(4096, 2785, 2400, 1600, 31.64), 4.17, 'Dense 75x51 grid allows ~4.17x (~132px/cell)');
+  assert.equal(TabletopMaterial.computeAdaptiveMaxZoom(4096, 2785, 2400, 1600, 20), 5, 'Ultra-dense grid caps cleanly at 5.0x');
 
   const state = resetGmService();
   state.mapId = 'custom';
   Service.loadedMapImage = { naturalWidth: 4096, naturalHeight: 2730 };
+  state.grid.cellSize = 80;
   assert.equal(Service.getMaxCameraZoom(), 1.79);
+
+  state.grid.cellSize = 31.64;
+  assert.equal(Service.getMaxCameraZoom(), 4.17);
 
   const notifyOpts = [];
   Service.listeners.push((_, opts) => notifyOpts.push(opts));
-  Service.setZoom(3.0, 640, 360);
-  assert.equal(state.camera.zoom, 1.79, 'setZoom must clamp to adaptive max zoom instead of 2.2x');
+  Service.setZoom(5.0, 640, 360);
+  assert.equal(state.camera.zoom, 4.17, 'setZoom must clamp to adaptive max zoom for dense grid');
   assert.equal(notifyOpts[0]?.skipVaultSave, true, 'Zooming must not trigger redundant vault saves');
+});
+
+test('VAULT-5: registerAndActivateDirectMap registers direct drop/modal maps in customMaps and activates their scene key', async () => {
+  const state = resetGmService();
+  const webpUrl = 'data:image/webp;base64,AAAA';
+
+  const entry = await Service.registerAndActivateDirectMap(webpUrl, 'Mapa_4K_Castillo.png');
+  assert.ok(entry && entry.key, 'Must return created customMap entry');
+  assert.equal(entry.name, 'Mapa_4K_Castillo');
+  assert.equal(entry.imageUrl, webpUrl);
+  assert.equal(entry.sceneMode, 'tactical');
+
+  assert.equal(state.customMaps.length, 1, 'Direct map must appear in Baúl customMaps');
+  assert.equal(state.customMaps[0].key, entry.key);
+  assert.equal(state.mapId, 'custom');
+  assert.equal(state.customMapUrl, webpUrl);
+  assert.equal(state.activeMapKey, entry.key);
+});
+
+test('VAULT-6: BrowserVault.onSaveStateChange fires once on idle->saving->idle transitions and lifecycle flushes cleanly', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+
+  const states = [];
+  const prevStateCb = BrowserVault.onSaveStateChange;
+  const prevSaveRoom = BrowserVault.saveRoom;
+  let resolveSave = null;
+  BrowserVault.onSaveStateChange = (isSaving) => states.push(isSaving);
+  BrowserVault.saveRoom = () =>
+    new Promise((resolve) => {
+      resolveSave = () => resolve(true);
+    });
+
+  try {
+    const p = BrowserVault.scheduleRoomSave('MESA-SAVE', () => ({ ok: 1 }), { immediate: true });
+    assert.deepEqual(states, [true], 'Must emit true while save is in flight');
+    assert.equal(BrowserVault.hasPendingSaves(), true);
+
+    resolveSave();
+    await p;
+    assert.deepEqual(states, [true, false], 'Must emit false once queue drains');
+    assert.equal(BrowserVault.hasPendingSaves(), false);
+  } finally {
+    BrowserVault.onSaveStateChange = prevStateCb;
+    BrowserVault.saveRoom = prevSaveRoom;
+  }
+
+  const viewSrc = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'js', 'core', 'view.js'), 'utf8');
+  assert.match(viewSrc, /visibilitychange/);
+  assert.match(viewSrc, /pagehide[\s\S]*GmHostLock\.release\(\)/);
+  assert.match(viewSrc, /vaultSaveBadge[\s\S]*350/);
+
+  const serviceSrc = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'js', 'core', 'service.js'), 'utf8');
+  const maskFnStart = serviceSrc.indexOf('saveActiveExploredMask(');
+  const maskFnEnd = serviceSrc.indexOf('getSceneLighting(', maskFnStart);
+  assert.ok(maskFnStart >= 0 && maskFnEnd > maskFnStart);
+  const maskBlock = serviceSrc.slice(maskFnStart, maskFnEnd);
+  assert.match(maskBlock, /BrowserVault\.scheduleRoomSave\(/);
+  assert.doesNotMatch(maskBlock, /BrowserVault\.saveRoom\(/);
 });

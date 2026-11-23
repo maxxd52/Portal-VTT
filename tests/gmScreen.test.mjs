@@ -28,6 +28,7 @@ function resetServiceForTest(preset = 'dnd55', role = 'gm') {
   Service.listeners = [];
   Service.state = createInitialState();
   Service.state.role = role;
+  Service.state.isHostGm = role === 'gm';
   Service.applySystemPreset(preset);
   return Service.state;
 }

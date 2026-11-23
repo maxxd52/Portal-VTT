@@ -10,6 +10,7 @@ import {
 import { clampTokenSize } from '../utils/tokenTemplateSync.js?v=20261123a7';
 import { groupCompendiumItemsForPicker } from '../utils/pickerModel.js?v=20261123a7';
 import { resolveMapCardDescriptor } from '../utils/compendiumCardModel.js?v=20261123a7';
+import { parseDragSpec, resolveEntryFolder } from '../utils/compendiumDragModel.js?v=20261123a7';
 import { drawPresetMapBackground } from './canvasView.js?v=20261123a7';
 
 export const CompendiumViewMethods = {
@@ -471,7 +472,7 @@ export const CompendiumViewMethods = {
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-          this.els.inpCustomMapImg.value = await Service.compressImageFile(file, 4096, 0.85);
+          this.els.inpCustomMapImg.value = await Service.compressImageFile(file);
           if (this.selectedCustomMapMode !== 'narrative') {
             openCustomMapGridCalibrator();
           }
@@ -511,6 +512,91 @@ export const CompendiumViewMethods = {
       closeAllCompendiumForms();
       this.showActionToast(`Carpeta "${name}" creada.`);
     });
+
+    if (this.els.tokenTemplatesGrid) {
+      let springTimer = null;
+      let springFolderKey = '';
+      const clearFolderDropVisuals = () => {
+        if (springTimer) {
+          clearTimeout(springTimer);
+          springTimer = null;
+        }
+        springFolderKey = '';
+        this.els.tokenTemplatesGrid.classList.remove('is-root-drop-target');
+        this.els.tokenTemplatesGrid.querySelectorAll('.is-folder-drop-target').forEach((el) => {
+          el.classList.remove('is-folder-drop-target');
+        });
+      };
+
+      this.els.tokenTemplatesGrid.addEventListener('dragover', (e) => {
+        const spec = parseDragSpec(this._activeDragSpec);
+        const tab = Service.state.compendiumTab || 'actors';
+        if (!spec || spec.tab !== tab) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+
+        const folderEl = e.target?.closest?.('[data-folder-drop]');
+        this.els.tokenTemplatesGrid.querySelectorAll('.is-folder-drop-target').forEach((el) => {
+          if (el !== folderEl) el.classList.remove('is-folder-drop-target');
+        });
+        if (folderEl) {
+          this.els.tokenTemplatesGrid.classList.remove('is-root-drop-target');
+          folderEl.classList.add('is-folder-drop-target');
+          const folderName = folderEl.dataset.folderDrop || '';
+          const fKey = `${tab}:${folderName}`;
+          if (this.collapsedFolders?.has(fKey)) {
+            if (springFolderKey !== fKey) {
+              if (springTimer) clearTimeout(springTimer);
+              springFolderKey = fKey;
+              springTimer = setTimeout(() => {
+                this.collapsedFolders?.delete(fKey);
+                this.renderCompendium(Service.state);
+              }, 500);
+            }
+          } else if (springTimer) {
+            clearTimeout(springTimer);
+            springTimer = null;
+            springFolderKey = '';
+          }
+        } else {
+          if (springTimer) {
+            clearTimeout(springTimer);
+            springTimer = null;
+            springFolderKey = '';
+          }
+          this.els.tokenTemplatesGrid.classList.add('is-root-drop-target');
+        }
+      });
+
+      this.els.tokenTemplatesGrid.addEventListener('dragleave', (e) => {
+        if (!this.els.tokenTemplatesGrid.contains(e.relatedTarget)) {
+          clearFolderDropVisuals();
+        }
+      });
+
+      this.els.tokenTemplatesGrid.addEventListener('drop', (e) => {
+        const rawSpec =
+          (e.dataTransfer && (e.dataTransfer.getData('application/x-portal-drag') || e.dataTransfer.getData('text/plain'))) ||
+          this._activeDragSpec ||
+          '';
+        const spec = parseDragSpec(rawSpec);
+        const tab = Service.state.compendiumTab || 'actors';
+        const folderEl = e.target?.closest?.('[data-folder-drop]');
+        const targetFolder = folderEl ? folderEl.dataset.folderDrop || '' : '';
+        clearFolderDropVisuals();
+        if (!spec || spec.tab !== tab) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this._isInternalDrag = false;
+        this._activeDragSpec = '';
+        const moved = Service.moveCompendiumEntryToFolder(tab, spec.key, targetFolder);
+        if (moved) {
+          this.showActionToast(targetFolder ? `Movido a "${targetFolder}".` : 'Movido a la raíz del Baúl.');
+        }
+      });
+
+      window.addEventListener('dragend', clearFolderDropVisuals);
+    }
 
     if (this.els.btnToggleCustomToken) {
       this.els.btnToggleCustomToken.addEventListener('click', () => {
@@ -726,8 +812,10 @@ export const CompendiumViewMethods = {
     const renderWithFolders = (entries, renderRowFn) => {
       const savedFolders = (state.compendiumFolders && state.compendiumFolders[tab]) || [];
       const folderSet = new Set(savedFolders);
+      const getFolder = (entry) => resolveEntryFolder(entry, tab, state.compendiumFolderOverrides);
       entries.forEach((entry) => {
-        if (entry.folder) folderSet.add(entry.folder);
+        const f = getFolder(entry);
+        if (f) folderSet.add(f);
       });
       const folders = Array.from(folderSet);
 
@@ -737,13 +825,13 @@ export const CompendiumViewMethods = {
 
       const folderHtml = folders
         .map((folderName) => {
-          const children = entries.filter((e) => (e.folder || '') === folderName);
+          const children = entries.filter((e) => getFolder(e) === folderName);
           if (q && children.length === 0 && !folderName.toLowerCase().includes(q)) return '';
           const folderKey = `${tab}:${folderName}`;
           const isOpen = Boolean(q) || !this.collapsedFolders.has(folderKey);
           return `
-            <div class="flex flex-col">
-              <div data-toggle-folder="${folderName}" class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-pointer select-none">
+            <div class="flex flex-col portal-folder-group rounded-xl transition-colors" data-folder-drop="${this.escapeHtml(folderName)}">
+              <div data-toggle-folder="${this.escapeHtml(folderName)}" class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-pointer select-none">
                 <div class="flex items-center gap-2 min-w-0">
                   <svg class="w-3 h-3 opacity-60 transition-transform ${isOpen ? 'rotate-90' : ''}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4" /></svg>
                   <svg class="w-3.5 h-3.5 opacity-75 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /></svg>
@@ -767,7 +855,7 @@ export const CompendiumViewMethods = {
         .join('');
 
       const rootHtml = entries
-        .filter((e) => !e.folder)
+        .filter((e) => !getFolder(e))
         .map(renderRowFn)
         .join('');
 
@@ -777,7 +865,26 @@ export const CompendiumViewMethods = {
       const openFolderMenu = (folderName, cx, cy) => {
         this.openListContextMenu(cx, cy, folderName, 'Carpeta', [
           {
-            icon: '🗑️',
+            icon: 'edit',
+            label: 'Renombrar carpeta',
+            onClick: () => {
+              const nextName = typeof window !== 'undefined' && typeof window.prompt === 'function'
+                ? window.prompt('Nuevo nombre para la carpeta:', folderName)
+                : '';
+              const cleanNext = String(nextName || '').trim();
+              if (!cleanNext || cleanNext === folderName) return;
+              const prevKey = `${tab}:${folderName}`;
+              const nextKey = `${tab}:${cleanNext}`;
+              if (this.collapsedFolders?.has(prevKey)) {
+                this.collapsedFolders.delete(prevKey);
+                this.collapsedFolders.add(nextKey);
+              }
+              Service.renameCompendiumFolder(tab, folderName, cleanNext);
+              this.showActionToast(`Carpeta renombrada a "${cleanNext}".`);
+            }
+          },
+          {
+            icon: 'trash',
             label: 'Eliminar carpeta',
             danger: true,
             onClick: () => Service.deleteCompendiumFolder(tab, folderName)
@@ -909,7 +1016,7 @@ export const CompendiumViewMethods = {
         const target = tabs[0];
         return [
           {
-            icon: '📌',
+            icon: 'pin',
             label: 'Agregar a la Pantalla',
             onClick: () => {
               const res = Service.pinToGmScreen({ kind, key, tabId: target?.id, title: label });
@@ -920,7 +1027,7 @@ export const CompendiumViewMethods = {
         ];
       }
       return tabs.slice(0, 4).map((t) => ({
-        icon: '📌',
+        icon: 'pin',
         label: `Pantalla · ${t.label}`,
         onClick: () => {
           const res = Service.pinToGmScreen({ kind, key, tabId: t.id, title: label });
@@ -991,7 +1098,7 @@ export const CompendiumViewMethods = {
         const actions = [
           ...buildGmPinActions('actor', a.key, a.name),
           {
-            icon: '⧉',
+            icon: 'copy',
             label: 'Duplicar para editar',
             onClick: () => {
               const copy = Service.saveCustomActor({
@@ -1007,9 +1114,9 @@ export const CompendiumViewMethods = {
         ];
         if (a.isCustom) {
           actions.push(
-            { icon: '✏️', label: 'Editar personaje', onClick: () => editCustomActor(a.key) },
+            { icon: 'edit', label: 'Editar personaje', onClick: () => editCustomActor(a.key) },
             {
-              icon: '🗑️',
+              icon: 'trash',
               label: 'Eliminar personaje',
               danger: true,
               onClick: () => {
@@ -1073,7 +1180,7 @@ export const CompendiumViewMethods = {
         const actions = [...buildGmPinActions('item', it.key, it.name)];
         if (Service.state.selectedTokenId) {
           actions.push({
-            icon: '🎒',
+            icon: 'package',
             label: 'Equipar en ficha seleccionada',
             onClick: () => {
               this.activeSheetTab = this.getItemCategory(it.kind);
@@ -1084,9 +1191,9 @@ export const CompendiumViewMethods = {
         }
         if (it.isCustom) {
           actions.push(
-            { icon: '✏️', label: 'Editar complemento', onClick: () => editCustomItem(it.key) },
+            { icon: 'edit', label: 'Editar complemento', onClick: () => editCustomItem(it.key) },
             {
-              icon: '🗑️',
+              icon: 'trash',
               label: 'Eliminar complemento',
               danger: true,
               onClick: () => {
@@ -1098,7 +1205,7 @@ export const CompendiumViewMethods = {
         }
         if (!actions.length) {
           actions.push({
-            icon: 'ℹ️',
+            icon: 'info',
             label: 'Seleccioná un token para equipar',
             onClick: () => {}
           });
@@ -1178,7 +1285,7 @@ export const CompendiumViewMethods = {
         const actions = [
           ...buildGmPinActions('map', m.key, m.name),
           {
-            icon: '🗺️',
+            icon: 'map',
             label: 'Activar escenario',
             onClick: async () => {
               await Service.activateMapTemplate(m);
@@ -1189,7 +1296,7 @@ export const CompendiumViewMethods = {
         if (!isNarrative) {
           actions.push(
             {
-              icon: '⚙️',
+              icon: 'sliders',
               label: 'Opciones del escenario',
               onClick: () => {
                 const isActive = Service.getActiveSceneKey() === m.key;
@@ -1220,7 +1327,7 @@ export const CompendiumViewMethods = {
               }
             },
             {
-              icon: '↺',
+              icon: 'rotate-ccw',
               label: 'Resetear área descubierta',
               onClick: () => {
                 Service.resetSceneExploredFog(m.key);
@@ -1231,9 +1338,9 @@ export const CompendiumViewMethods = {
         }
         if (m.isCustom) {
           actions.push(
-            { icon: '✏️', label: 'Editar escenario', onClick: () => editCustomMap(m.key) },
+            { icon: 'edit', label: 'Editar escenario', onClick: () => editCustomMap(m.key) },
             {
-              icon: '🗑️',
+              icon: 'trash',
               label: 'Eliminar escenario',
               danger: true,
               onClick: () => {

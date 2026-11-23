@@ -42,6 +42,10 @@ Any GM action that projects or reveals potentially private information to player
 - Inside vertical scrollable flex containers (`flex flex-col overflow-y-auto`), media wrappers and headers MUST use `shrink-0` so growing content scrolls cleanly instead of squishing images or toolbars.
 - Modals and popovers follow the unified `Escape` layer stack (modals → overlays/temp tools → side drawers).
 
+### Law 6 — Unified Monochrome Line Iconography
+- **UI actions & controls:** All contextual menus, toolbars, and action buttons MUST use clean monochrome line-art SVGs (`fill="none"`, `stroke="currentColor"`, `stroke-width="1.8"`, rounded caps/joins) via `js/utils/uiIcons.js`, inheriting white/theme ink (or semantic danger red on destructive actions). Never use colorful OS emojis for UI controls.
+- **Reserved color:** Color in icons is reserved strictly for semantic status/condition badges (colored stroke when inactive, white over colored pill when active), HP deltas, and active accent toggles.
+
 ---
 
 ## 3. Reference Specification: Unified Journal (`Diario`)
@@ -63,3 +67,4 @@ Before shipping any UI change in Portal-VTT, verify:
 - [ ] Is there only one clear entry point per action (no duplicate buttons)?
 - [ ] Does any GM-to-player reveal show a live anti-spoiler preview before sending?
 - [ ] Do images and headers preserve their height (`shrink-0`) when content overflows and scrolls?
+- [ ] Do all UI actions use unified monochrome line-art SVGs (`uiIcons.js`), reserving color strictly for semantic states/conditions and danger actions?

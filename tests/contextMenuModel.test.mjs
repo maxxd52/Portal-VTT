@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   computeContextMenuPosition,
@@ -8,11 +9,13 @@ import {
   buildDiceBarMenuSpec,
   buildMapMenuSpec,
   buildTokenMenuSpec,
+  buildMultiTokenMenuSpec,
   buildWallMenuSpec,
   parseHpInputExpression,
   stepPresetValue,
   shouldAllowNativeContextMenu
 } from '../js/utils/contextMenuModel.js?v=20261123a7';
+import { renderUiLineIcon, hasUiLineIcon } from '../js/utils/uiIcons.js?v=20261123a7';
 
 const flattenIds = (spec) => {
   const ids = [];
@@ -235,4 +238,47 @@ test('buildWallMenuSpec handles single door and batch multi-wall selection clean
   assert.equal(del.id, 'delete-walls');
   assert.equal(del.danger, true);
   assert.ok(del.label.includes('3'));
+});
+
+test('all context menu specs use canonical monochrome line icon keys from uiIcons.js (zero raw OS emojis)', () => {
+  const specs = [
+    buildTokenMenuSpec({ role: 'gm', token: { id: 't1', isAlly: false, hidden: false } }),
+    buildTokenMenuSpec({ role: 'gm', token: { id: 't2', isAlly: true, hidden: true } }),
+    buildMultiTokenMenuSpec({ role: 'gm', tokens: [{ id: 't1', hidden: false }, { id: 't2', hidden: false }] }),
+    buildMapMenuSpec({ role: 'gm', dynamicLighting: true }),
+    buildMapMenuSpec({ role: 'player', hasOwnedToken: true }),
+    buildWallMenuSpec([{ id: 'w1', kind: 'door', open: false, locked: true }]),
+    buildWallMenuSpec([{ id: 'w2', kind: 'wall', open: false }]),
+    buildDiceDieMenuSpec(20, { modifier: 2 }),
+    buildDiceDieMenuSpec(2),
+    buildDiceDieMenuSpec('fudge'),
+    buildDiceDieMenuSpec('card'),
+    buildDiceBarMenuSpec({ hand: ['20'], modifier: 1, visibility: 'private', historyCount: 2 })
+  ];
+
+  for (const spec of specs) {
+    for (const section of spec.sections || []) {
+      for (const item of section) {
+        assert.equal(hasUiLineIcon(item.icon), true, `Item "${item.id}" must use a canonical uiIcons key, got "${item.icon}"`);
+        const svg = renderUiLineIcon(item.icon);
+        assert.ok(svg.includes('<svg') && svg.includes('fill="none"') && svg.includes('stroke="currentColor"'), `Icon "${item.icon}" must render a stroke SVG`);
+      }
+    }
+  }
+});
+
+test('all list context menus in compendiumView, sheetInventoryView, and sheetView use canonical uiIcons keys', () => {
+  const files = [
+    'js/ui/compendiumView.js',
+    'js/ui/sheetInventoryView.js',
+    'js/ui/sheetView.js'
+  ];
+  for (const rel of files) {
+    const src = fs.readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+    const matches = [...src.matchAll(/icon:\s*'([^']+)'/g)];
+    assert.ok(matches.length > 0, `${rel} must define at least one context menu icon`);
+    for (const m of matches) {
+      assert.equal(hasUiLineIcon(m[1]), true, `${rel} uses non-canonical icon "${m[1]}"`);
+    }
+  }
 });

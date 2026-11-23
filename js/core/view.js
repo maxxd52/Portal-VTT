@@ -4,6 +4,7 @@
 
 import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
 import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
+import { GmHostLock } from '../services/gmHostLock.js?v=20261123a7';
 import { TabletopAudio } from '../services/tabletopAudio.js?v=20261123a7';
 import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
 import { Selector } from './selector.js?v=20261123a7';
@@ -38,6 +39,7 @@ import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261123a
 import { TokenEditorViewMethods } from '../ui/tokenEditorView.js?v=20261123a7';
 import { TokenInspectViewMethods } from '../ui/tokenInspectView.js?v=20261123a7';
 import { TokenPhysicsViewMethods } from '../ui/tokenPhysicsView.js?v=20261123a7';
+import { buildSceneTransitionSignature } from '../utils/sceneTransitionModel.js?v=20261123a7';
 
 export const View = {
   els: {},
@@ -267,7 +269,49 @@ export const View = {
     BrowserVault.onSaveError = () => {
       this.showActionToast('Error al guardar en el navegador (espacio lleno o pestaña bloqueada). Exporta tu .portal.');
     };
+    BrowserVault.onSaveStateChange = (saving) => {
+      const badge = this.els?.vaultSaveBadge;
+      if (!badge) return;
+      clearTimeout(this._vaultBadgeTimer);
+      if (saving) {
+        this._vaultBadgeTimer = setTimeout(() => {
+          if (BrowserVault.hasPendingSaves()) badge.classList.remove('hidden');
+        }, 350);
+      } else {
+        badge.classList.add('hidden');
+      }
+    };
     Service.subscribe((state, opts) => this.render(state, opts));
+
+    const hasRoomParam = new URLSearchParams(window.location.search).has('room');
+    if (!hasRoomParam) {
+      Service.loadDiceStyle();
+      Service.loadUiScale();
+      Service.loadRailsSwapped();
+      const savedShelf = await BrowserVault.loadShelf();
+      if (savedShelf) Service.state.shelfModules = savedShelf;
+      this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
+      await this.showPortalLobby();
+      return;
+    }
+
+    if (Service.isHostNetwork()) {
+      const roomCode = Service.state.room.code;
+      const acquired = await GmHostLock.acquire(roomCode);
+      if (!acquired) {
+        Service.state.isHostGm = false;
+        Service.state.role = 'player';
+        this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
+        await this.showPortalLobby();
+        if (this.els.inpJoinPortalCode) this.els.inpJoinPortalCode.value = roomCode;
+        if (this.els.selJoinPortalRole) this.els.selJoinPortalRole.value = 'player';
+        this.showActionToast(
+          `El portal ${roomCode} ya está abierto como GM en otra pestaña. Ciérrala o únete como Jugador/Espectador.`
+        );
+        return;
+      }
+    }
+
     await Service.restoreFromVault();
 
     if (Service.isHostNetwork() && Service.state.mapId === 'custom' && Service.state.customMapSourceUrl) {
@@ -282,11 +326,6 @@ export const View = {
     this.startPresenceHeartbeat();
 
     this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
-
-    const hasRoomParam = new URLSearchParams(window.location.search).has('room');
-    if (!hasRoomParam) {
-      await this.showPortalLobby();
-    }
   },
 
   startPresenceHeartbeat() {
@@ -331,6 +370,13 @@ export const View = {
     this._presenceTimer = setInterval(sendPing, 10000);
     if (!this._presenceUnloadBound) {
       this._presenceUnloadBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') BrowserVault.flushPendingSaves();
+      });
+      window.addEventListener('pagehide', () => {
+        BrowserVault.flushPendingSaves();
+        GmHostLock.release();
+      });
       window.addEventListener('beforeunload', (e) => {
         RealtimeBridge.send({ kind: 'PRESENCE_BYE', clientId: Service.clientId, leaving: true });
         BrowserVault.flushPendingSaves();
@@ -344,12 +390,14 @@ export const View = {
 
   handleRealtimeMessage(msg) {
     if (!msg) return;
+    const netIsGm = Service.isHostNetwork();
     const selfSeat = Service.getSelfSeatKey();
     if (msg.targetSeatKey && msg.targetSeatKey !== selfSeat) return;
-    if (msg.spectatorOnly && Service.state.role === 'player' && Service.state.activeInviteId) return;
-    if (msg.hostOnly && Service.state.role !== 'gm') return;
+    if (msg.spectatorOnly && (netIsGm || (Service.state.role === 'player' && Service.state.activeInviteId))) return;
+    if (msg.hostOnly && !netIsGm) return;
 
     if (msg.kind === 'WORLD_SYNC' && msg.world) {
+      if (netIsGm) return;
       Service.applyFullWorldState(msg.world, true);
     } else if (msg.kind === 'PLAYER_TOKENS_SYNC') {
       Service.applyPlayerTokensSync(msg);
@@ -386,7 +434,7 @@ export const View = {
     } else if (msg.kind === 'CHAT_MESSAGE' && msg.message) {
       Service.receiveChatMessage(msg.message);
     } else if (msg.kind === 'PUBLIC_CLOCKS_SYNC' && Array.isArray(msg.publicClocks)) {
-      if (Service.state.role !== 'gm') {
+      if (!netIsGm) {
         Service.state.publicClocks = msg.publicClocks;
         Service.notify({ skipVaultSave: true });
       }
@@ -731,13 +779,17 @@ export const View = {
     this.bindJournalShareEvents?.();
     this.bindJournalPresentationEvents?.();
     this.bindMapGridEditorEvents();
+    Service.onBeforeSceneChange = (nextStatePreview) => this.beginSceneDarken?.(nextStatePreview);
   },
 
   applyWorldCameraTransform(state) {
     if (!this.els?.worldLayer || !state?.camera) return;
     const sx = this._cameraShakeOffset?.x || 0;
     const sy = this._cameraShakeOffset?.y || 0;
-    this.els.worldLayer.style.transform = `translate(${state.camera.x + sx}px, ${state.camera.y + sy}px) scale(${state.camera.zoom})`;
+    const dpr = Math.max(1, (typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1);
+    const tx = Math.round((state.camera.x + sx) * dpr) / dpr;
+    const ty = Math.round((state.camera.y + sy) * dpr) / dpr;
+    this.els.worldLayer.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${state.camera.zoom})`;
   },
 
   /* --------------------------------------------------------------------
@@ -773,21 +825,38 @@ export const View = {
     if (opts.clearExplored) this.clearExploredMemory();
     else if (opts.syncExplored || shouldRedrawFog) this.syncExploredMemoryFromState(state);
     if (opts.redrawMap) this.drawMapCanvas(state);
-    this.syncSceneAtmosphere?.(state);
-    this.drawWallShadowCanvas?.(state);
-    if (opts.redrawGrid) this.drawGridCanvas(state);
-    if (opts.redrawDraw) this.drawStrokesCanvas(state);
-    if (shouldRedrawFog) this.drawFogCanvas(state);
+
+    const sceneSig = buildSceneTransitionSignature(state);
+    const isSceneTransition = sceneSig !== this._lastSceneTransitionSig || this._pendingTransitionSeq > 0;
+    if (isSceneTransition) {
+      const isInitialLoad = !this._lastSceneTransitionSig;
+      this._lastSceneTransitionSig = sceneSig;
+      this.triggerSceneTransition?.(state, { isInitialLoad });
+      if (opts.redrawDraw) this.drawStrokesCanvas(state);
+    } else {
+      this.syncSceneAtmosphere?.(state);
+      this.drawWallShadowCanvas?.(state);
+      if (opts.redrawGrid) this.drawGridCanvas(state);
+      if (opts.redrawDraw) this.drawStrokesCanvas(state);
+      if (shouldRedrawFog) this.drawFogCanvas(state);
+    }
 
     this.renderHudControls(state);
     this.renderCombatTracker(state);
     this.renderTokensLayer(state);
     this.renderMapNotes(state);
     this.renderVectorOverlay(state);
-    this.renderCharacterSheet(state);
-    this.renderCompendium(state);
-    this.renderGmScreen(state);
-    this.renderJournal?.(state);
+    const prevDrawers = this._prevDrawerOpenState || { sheet: true, drawer: true, gmScreen: true, journal: true };
+    if (state.sheetOpen || prevDrawers.sheet) this.renderCharacterSheet(state);
+    if (state.drawerOpen || prevDrawers.drawer) this.renderCompendium(state);
+    if (state.gmScreenOpen || prevDrawers.gmScreen) this.renderGmScreen(state);
+    if (state.journalOpen || prevDrawers.journal) this.renderJournal?.(state);
+    this._prevDrawerOpenState = {
+      sheet: Boolean(state.sheetOpen),
+      drawer: Boolean(state.drawerOpen),
+      gmScreen: Boolean(state.gmScreenOpen),
+      journal: Boolean(state.journalOpen)
+    };
     this.renderPublicClocksBar(state);
     this.renderDiceReadout(state);
     this.renderSequenceUI(state);

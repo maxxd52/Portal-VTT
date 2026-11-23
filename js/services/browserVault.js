@@ -6,6 +6,8 @@ export const BrowserVault = {
   dbName: 'PortalVaultDB',
   storeName: 'rooms',
   onSaveError: null,
+  onSaveStateChange: null,
+  _lastSavingState: false,
   _saveQueue: new Map(),
 
   async requestPersistentStorage() {
@@ -21,6 +23,17 @@ export const BrowserVault = {
     if (typeof this.onSaveError === 'function') {
       try {
         this.onSaveError(err, roomCode);
+      } catch (_) {}
+    }
+  },
+
+  _notifySaveState() {
+    const saving = this.hasPendingSaves();
+    if (saving === this._lastSavingState) return;
+    this._lastSavingState = saving;
+    if (typeof this.onSaveStateChange === 'function') {
+      try {
+        this.onSaveStateChange(saving);
       } catch (_) {}
     }
   },
@@ -61,6 +74,7 @@ export const BrowserVault = {
         if (entry.timer) clearTimeout(entry.timer);
         entry.timer = setTimeout(kick, Math.max(0, Number(delayMs) || 0));
       }
+      this._notifySaveState();
     });
   },
 
@@ -86,6 +100,7 @@ export const BrowserVault = {
       if (!entry.timer && !entry.pending && entry.waiters.length === 0) {
         this._saveQueue.delete(code);
       }
+      this._notifySaveState();
     }
   },
 
