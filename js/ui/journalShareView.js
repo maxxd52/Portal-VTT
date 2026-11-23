@@ -2,8 +2,8 @@
    JOURNAL SHARE VIEW: MODAL CENTRAL ANTI-SPOILER CON VISTA PREVIA EN VIVO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 export const JournalShareViewMethods = {
   journalShareNoteId: '',

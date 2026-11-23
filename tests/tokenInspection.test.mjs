@@ -21,10 +21,10 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261121a6');
-const { Service } = await import('../js/core/service.js?v=20261121a6');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261121a6');
-const { resolveTokenDoubleClickAction } = await import('../js/utils/worldRedaction.js?v=20261121a6');
+const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { resolveTokenDoubleClickAction } = await import('../js/utils/worldRedaction.js?v=20261123a7');
 
 test('S4: saveCustomActor and spawnActorFromTemplate preserve publicDescription and dual-layer token notes enforce permissions', async () => {
   const origSend = RealtimeBridge.send;
@@ -49,7 +49,13 @@ test('S4: saveCustomActor and spawnActorFromTemplate preserve publicDescription 
     assert.equal(savedTpl.publicDescription, 'Armadura bruñida con el emblema del león dorado.');
     assert.ok(savedTpl.mediaId);
 
+    Service.state.sheetOpen = false;
+    Service.state.gmScreenOpen = true;
     const spawned = await Service.spawnActorFromTemplate(savedTpl, 500, 500);
+    assert.equal(Service.state.selectedTokenId, spawned.id);
+    assert.deepEqual(Service.state.selectedTokenIds, [spawned.id]);
+    assert.equal(Service.state.sheetOpen, false, 'Spawning a token must not auto-open character sheet');
+    assert.equal(Service.state.gmScreenOpen, true, 'Spawning a token must not close an open GM screen');
     assert.equal(spawned.publicDescription, 'Armadura bruñida con el emblema del león dorado.');
     assert.equal(spawned.privateNotes, '');
 
@@ -134,3 +140,31 @@ test('S4: index.html includes public/private description fields and clean Inspec
   assert.ok(html.includes('id="btnInspectSaveToJournal"'));
   assert.ok(html.includes('Guardar en Diario'));
 });
+
+test('S5: compendium and GM screen actor thumbnails disable native image drag and board drop prioritizes dragSpec over files', () => {
+  const compSrc = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'js/ui/compendiumView.js'), 'utf8');
+  const gmSrc = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'js/ui/gmScreenView.js'), 'utf8');
+  const boardSrc = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'js/ui/boardView.js'), 'utf8');
+
+  assert.ok(
+    compSrc.includes('draggable="false"') && compSrc.includes('pointer-events-none'),
+    'compendiumView actor thumbnail img must disable native image dragging'
+  );
+  assert.ok(
+    gmSrc.includes('draggable="false"') && gmSrc.includes('pointer-events-none'),
+    'gmScreenView actor thumbnail img must disable native image dragging'
+  );
+
+  const dropHandlerIdx = boardSrc.indexOf("window.addEventListener('drop'");
+  const dragSpecIdx = boardSrc.indexOf("dragSpec.startsWith('actor:')", dropHandlerIdx);
+  const imageFileIdx = boardSrc.indexOf("file.type.startsWith('image/')", dropHandlerIdx);
+  assert.ok(
+    dragSpecIdx > dropHandlerIdx && imageFileIdx > dragSpecIdx,
+    'boardView drop handler must evaluate compendium dragSpec before falling back to external image file drop'
+  );
+  assert.ok(
+    boardSrc.includes('this._isInternalDrag = true') && boardSrc.includes('if (this._isInternalDrag)'),
+    'boardView must track internal dragstart and suppress dropModuleOverlay during internal compendium drags'
+  );
+});
+

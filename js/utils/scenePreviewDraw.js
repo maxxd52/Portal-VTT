@@ -2,9 +2,9 @@
    SCENE PREVIEW DRAW: RENDER VISUAL DE GRILLA, TOKEN DE PRUEBA Y LUZ EN PREVIEW
    ========================================================================== */
 
-import { fillFogMist } from './fogShader.js?v=20261121a6';
-import { drawGridOverlay, normalizeGridConfig } from './gridGeometry.js?v=20261121a6';
-import { formatDistance, metersToPixels } from './lightingModel.js?v=20261121a6';
+import { fillFogMist } from './fogShader.js?v=20261123a7';
+import { drawGridOverlay, normalizeGridConfig } from './gridGeometry.js?v=20261123a7';
+import { formatDistance, metersToPixels } from './lightingModel.js?v=20261123a7';
 
 function drawWorldWalls(ctx, walls, invZoom) {
   for (const w of walls || []) {

@@ -2,35 +2,46 @@
    SERVICE: LÓGICA DE NEGOCIO, MUTACIONES Y SINCRONIZACIÓN
    ========================================================================== */
 
-import { buildPresetWallsForMap } from '../data/compendium.js?v=20261121a6';
-import { BrowserVault } from '../services/browserVault.js?v=20261121a6';
-import { ChatServiceMethods } from '../services/chatService.js?v=20261121a6';
-import { CombatServiceMethods } from '../services/combatService.js?v=20261121a6';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261121a6';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261121a6';
-import { GmScreenServiceMethods } from '../services/gmScreenService.js?v=20261121a6';
-import { JournalRevealServiceMethods } from '../services/journalRevealService.js?v=20261121a6';
-import { JournalServiceMethods } from '../services/journalService.js?v=20261121a6';
-import { MediaRegistryServiceMethods } from '../services/mediaRegistryService.js?v=20261121a6';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261121a6';
-import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261121a6';
-import { SystemServiceMethods } from '../services/systemService.js?v=20261121a6';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261121a6';
+import { buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
+import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
+import { ChatServiceMethods } from '../services/chatService.js?v=20261123a7';
+import { CombatServiceMethods } from '../services/combatService.js?v=20261123a7';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261123a7';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261123a7';
+import { GmScreenServiceMethods } from '../services/gmScreenService.js?v=20261123a7';
+import { JournalRevealServiceMethods } from '../services/journalRevealService.js?v=20261123a7';
+import { JournalServiceMethods } from '../services/journalService.js?v=20261123a7';
+import { MediaRegistryServiceMethods } from '../services/mediaRegistryService.js?v=20261123a7';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
+import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261123a7';
+import { SystemServiceMethods } from '../services/systemService.js?v=20261123a7';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261123a7';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
+import { computeAdaptiveMaxZoom } from '../utils/tabletopMaterial.js?v=20261123a7';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261123a7';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
+import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
 import {
   normalizeSceneLighting,
   normalizeVisionConfig,
   resolveTokenLightMeters
-} from '../utils/lightingModel.js?v=20261121a6';
-import { mergeAssignedTokensForScene } from '../utils/scenePartySync.js?v=20261121a6';
+} from '../utils/lightingModel.js?v=20261123a7';
+import { mergeAssignedTokensForScene } from '../utils/scenePartySync.js?v=20261123a7';
+import {
+  clampTokenSize,
+  syncLinkedProtagonistsToActorsInState
+} from '../utils/tokenTemplateSync.js?v=20261123a7';
+import {
+  cloneWallsAtPoint,
+  normalizeWallKind
+} from '../utils/wallGeometry.js?v=20261123a7';
 import {
   getSeatAllowedTokenIds,
   mergeRedactedTokensPreservingGmPrivate,
   normalizeMediaAssets
-} from '../utils/worldRedaction.js?v=20261121a6';
-import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261121a6';
-import { Selector } from './selector.js?v=20261121a6';
+} from '../utils/worldRedaction.js?v=20261123a7';
+import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261123a7';
+import { Selector } from './selector.js?v=20261123a7';
 
 const PROFILE_STORAGE_KEY = 'portal_vtt_user_profile_v1';
 const UI_SCALE_STORAGE_KEY = 'portal_vtt_ui_scale_v1';
@@ -332,19 +343,24 @@ export const Service = {
     }
   },
 
+  isHostNetwork() {
+    return Boolean(this.state && (this.state.isHostGm || this.state.role === 'gm'));
+  },
+
   getActivePeers() {
     this.pruneStalePeers();
-    const selfInviteId = this.state.activeInviteId || '';
+    const netIsGm = this.isHostNetwork();
+    const selfInviteId = netIsGm ? '' : (this.state.activeInviteId || '');
     const selfPrimary = selfInviteId && this.playerPrimaryTokens instanceof Map
       ? (this.playerPrimaryTokens.get(selfInviteId) || '')
       : '';
     return [
       {
         clientId: this.clientId,
-        role: this.state.role || 'gm',
+        role: netIsGm ? 'gm' : 'player',
         inviteId: selfInviteId,
         primaryTokenId: selfPrimary,
-        profile: this.state.role === 'gm' ? this.getLocalProfile() : null,
+        profile: netIsGm ? this.getLocalProfile() : null,
         self: true
       },
       ...Array.from(this.peers.values())
@@ -374,13 +390,28 @@ export const Service = {
     this.listeners.push(fn);
   },
 
+  _applyAuthoritativeGlideTargetsToWorld(world) {
+    if (!world || !Array.isArray(world.tokens) || !(this.tokenGlides instanceof Map) || this.tokenGlides.size === 0) {
+      return world;
+    }
+    for (const tok of world.tokens) {
+      if (!tok || !tok.id) continue;
+      const glide = this.tokenGlides.get(tok.id);
+      if (glide && Number.isFinite(glide.targetX) && Number.isFinite(glide.targetY)) {
+        tok.x = glide.targetX;
+        tok.y = glide.targetY;
+      }
+    }
+    return world;
+  },
+
   syncWorldToPeers(targetSeatKey = null) {
-    if (this.state.role !== 'gm') return;
+    if (!this.isHostNetwork()) return;
     if (targetSeatKey && targetSeatKey !== 'gm') {
       RealtimeBridge.send({
         kind: 'WORLD_SYNC',
         targetSeatKey,
-        world: Selector.extractWorldForSeat(this.state, targetSeatKey)
+        world: this._applyAuthoritativeGlideTargetsToWorld(Selector.extractWorldForSeat(this.state, targetSeatKey))
       });
       return;
     }
@@ -400,18 +431,18 @@ export const Service = {
       RealtimeBridge.send({
         kind: 'WORLD_SYNC',
         targetSeatKey: seat,
-        world: Selector.extractWorldForSeat(this.state, seat)
+        world: this._applyAuthoritativeGlideTargetsToWorld(Selector.extractWorldForSeat(this.state, seat))
       });
     }
     RealtimeBridge.send({
       kind: 'WORLD_SYNC',
       spectatorOnly: true,
-      world: Selector.extractSerializableWorld(this.state)
+      world: this._applyAuthoritativeGlideTargetsToWorld(Selector.extractSerializableWorld(this.state))
     });
   },
 
   syncPlayerOwnedTokensToHost() {
-    if (this.state.role !== 'player') return;
+    if (this.isHostNetwork() || this.state.role !== 'player') return;
     const seatKey = this.getSelfSeatKey();
     const owned = (this.state.tokens || []).filter((t) => this.canControlToken(t));
     RealtimeBridge.send({
@@ -425,7 +456,7 @@ export const Service = {
   },
 
   applyPlayerTokensSync(msg) {
-    if (this.state.role !== 'gm' || !msg || !Array.isArray(msg.tokens)) return false;
+    if (!this.isHostNetwork() || !msg || !Array.isArray(msg.tokens)) return false;
     const seatKey = String(msg.seatKey || msg.inviteId || '');
     const allowedIds = new Set(getSeatAllowedTokenIds(this.state, seatKey));
     if (allowedIds.size === 0) return false;
@@ -436,35 +467,50 @@ export const Service = {
       if (!incoming || !incoming.id || !allowedIds.has(incoming.id)) continue;
       const target = byId.get(incoming.id);
       if (!target || incoming._redacted) continue;
-      const safeImage = incoming.imageUrl !== undefined ? (DriveUrlHelper.toDirectImageUrl(incoming.imageUrl) || String(incoming.imageUrl || '').trim()) : target.imageUrl;
-      const mediaId = safeImage ? this.registerMediaAsset(safeImage, { label: incoming.name || target.name, kind: 'token' }) : '';
-      Object.assign(target, {
-        name: incoming.name !== undefined ? String(incoming.name || target.name).trim() || target.name : target.name,
-        role: incoming.role !== undefined ? String(incoming.role || '') : target.role,
-        color: incoming.color !== undefined ? String(incoming.color || target.color) : target.color,
-        imageUrl: safeImage,
-        mediaId,
-        publicDescription: incoming.publicDescription !== undefined ? String(incoming.publicDescription || '') : (target.publicDescription || ''),
-        privateNotes: incoming.privateNotes !== undefined ? String(incoming.privateNotes || '') : (target.privateNotes || ''),
-        hp: incoming.hp !== undefined ? Math.max(0, Number(incoming.hp) || 0) : target.hp,
-        maxHp: incoming.maxHp !== undefined ? Math.max(1, Number(incoming.maxHp) || 1) : target.maxHp,
-        ac: incoming.ac !== undefined ? Math.max(1, Number(incoming.ac) || 10) : target.ac,
-        level: incoming.level !== undefined ? Math.max(1, Math.min(20, Number(incoming.level) || 1)) : target.level,
-        speed: incoming.speed !== undefined ? String(incoming.speed || '30 ft') : target.speed,
-        stats: incoming.stats && typeof incoming.stats === 'object' ? incoming.stats : target.stats,
-        scores: incoming.scores !== undefined ? incoming.scores : target.scores,
-        saveProfs: incoming.saveProfs && typeof incoming.saveProfs === 'object' ? incoming.saveProfs : target.saveProfs,
-        skills: Array.isArray(incoming.skills) ? incoming.skills : target.skills,
-        traits: Array.isArray(incoming.traits) ? incoming.traits : target.traits,
-        resources: Array.isArray(incoming.resources) ? incoming.resources : target.resources,
-        inventory: Array.isArray(incoming.inventory) ? incoming.inventory : target.inventory,
-        texts: incoming.texts && typeof incoming.texts === 'object' ? incoming.texts : target.texts,
-        conditions: Array.isArray(incoming.conditions) ? incoming.conditions : target.conditions,
-        auraRadius: incoming.auraRadius !== undefined ? Number(incoming.auraRadius) || 0 : target.auraRadius,
-        visionMeters: incoming.visionMeters !== undefined ? incoming.visionMeters : target.visionMeters,
-        lightMeters: incoming.lightMeters !== undefined ? Math.max(0, Number(incoming.lightMeters) || 0) : target.lightMeters,
-        hpPips: Array.isArray(incoming.hpPips) ? incoming.hpPips : target.hpPips
-      });
+      const nextPatch = {};
+      if (incoming.name !== undefined) nextPatch.name = String(incoming.name || target.name).trim() || target.name;
+      if (incoming.role !== undefined) nextPatch.role = String(incoming.role || '');
+      if (incoming.color !== undefined) nextPatch.color = String(incoming.color || target.color);
+      if (incoming.imageUrl !== undefined) {
+        const safeImage = DriveUrlHelper.toDirectImageUrl(incoming.imageUrl) || String(incoming.imageUrl || '').trim();
+        nextPatch.imageUrl = safeImage;
+        nextPatch.mediaId = safeImage ? this.registerMediaAsset(safeImage, { label: nextPatch.name || target.name, kind: 'token' }) : '';
+      }
+      if (incoming.publicDescription !== undefined) nextPatch.publicDescription = String(incoming.publicDescription || '');
+      if (incoming.privateNotes !== undefined) nextPatch.privateNotes = String(incoming.privateNotes || '');
+      if (incoming.hp !== undefined) nextPatch.hp = Math.max(0, Number(incoming.hp) || 0);
+      if (incoming.maxHp !== undefined) nextPatch.maxHp = Math.max(1, Number(incoming.maxHp) || 1);
+      if (incoming.ac !== undefined) nextPatch.ac = Math.max(1, Number(incoming.ac) || 10);
+      if (incoming.level !== undefined) nextPatch.level = Math.max(1, Math.min(20, Number(incoming.level) || 1));
+      if (incoming.speed !== undefined) nextPatch.speed = String(incoming.speed || '30 ft');
+      if (incoming.stats && typeof incoming.stats === 'object') nextPatch.stats = incoming.stats;
+      if (incoming.scores !== undefined) nextPatch.scores = incoming.scores;
+      if (incoming.saveProfs && typeof incoming.saveProfs === 'object') nextPatch.saveProfs = incoming.saveProfs;
+      if (Array.isArray(incoming.skills)) nextPatch.skills = incoming.skills;
+      if (Array.isArray(incoming.traits)) nextPatch.traits = incoming.traits;
+      if (Array.isArray(incoming.resources)) nextPatch.resources = incoming.resources;
+      if (Array.isArray(incoming.inventory)) nextPatch.inventory = incoming.inventory;
+      if (incoming.texts && typeof incoming.texts === 'object') nextPatch.texts = incoming.texts;
+      if (Array.isArray(incoming.conditions)) nextPatch.conditions = incoming.conditions;
+      if (incoming.auraRadius !== undefined) nextPatch.auraRadius = Number(incoming.auraRadius) || 0;
+      if (incoming.size !== undefined) nextPatch.size = clampTokenSize(incoming.size, target.size || 1);
+      if (incoming.visionMeters !== undefined) nextPatch.visionMeters = incoming.visionMeters;
+      if (incoming.lightMeters !== undefined) nextPatch.lightMeters = Math.max(0, Number(incoming.lightMeters) || 0);
+      if (Array.isArray(incoming.hpPips)) nextPatch.hpPips = incoming.hpPips;
+
+      let tokenChanged = false;
+      for (const [k, v] of Object.entries(nextPatch)) {
+        const prevVal = target[k];
+        const equal =
+          prevVal === v ||
+          (typeof prevVal === 'object' && typeof v === 'object' && JSON.stringify(prevVal) === JSON.stringify(v));
+        if (!equal) {
+          tokenChanged = true;
+          break;
+        }
+      }
+      if (!tokenChanged) continue;
+      Object.assign(target, nextPatch);
       changed = true;
     }
 
@@ -475,12 +521,16 @@ export const Service = {
   },
 
   notify(opts = {}) {
-    if (!opts.skipVaultSave && this.state.role === 'gm') {
-      BrowserVault.saveRoom(
-        this.state.room.code,
-        Selector.extractSerializableWorld(this.state, { includePrivateGm: true })
+    const netHost = this.isHostNetwork();
+    if (!opts.skipVaultSave && netHost) {
+      syncLinkedProtagonistsToActorsInState(this.state);
+      const roomCode = this.state.room.code;
+      BrowserVault.scheduleRoomSave(
+        roomCode,
+        () => Selector.extractSerializableWorld(this.state, { includePrivateGm: true }),
+        { immediate: Boolean(opts.flushVault || opts.redrawMap) }
       );
-    } else if (!opts.skipVaultSave && !opts.skipPeerSync && this.state.role === 'player') {
+    } else if (!opts.skipVaultSave && !opts.skipPeerSync && !netHost && this.state.role === 'player') {
       this.syncPlayerOwnedTokensToHost();
     }
     this.listeners.forEach((fn) => fn(this.state, opts));
@@ -496,7 +546,7 @@ export const Service = {
     if (this.state.events.length > 200) {
       this.state.events.shift();
     }
-    if (broadcast && this.state.role === 'gm') {
+    if (broadcast && this.isHostNetwork()) {
       this.syncWorldToPeers();
     }
   },
@@ -680,6 +730,8 @@ export const Service = {
     }
     if (world.mapId) this.state.mapId = world.mapId;
     if (world.activeMapKey) this.state.activeMapKey = world.activeMapKey;
+    this.state.sceneMode = world.sceneMode === 'narrative' ? 'narrative' : 'tactical';
+    this.state.sceneWeather = normalizeWeatherType(world.sceneWeather);
     if (world.mapGrids && typeof world.mapGrids === 'object') this.state.mapGrids = world.mapGrids;
     if (typeof world.dynamicLighting === 'boolean') this.state.dynamicLighting = world.dynamicLighting;
     if (typeof world.rememberExplored === 'boolean') {
@@ -691,6 +743,7 @@ export const Service = {
     this.state.exploredRev = Math.max(0, Math.trunc(Number(world.exploredRev) || 0));
     if (Array.isArray(world.walls)) this.state.walls = world.walls;
     this.state.customMapUrl = world.customMapUrl || '';
+    this.state.customMapSourceUrl = typeof world.customMapSourceUrl === 'string' ? world.customMapSourceUrl : '';
     if (this.state.customMapUrl) {
       this.loadExternalMapImage(this.state.customMapUrl);
     } else {
@@ -709,9 +762,38 @@ export const Service = {
       };
     }
     if (Array.isArray(world.tokens)) {
-      this.state.tokens = this.state.role === 'gm'
+      const prevById = new Map((this.state.tokens || []).filter(Boolean).map((t) => [t.id, t]));
+      const mergedTokens = this.isHostNetwork()
         ? mergeRedactedTokensPreservingGmPrivate(this.state.tokens, world.tokens)
-        : world.tokens;
+        : world.tokens.map((t) => (t ? { ...t } : t));
+      if (!this.isHostNetwork()) {
+        const now = Date.now();
+        for (const tok of mergedTokens) {
+          if (!tok || !tok.id) continue;
+          const prev = prevById.get(tok.id);
+          if (prev && this.activeDragTokenId && tok.id === this.activeDragTokenId) {
+            tok.x = prev.x;
+            tok.y = prev.y;
+            continue;
+          }
+          const recent = this._recentLocalMoves instanceof Map ? this._recentLocalMoves.get(tok.id) : null;
+          if (recent) {
+            if (now - recent.at > 1500) {
+              this._recentLocalMoves.delete(tok.id);
+            } else {
+              const distToFrom = Math.hypot((Number(tok.x) || 0) - recent.fromX, (Number(tok.y) || 0) - recent.fromY);
+              const distToTo = Math.hypot((Number(tok.x) || 0) - recent.toX, (Number(tok.y) || 0) - recent.toY);
+              if (distToTo <= 2) {
+                this._recentLocalMoves.delete(tok.id);
+              } else if (distToFrom <= 18 || distToFrom < distToTo) {
+                tok.x = recent.toX;
+                tok.y = recent.toY;
+              }
+            }
+          }
+        }
+      }
+      this.state.tokens = mergedTokens;
     }
     if (Array.isArray(world.playerInvites)) this.state.playerInvites = world.playerInvites;
     if (Array.isArray(world.strokes)) this.state.strokes = world.strokes;
@@ -841,14 +923,76 @@ export const Service = {
 
   loadExternalMapImage(url) {
     const direct = DriveUrlHelper.toDirectImageUrl(url);
-    if (!direct) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      this.loadedMapImage = img;
-      this.notify({ redrawMap: true });
+    if (!direct || typeof Image === 'undefined') return;
+    const isInline = direct.startsWith('data:') || direct.startsWith('blob:');
+    const loadOnce = (useCors) => {
+      const img = new Image();
+      if (useCors) img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        this.loadedMapImage = img;
+        this.notify({ redrawMap: true, skipVaultSave: true, skipPeerSync: true });
+      };
+      img.onerror = () => {
+        if (useCors) loadOnce(false);
+      };
+      img.src = direct;
     };
-    img.src = direct;
+    loadOnce(!isInline);
+  },
+
+  async applyExternalMapUrl(rawUrl, { sceneKey = '', converter = WebPConverter } = {}) {
+    const direct = DriveUrlHelper.toDirectImageUrl(rawUrl);
+    if (!direct) return { cached: false, url: '', sourceUrl: '' };
+
+    const isInline = direct.startsWith('data:') || direct.startsWith('blob:');
+    if (isInline) {
+      this.state.customMapSourceUrl = '';
+      this.loadExternalMapImage(direct);
+      await this.changeMap('custom', direct, sceneKey);
+      return { cached: true, url: direct, sourceUrl: '' };
+    }
+
+    try {
+      const webpDataUrl = await converter.sourceToWebPDataUrl(direct, WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
+      this.state.customMapSourceUrl = direct;
+      this.loadExternalMapImage(webpDataUrl);
+      await this.changeMap('custom', webpDataUrl, sceneKey);
+      return { cached: true, url: webpDataUrl, sourceUrl: direct };
+    } catch (_) {
+      const hasExistingCache =
+        this.state.mapId === 'custom' &&
+        this.state.customMapSourceUrl === direct &&
+        typeof this.state.customMapUrl === 'string' &&
+        this.state.customMapUrl.startsWith('data:');
+      if (hasExistingCache) {
+        return { cached: true, preservedFallback: true, url: this.state.customMapUrl, sourceUrl: direct };
+      }
+      this.state.customMapSourceUrl = direct;
+      this.loadExternalMapImage(direct);
+      await this.changeMap('custom', direct, sceneKey);
+      return { cached: false, corsBlocked: true, url: direct, sourceUrl: direct };
+    }
+  },
+
+  async refreshExternalMapFromSource({ converter = WebPConverter } = {}) {
+    const sourceUrl = String(this.state?.customMapSourceUrl || '').trim();
+    if (this.state?.mapId !== 'custom' || !sourceUrl) {
+      return { updated: false, preservedCache: false };
+    }
+    const prevUrl = String(this.state.customMapUrl || '');
+    const hadCache = prevUrl.startsWith('data:');
+    try {
+      const freshWebp = await converter.sourceToWebPDataUrl(sourceUrl, WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
+      if (!freshWebp || freshWebp === prevUrl) {
+        return { updated: false, preservedCache: hadCache };
+      }
+      this.state.customMapUrl = freshWebp;
+      this.loadExternalMapImage(freshWebp);
+      this.notify({ redrawMap: true, flushVault: true });
+      return { updated: true, preservedCache: false };
+    } catch (_) {
+      return { updated: false, preservedCache: hadCache };
+    }
   },
 
   getActiveSceneKey() {
@@ -1065,6 +1209,25 @@ export const Service = {
     });
   },
 
+  setSceneWeather(weather, sceneKey = '') {
+    const next = normalizeWeatherType(weather);
+    const key = sceneKey || this.getActiveSceneKey();
+    if (!this.state.sceneWeathers || typeof this.state.sceneWeathers !== 'object') {
+      this.state.sceneWeathers = {};
+    }
+    if (key) {
+      this.state.sceneWeathers[key] = next;
+      const custom = (this.state.customMaps || []).find((m) => m.key === key);
+      if (custom) custom.weather = next;
+    }
+    const isActive = !sceneKey || sceneKey === this.getActiveSceneKey();
+    if (isActive) {
+      this.state.sceneWeather = next;
+    }
+    this.notify({ redrawMap: isActive });
+    return next;
+  },
+
   async changeMap(mapId, customUrl = '', sceneKey = '') {
     this.cancelAllTokenGlides();
     const prevTokens = Array.isArray(this.state.tokens) ? JSON.parse(JSON.stringify(this.state.tokens)) : [];
@@ -1083,6 +1246,7 @@ export const Service = {
       this.loadExternalMapImage(customUrl);
     } else {
       this.state.customMapUrl = '';
+      this.state.customMapSourceUrl = '';
       this.loadedMapImage = null;
       this.state.walls = savedLayers && Array.isArray(savedLayers.walls)
         ? savedLayers.walls.map((w) => ({ ...w }))
@@ -1095,6 +1259,14 @@ export const Service = {
         }))
       : [];
     const customMap = (this.state.customMaps || []).find((m) => m.key === nextKey);
+    const nextMode = customMap?.sceneMode === 'narrative' ? 'narrative' : 'tactical';
+    this.state.sceneMode = nextMode;
+    this.state.sceneWeather = normalizeWeatherType(this.state.sceneWeathers?.[nextKey] || customMap?.weather || 'none');
+    if (nextMode === 'narrative') {
+      this.state.tool = 'select';
+      this.state.ruler = null;
+      this.state.wallAnchor = null;
+    }
     const savedGrid = (this.state.mapGrids && this.state.mapGrids[nextKey]) || customMap?.grid || null;
     this.state.grid = normalizeGridConfig(savedGrid || {});
 
@@ -1150,10 +1322,11 @@ export const Service = {
       this.state.journalOpen = false;
       this.syncPlayerRoleState();
     } else {
+      this.state.activeInviteId = '';
       this.state.journalOpen = false;
       this.state.publicClocks = Selector.getPublicClocks(this.state);
     }
-    this.notify({ redrawFog: true });
+    this.notify({ redrawFog: true, skipVaultSave: true, skipPeerSync: true });
     return true;
   },
 
@@ -1196,8 +1369,10 @@ export const Service = {
 
   applyRemoteTokenMove(msg) {
     if (!msg || !msg.tokenId) return false;
+    if (msg.clientId && msg.clientId === this.clientId) return false;
     const tok = (this.state.tokens || []).find((t) => t.id === msg.tokenId);
     if (!tok) return false;
+    if (this._recentLocalMoves instanceof Map) this._recentLocalMoves.delete(tok.id);
     const rawX = Number(msg.x);
     const rawY = Number(msg.y);
     if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return false;
@@ -1243,7 +1418,7 @@ export const Service = {
     if (!raf || totalDist < 4) {
       tok.x = targetX;
       tok.y = targetY;
-      this.notify({ tokensOnly: true, redrawFog: true, skipVaultSave: this.state.role !== 'gm', skipPeerSync: true });
+      this.notify({ tokensOnly: true, redrawFog: true, skipVaultSave: !this.isHostNetwork(), skipPeerSync: true });
       return true;
     }
 
@@ -1270,7 +1445,7 @@ export const Service = {
         this.tokenGlides.delete(tok.id);
         liveTok.x = targetX;
         liveTok.y = targetY;
-        this.notify({ tokensOnly: true, redrawFog: affectsFog, skipVaultSave: this.state.role !== 'gm', skipPeerSync: true });
+        this.notify({ tokensOnly: true, redrawFog: affectsFog, skipVaultSave: !this.isHostNetwork(), skipPeerSync: true });
         return;
       }
       const eased = Selector.easeTokenGlide(rawT);
@@ -1293,9 +1468,202 @@ export const Service = {
   },
 
   setTool(tool) {
+    const prevTool = this.state.tool;
     this.state.tool = tool;
     this.state.wallAnchor = null;
-    this.notify();
+    if (tool !== 'wall') {
+      this.state.selectedWallIds = [];
+      this.state.wallSelectBox = null;
+    }
+    this.notify({ redrawFog: prevTool === 'wall' || tool === 'wall' });
+  },
+
+  setWallMode(mode) {
+    const clean = mode === 'select' ? 'select' : 'draw';
+    this.state.wallMode = clean;
+    this.state.wallAnchor = null;
+    this.state.wallSelectBox = null;
+    if (clean !== 'select') {
+      this.state.selectedWallIds = [];
+    }
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+  },
+
+  setWallDrawKind(kind = 'wall') {
+    const cleanKind = normalizeWallKind(kind);
+    this.state.wallDrawKind = cleanKind;
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return cleanKind;
+  },
+
+  applyWallKind(kind = 'wall') {
+    const cleanKind = normalizeWallKind(kind);
+    this.state.wallDrawKind = cleanKind;
+    const selIds = Array.isArray(this.state.selectedWallIds) ? this.state.selectedWallIds : [];
+    if (this.state.wallMode === 'select' && selIds.length > 0) {
+      const count = this.setWallsKind(selIds, cleanKind);
+      return { mode: 'transform', kind: cleanKind, count };
+    }
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return { mode: 'draw', kind: cleanKind, count: 0 };
+  },
+
+  deleteSelectedWalls() {
+    const selIds = Array.isArray(this.state.selectedWallIds) ? [...this.state.selectedWallIds] : [];
+    if (selIds.length === 0) return 0;
+    return this.removeWallsByIds(selIds);
+  },
+
+  copySelectedWalls(wallIds = null) {
+    const rawIds = Array.isArray(wallIds) ? wallIds : this.state.selectedWallIds;
+    const idSet = new Set(Array.isArray(rawIds) ? rawIds : []);
+    const picked = (this.state.walls || []).filter((w) => w && idSet.has(w.id));
+    if (picked.length === 0) return 0;
+    this._wallClipboard = picked.map((w) => ({ ...w }));
+    return this._wallClipboard.length;
+  },
+
+  pasteWallsAt(wx, wy) {
+    if (!this.isHostNetwork()) return [];
+    const clip = Array.isArray(this._wallClipboard) ? this._wallClipboard : [];
+    if (clip.length === 0) return [];
+    const cloned = cloneWallsAtPoint(clip, wx, wy);
+    if (cloned.length === 0) return [];
+    this.pushUndoSnapshot();
+    if (!Array.isArray(this.state.walls)) this.state.walls = [];
+    this.state.walls.push(...cloned);
+    this.state.selectedWallIds = cloned.map((w) => w.id);
+    this.recordEvent('MURO', cloned.length > 1 ? `${cloned.length} muros pegados` : 'Muro pegado');
+    this.notify({ redrawFog: true });
+    return cloned;
+  },
+
+  duplicateWalls(wallIds = null, offset = 40) {
+    if (!this.isHostNetwork()) return [];
+    const rawIds = Array.isArray(wallIds) ? wallIds : this.state.selectedWallIds;
+    const idSet = new Set(Array.isArray(rawIds) ? rawIds : []);
+    const picked = (this.state.walls || []).filter((w) => w && idSet.has(w.id));
+    if (picked.length === 0) return [];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const w of picked) {
+      minX = Math.min(minX, w.x1, w.x2);
+      maxX = Math.max(maxX, w.x1, w.x2);
+      minY = Math.min(minY, w.y1, w.y2);
+      maxY = Math.max(maxY, w.y1, w.y2);
+    }
+    const cx = (minX + maxX) / 2 + offset;
+    const cy = (minY + maxY) / 2 + offset;
+    this._wallClipboard = picked.map((w) => ({ ...w }));
+    return this.pasteWallsAt(cx, cy);
+  },
+
+  moveWallsByDelta(wallIds = [], dx = 0, dy = 0, { commit = true, skipUndo = false } = {}) {
+    if (!this.isHostNetwork() || !Array.isArray(this.state.walls)) return 0;
+    const idSet = new Set(Array.isArray(wallIds) ? wallIds : []);
+    const targets = this.state.walls.filter((w) => w && idSet.has(w.id));
+    if (targets.length === 0) return 0;
+    const rx = Math.round(Number(dx) || 0);
+    const ry = Math.round(Number(dy) || 0);
+    if (commit && !skipUndo) this.pushUndoSnapshot();
+    for (const w of targets) {
+      w.x1 = Math.max(0, Math.min(2400, Math.round((Number(w.x1) || 0) + rx)));
+      w.y1 = Math.max(0, Math.min(1600, Math.round((Number(w.y1) || 0) + ry)));
+      w.x2 = Math.max(0, Math.min(2400, Math.round((Number(w.x2) || 0) + rx)));
+      w.y2 = Math.max(0, Math.min(1600, Math.round((Number(w.y2) || 0) + ry)));
+    }
+    if (commit) {
+      this.recordEvent('MURO', targets.length > 1 ? `${targets.length} muros movidos` : 'Muro movido');
+      this.notify({ redrawFog: true });
+    }
+    return targets.length;
+  },
+
+  moveWallEndpoint(wallId, endKey, wx, wy, { commit = true, skipUndo = false } = {}) {
+    if (!this.isHostNetwork() || !Array.isArray(this.state.walls)) return null;
+    const w = this.state.walls.find((x) => x && x.id === wallId);
+    if (!w) return null;
+    const nx = Math.max(0, Math.min(2400, Math.round(Number(wx) || 0)));
+    const ny = Math.max(0, Math.min(1600, Math.round(Number(wy) || 0)));
+    if (commit && !skipUndo) this.pushUndoSnapshot();
+    if (endKey === 'start') {
+      w.x1 = nx;
+      w.y1 = ny;
+    } else {
+      w.x2 = nx;
+      w.y2 = ny;
+    }
+    if (commit) {
+      this.recordEvent('MURO', 'Vértice ajustado');
+      this.notify({ redrawFog: true });
+    }
+    return w;
+  },
+
+  setDrawColor(color = '#ef4444') {
+    const clean = String(color || '#ef4444').trim() || '#ef4444';
+    this.state.drawColor = clean;
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return clean;
+  },
+
+  clearStrokes() {
+    const count = Array.isArray(this.state.strokes) ? this.state.strokes.length : 0;
+    if (count === 0) return 0;
+    this.pushUndoSnapshot();
+    this.state.strokes = [];
+    this.recordEvent('TRAZO', 'Trazos limpiados');
+    this.notify({ redrawDraw: true });
+    return count;
+  },
+
+  setSelectedWallIds(ids = []) {
+    const validSet = new Set((this.state.walls || []).map((w) => w.id));
+    this.state.selectedWallIds = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => validSet.has(id)))];
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+  },
+
+  setWallsKind(wallIds = [], kind = 'wall') {
+    if (!Array.isArray(this.state.walls) || !Array.isArray(wallIds) || wallIds.length === 0) return 0;
+    const cleanKind = normalizeWallKind(kind);
+    const idSet = new Set(wallIds);
+    const targets = this.state.walls.filter((w) => w && idSet.has(w.id));
+    if (targets.length === 0) return 0;
+    this.pushUndoSnapshot();
+    const isDoor = cleanKind === 'door' || cleanKind === 'secret';
+    for (const w of targets) {
+      w.kind = cleanKind;
+      if (!isDoor) {
+        w.open = false;
+        w.locked = false;
+      }
+    }
+    const labels = {
+      wall: 'Muro sólido',
+      terrain: 'Pilar / terreno',
+      door: 'Puerta',
+      secret: 'Puerta secreta',
+      invisible: 'Invisible / Reja'
+    };
+    this.recordEvent('MURO', `${targets.length} → ${labels[cleanKind] || 'Muro'}`);
+    this.notify({ redrawFog: true });
+    return targets.length;
+  },
+
+  removeWallsByIds(wallIds = []) {
+    if (!Array.isArray(this.state.walls) || !Array.isArray(wallIds) || wallIds.length === 0) return 0;
+    const idSet = new Set(wallIds);
+    const before = this.state.walls.length;
+    const remaining = this.state.walls.filter((w) => !w || !idSet.has(w.id));
+    const removedCount = before - remaining.length;
+    if (removedCount === 0) return 0;
+    this.pushUndoSnapshot();
+    this.state.walls = remaining;
+    if (Array.isArray(this.state.selectedWallIds)) {
+      this.state.selectedWallIds = this.state.selectedWallIds.filter((id) => !idSet.has(id));
+    }
+    this.recordEvent('MURO', removedCount > 1 ? `${removedCount} muros eliminados` : 'Muro eliminado');
+    this.notify({ redrawFog: true });
+    return removedCount;
   },
 
   toggleDynamicLighting() {
@@ -1304,9 +1672,10 @@ export const Service = {
     this.updateSceneLighting(this.getActiveSceneKey(), { dynamicLighting: nextDyn }, { broadcast: true });
   },
 
-  addWallSegment(x1, y1, x2, y2, kind = 'wall') {
+  addWallSegment(x1, y1, x2, y2, kind = null) {
     if (Math.hypot(x2 - x1, y2 - y1) < 10) return;
-    const cleanKind = ['wall', 'terrain', 'door', 'secret'].includes(kind) ? kind : 'wall';
+    const rawKind = kind || this.state.wallDrawKind || 'wall';
+    const cleanKind = normalizeWallKind(rawKind);
     this.pushUndoSnapshot();
     this.state.walls.push({
       id: `wall-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
@@ -1321,7 +1690,8 @@ export const Service = {
       wall: 'Muro añadido',
       terrain: 'Pilar / terreno añadido',
       door: 'Puerta añadida',
-      secret: 'Puerta secreta añadida'
+      secret: 'Puerta secreta añadida',
+      invisible: 'Invisible / reja añadido'
     };
     this.recordEvent('MURO', labels[cleanKind] || 'Muro añadido');
     this.notify({ redrawFog: true });
@@ -1333,12 +1703,53 @@ export const Service = {
       (w) => w.id === wallId && (w.kind === 'door' || (isGm && w.kind === 'secret'))
     );
     if (!door) return null;
+    if (door.locked && !isGm) return null;
     this.pushUndoSnapshot();
-    door.open = !door.open;
+    if (door.locked && isGm) {
+      door.locked = false;
+      door.open = true;
+    } else {
+      door.open = !door.open;
+    }
     const prefix = door.kind === 'secret' ? 'PUERTA SECRETA' : 'PUERTA';
     this.recordEvent(prefix, door.open ? 'Abierta' : 'Cerrada');
     this.notify({ redrawFog: true });
     return door;
+  },
+
+  toggleDoorLocked(wallId) {
+    if (this.state.role !== 'gm') return null;
+    const door = (this.state.walls || []).find(
+      (w) => w.id === wallId && (w.kind === 'door' || w.kind === 'secret')
+    );
+    if (!door) return null;
+    this.pushUndoSnapshot();
+    door.locked = !door.locked;
+    if (door.locked) door.open = false;
+    const prefix = door.kind === 'secret' ? 'PUERTA SECRETA' : 'PUERTA';
+    this.recordEvent(prefix, door.locked ? 'Bloqueada' : 'Desbloqueada');
+    this.notify({ redrawFog: true });
+    return door;
+  },
+
+  toggleSelectedDoorsLocked(wallIds = null) {
+    if (this.state.role !== 'gm') return 0;
+    const rawIds = Array.isArray(wallIds) ? wallIds : this.state.selectedWallIds;
+    const idSet = new Set(Array.isArray(rawIds) ? rawIds : []);
+    const doors = (this.state.walls || []).filter(
+      (w) => w && idSet.has(w.id) && (w.kind === 'door' || w.kind === 'secret')
+    );
+    if (doors.length === 0) return 0;
+    this.pushUndoSnapshot();
+    const allLocked = doors.every((d) => Boolean(d.locked));
+    const nextLocked = !allLocked;
+    for (const d of doors) {
+      d.locked = nextLocked;
+      if (nextLocked) d.open = false;
+    }
+    this.recordEvent('PUERTA', `${doors.length} ${nextLocked ? 'bloqueadas' : 'desbloqueadas'}`);
+    this.notify({ redrawFog: true });
+    return nextLocked ? doors.length : -doors.length;
   },
 
   removeWallById(wallId) {
@@ -1369,13 +1780,24 @@ export const Service = {
     this.setTheme(this.state.theme === 'slate' ? 'parchment' : 'slate');
   },
 
+  getMaxCameraZoom() {
+    if (this.state?.mapId === 'custom') {
+      const img = this.loadedMapImage;
+      const iw = img?.naturalWidth || img?.width || 0;
+      const ih = img?.naturalHeight || img?.height || 0;
+      return computeAdaptiveMaxZoom(iw, ih, 2400, 1600);
+    }
+    return computeAdaptiveMaxZoom(0, 0, 2400, 1600);
+  },
+
   setZoom(nextZoom, anchorX = window.innerWidth / 2, anchorY = window.innerHeight / 2) {
-    const clamped = Math.min(2.2, Math.max(0.35, nextZoom));
+    const maxZoom = this.getMaxCameraZoom();
+    const clamped = Math.min(maxZoom, Math.max(0.35, nextZoom));
     const ratio = clamped / this.state.camera.zoom;
     this.state.camera.x = anchorX - (anchorX - this.state.camera.x) * ratio;
     this.state.camera.y = anchorY - (anchorY - this.state.camera.y) * ratio;
     this.state.camera.zoom = clamped;
-    this.notify();
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
   },
 
   addMapNote(x, y, title, body = '', gmOnly = false) {
@@ -1408,32 +1830,11 @@ export const Service = {
     this.notify();
   },
 
-  compressImageFile(file, maxDim = 1600, quality = 0.82) {
-    return new Promise((resolve, reject) => {
-      if (!file || !file.type.startsWith('image/')) {
-        reject(new Error('Archivo no es una imagen'));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-          const w = Math.max(1, Math.round(img.width * scale));
-          const h = Math.max(1, Math.round(img.height * scale));
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/webp', quality));
-        };
-        img.onerror = () => reject(new Error('No se pudo leer la imagen'));
-        img.src = reader.result;
-      };
-      reader.onerror = () => reject(new Error('Error leyendo archivo'));
-      reader.readAsDataURL(file);
-    });
+  compressImageFile(file, maxDim = WebPConverter.MAP_MAX_DIM, quality = WebPConverter.MAP_QUALITY) {
+    if (!file || !String(file.type || '').startsWith('image/')) {
+      return Promise.reject(new Error('Archivo no es una imagen'));
+    }
+    return WebPConverter.fileToWebPDataUrl(file, maxDim, quality);
   },
 
   triggerPing(wx, wy) {

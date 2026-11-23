@@ -2,10 +2,10 @@
    GM SCREEN SERVICE: ESTADO PRIVADO DEL NARRADOR, PINES Y HERRAMIENTAS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { createDefaultGmScreen, GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261121a6';
-import { BrowserVault } from './browserVault.js?v=20261121a6';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { createDefaultGmScreen, GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261123a7';
+import { BrowserVault } from './browserVault.js?v=20261123a7';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
 
 const makeGmId = (prefix) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;

@@ -2,9 +2,10 @@
    DICE VIEW: DOCK, HISTORIAL, OVERLAY 3D Y PERSONALIZACIÓN DE DADOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
+import { resolveDiceBarContextAction } from '../utils/contextMenuModel.js?v=20261123a7';
 
 export const DiceViewMethods = {
   bindDiceEvents() {
@@ -16,10 +17,17 @@ export const DiceViewMethods = {
       }
     });
     this.els.diceTrayBar.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       const dieBtn = e.target.closest('[data-die]');
-      if (dieBtn) {
-        e.preventDefault();
-        Service.removeDieFromHand(parseDieKey(dieBtn.dataset.die));
+      const dieKey = dieBtn ? parseDieKey(dieBtn.dataset.die) : null;
+      const action = resolveDiceBarContextAction(dieKey, Service.state.dice?.hand || []);
+      if (action.kind === 'remove-from-hand') {
+        Service.removeDieFromHand(action.die);
+      } else if (action.kind === 'die-menu') {
+        this.openDiceBarContextMenu?.(e.clientX, e.clientY, action.die);
+      } else {
+        this.openDiceBarContextMenu?.(e.clientX, e.clientY, null);
       }
     });
     const shuffleBtn = this.els.btnDiceShuffleDeck || document.getElementById('btnDiceShuffleDeck');
@@ -72,14 +80,31 @@ export const DiceViewMethods = {
         Service.clearActiveSequence();
       }
     });
+    this.els.dice3dOverlay?.addEventListener(
+      'wheel',
+      (e) => {
+        e.stopPropagation();
+      },
+      { passive: true }
+    );
 
     const applyDiceRollToSelected = (multiplier, isHeal) => {
-      const tokId = Service.state.selectedTokenId;
-      const tok = Service.state.tokens.find((t) => t.id === tokId);
       const base = Math.max(0, Number(this.currentRollTotal) || 0);
       const amount = Math.floor(base * multiplier);
-      if (!tok || amount <= 0) return;
-      Service.adjustTokenHp(tok.id, isHeal ? amount : -amount);
+      if (amount <= 0) return;
+      const delta = isHeal ? amount : -amount;
+      const selIds = Array.isArray(Service.state.selectedTokenIds) ? Service.state.selectedTokenIds : [];
+      if (selIds.length > 1) {
+        const count = Service.adjustTokensHp(selIds, delta);
+        if (count > 0) {
+          this.showActionToast(`${isHeal ? '+' : '−'}${amount} HP a ${count} fichas.`);
+        }
+        return;
+      }
+      const tokId = Service.state.selectedTokenId;
+      const tok = Service.state.tokens.find((t) => t.id === tokId);
+      if (!tok || !Service.canControlToken(tok)) return;
+      Service.adjustTokenHp(tok.id, delta);
       this.showActionToast(`${isHeal ? '+' : '−'}${amount} HP a ${tok.name} (${tok.hp}/${tok.maxHp}).`);
     };
     if (this.els.btnDiceApplyDmg) this.els.btnDiceApplyDmg.addEventListener('click', () => applyDiceRollToSelected(1, false));

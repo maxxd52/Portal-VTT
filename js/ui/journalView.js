@@ -2,8 +2,8 @@
    JOURNAL VIEW: DIARIO UNIFICADO ESTILO APPLE (LISTA, LECTURA Y BORRADOR)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 const ICON_EYE_SVG = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>';
 const ICON_EDIT_SVG = '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';

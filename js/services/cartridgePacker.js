@@ -2,8 +2,8 @@
    EMPAQUETADOR BINARIO .PORTAL (ZIP + WEBP)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261123a7';
 
 function bytesToBase64(bytes) {
   if (typeof Buffer !== 'undefined') {
@@ -23,20 +23,13 @@ export const CartridgePacker = {
     const zipTree = {};
     const strEnc = (txt) => new TextEncoder().encode(txt);
 
-    if (world.customMapUrl && (world.customMapUrl.startsWith('data:') || world.customMapUrl.startsWith('blob:'))) {
-      try {
-        const mapBytes = await WebPConverter.sourceToWebPBytes(world.customMapUrl, 1600, 0.8);
-        zipTree['assets/maps/map.webp'] = mapBytes;
-        world.customMapUrl = 'portal://assets/maps/map.webp';
-      } catch (_) {}
-    }
-
     const packedBySrc = new Map();
-    const packTokenImage = async (src, relPath, maxDim = 384) => {
+    const packImageAsset = async (src, relPath, maxDim = 384, quality = 0.86) => {
       if (!src || (!src.startsWith('data:') && !src.startsWith('blob:'))) return src;
       if (packedBySrc.has(src)) return packedBySrc.get(src);
       try {
-        const bytes = await WebPConverter.sourceToWebPBytes(src, maxDim, 0.86);
+        const directBytes = WebPConverter.dataUrlToWebPBytes(src);
+        const bytes = directBytes || (await WebPConverter.sourceToWebPBytes(src, maxDim, quality));
         zipTree[relPath] = bytes;
         const uri = `portal://${relPath}`;
         packedBySrc.set(src, uri);
@@ -46,18 +39,23 @@ export const CartridgePacker = {
       }
     };
 
+    if (world.customMapUrl) {
+      world.customMapUrl = await packImageAsset(world.customMapUrl, 'assets/maps/map.webp', WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
+    }
+
     if (world.mediaAssets && typeof world.mediaAssets === 'object') {
       for (const [id, asset] of Object.entries(world.mediaAssets)) {
         if (asset?.url) {
-          const maxDim = asset.kind === 'map' ? 1600 : asset.kind === 'handout' || asset.kind === 'journal' ? 1200 : 384;
-          asset.url = await packTokenImage(asset.url, `assets/media/${id}.webp`, maxDim);
+          const maxDim = asset.kind === 'map' ? WebPConverter.MAP_MAX_DIM : asset.kind === 'handout' || asset.kind === 'journal' ? 1600 : 384;
+          const q = asset.kind === 'map' ? WebPConverter.MAP_QUALITY : 0.86;
+          asset.url = await packImageAsset(asset.url, `assets/media/${id}.webp`, maxDim, q);
         }
       }
     }
 
     for (const tok of world.tokens) {
       if (tok.imageUrl) {
-        tok.imageUrl = await packTokenImage(tok.imageUrl, `assets/tokens/${tok.id}.webp`);
+        tok.imageUrl = await packImageAsset(tok.imageUrl, `assets/tokens/${tok.id}.webp`);
       }
     }
 
@@ -65,7 +63,7 @@ export const CartridgePacker = {
       for (let i = 0; i < world.customActors.length; i++) {
         const actor = world.customActors[i];
         if (actor?.imageUrl) {
-          actor.imageUrl = await packTokenImage(actor.imageUrl, `assets/actors/${i}.webp`);
+          actor.imageUrl = await packImageAsset(actor.imageUrl, `assets/actors/${i}.webp`);
         }
       }
     }
@@ -74,7 +72,7 @@ export const CartridgePacker = {
       for (let i = 0; i < world.customMaps.length; i++) {
         const map = world.customMaps[i];
         if (map?.imageUrl) {
-          map.imageUrl = await packTokenImage(map.imageUrl, `assets/maps/custom_${i}.webp`, 1600);
+          map.imageUrl = await packImageAsset(map.imageUrl, `assets/maps/custom_${i}.webp`, WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
         }
       }
     }
@@ -86,7 +84,7 @@ export const CartridgePacker = {
         for (let ti = 0; ti < layer.tokens.length; ti++) {
           const tok = layer.tokens[ti];
           if (tok?.imageUrl) {
-            tok.imageUrl = await packTokenImage(tok.imageUrl, `assets/scenes/${sceneIdx}_${ti}.webp`);
+            tok.imageUrl = await packImageAsset(tok.imageUrl, `assets/scenes/${sceneIdx}_${ti}.webp`);
           }
         }
         sceneIdx += 1;

@@ -297,9 +297,9 @@ test('UX Audit (Items 1, 2, 6, 7): GM Screen removes redundant settings gear & h
 });
 
 test('UX Audit (Items 3 & 4): GM Screen clocks, notes, and tables follow Law 1 (+/Editar toggle purple + local draft + Guardar)', async () => {
-  const { Service: TaggedService } = await import('../js/core/service.js?v=20261121a6');
-  const { GmScreenViewMethods } = await import('../js/ui/gmScreenView.js?v=20261121a6');
-  const { GmScreenWidgetsViewMethods } = await import('../js/ui/gmScreenWidgetsView.js?v=20261121a6');
+  const { Service: TaggedService } = await import('../js/core/service.js?v=20261123a7');
+  const { GmScreenViewMethods } = await import('../js/ui/gmScreenView.js?v=20261123a7');
+  const { GmScreenWidgetsViewMethods } = await import('../js/ui/gmScreenWidgetsView.js?v=20261123a7');
 
   TaggedService.state = createInitialState();
   TaggedService.state.role = 'gm';

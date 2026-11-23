@@ -2,9 +2,9 @@
    TOKEN SHADOW MODEL: PURE DUAL SHADOWS (CONTACT + WALL-OCCLUDED MAP LIGHTS)
    ========================================================================== */
 
-import { metersToPixels, resolveTokenLightMeters } from './lightingModel.js?v=20261121a6';
-import { DEFAULT_BOARD_SHADOW_DIR } from './sceneAtmosphere.js?v=20261121a6';
-import { computePickupShadow } from './tabletopPhysics.js?v=20261121a6';
+import { metersToPixels, resolveTokenLightMeters } from './lightingModel.js?v=20261123a7';
+import { DEFAULT_BOARD_SHADOW_DIR } from './sceneAtmosphere.js?v=20261123a7';
+import { computePickupShadow } from './tabletopPhysics.js?v=20261123a7';
 
 const FLYING_CONDITIONS = new Set(['flying', 'volando', 'levitate', 'levitating', 'airborne']);
 
@@ -34,7 +34,7 @@ export function hasWallOcclusion(x1, y1, x2, y2, walls) {
   let terrainHits = 0;
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
-    if (!w) continue;
+    if (!w || w.kind === 'invisible') continue;
     if ((w.kind === 'door' || w.kind === 'secret') && w.open) continue;
     if (segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) {
       if (w.kind === 'terrain') {

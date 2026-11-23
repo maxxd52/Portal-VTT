@@ -2,7 +2,7 @@
    TABLETOP MATERIAL: PROCEDURAL SURFACE GRAIN & INTEGRATED GRID INK (PURE)
    ========================================================================== */
 
-import { normalizeGridConfig } from './gridGeometry.js?v=20261121a6';
+import { normalizeGridConfig } from './gridGeometry.js?v=20261123a7';
 
 let _cachedGrainUrl = '';
 let _cachedGrainSize = 0;
@@ -148,7 +148,7 @@ export function collectWallShadowSegments(walls = []) {
   if (!Array.isArray(walls) || walls.length === 0) return [];
   const out = [];
   for (const w of walls) {
-    if (!w) continue;
+    if (!w || w.kind === 'invisible') continue;
     if ((w.kind === 'door' || w.kind === 'secret') && w.open) continue;
     // Closed secret doors cast full wall shadows so players cannot spot them by shadow width
     const isDoor = w.kind === 'door';
@@ -174,7 +174,7 @@ export function buildWallShadowCacheKey(walls = [], ambientDir = null, enabled =
   const bx = bounds ? `${Math.round(bounds.x)},${Math.round(bounds.y)},${Math.round(bounds.width)},${Math.round(bounds.height)}` : '0,0,2400,1600';
   const parts = [`on|${dx},${dy}|${bx}`];
   for (const w of Array.isArray(walls) ? walls : []) {
-    if (!w) continue;
+    if (!w || w.kind === 'invisible') continue;
     if ((w.kind === 'door' || w.kind === 'secret') && w.open) continue;
     parts.push(`${Math.round(Number(w.x1) || 0)},${Math.round(Number(w.y1) || 0)},${Math.round(Number(w.x2) || 0)},${Math.round(Number(w.y2) || 0)},${w.kind === 'door' ? 1 : 0}`);
   }
@@ -199,6 +199,23 @@ export function computeActiveMapBounds(imgWidth, imgHeight, worldWidth = 2400, w
   const x = Math.round(((ww - width) / 2) * 100) / 100;
   const y = Math.round(((wh - height) / 2) * 100) / 100;
   return { x, y, width, height };
+}
+
+/**
+ * Computes the sharpest adaptive max camera zoom for the active map based on
+ * its native pixel density inside the 2400x1600 board bounds (range 1.35x-1.85x;
+ * preset procedural maps default to 1.65x).
+ */
+export function computeAdaptiveMaxZoom(imgWidth, imgHeight, worldWidth = 2400, worldHeight = 1600) {
+  const iw = Number(imgWidth);
+  const ih = Number(imgHeight);
+  if (!Number.isFinite(iw) || !Number.isFinite(ih) || iw <= 0 || ih <= 0) {
+    return 1.65;
+  }
+  const bounds = computeActiveMapBounds(iw, ih, worldWidth, worldHeight);
+  const nativeRatio = bounds.width > 0 ? iw / bounds.width : 1;
+  const clamped = Math.min(1.85, Math.max(1.35, nativeRatio * 1.05));
+  return Math.round(clamped * 100) / 100;
 }
 
 /**

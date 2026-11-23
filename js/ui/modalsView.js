@@ -1,11 +1,11 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261121a6';
-import { CartridgePacker } from '../services/cartridgePacker.js?v=20261121a6';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261121a6';
+import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261123a7';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261121a6';
-import { createInitialState, generateRoomCode } from '../core/model.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261123a7';
+import { createInitialState, generateRoomCode } from '../core/model.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 /**
  * Room/Cartridge/Shelf modal, Google Drive modal, Sync/Event Log modal & Handouts modal.
@@ -102,7 +102,7 @@ export const ModalsViewMethods = {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       try {
-        const webpDataUrl = await WebPConverter.fileToWebPDataUrl(file, 3840, 0.82);
+        const webpDataUrl = await WebPConverter.fileToWebPDataUrl(file, WebPConverter.MAP_MAX_DIM, WebPConverter.MAP_QUALITY);
         const kbSize = Math.round((webpDataUrl.length * 0.75) / 1024);
         Service.loadExternalMapImage(webpDataUrl);
         await Service.changeMap('custom', webpDataUrl);
@@ -184,11 +184,13 @@ export const ModalsViewMethods = {
     this.els.btnApplyDriveMap.addEventListener('click', async () => {
       const raw = this.els.inpDriveMapUrl.value.trim();
       if (!raw) return;
-      const direct = DriveUrlHelper.toDirectImageUrl(raw);
-      Service.loadExternalMapImage(direct);
-      await Service.changeMap('custom', direct);
+      const res = await Service.applyExternalMapUrl(raw);
       this.els.driveModal.classList.remove('is-open');
-      this.showActionToast('Mapa de Google Drive aplicado.');
+      if (res.cached) {
+        this.showActionToast('Mapa guardado localmente en la mesa (respaldo offline activo).');
+      } else {
+        this.showActionToast('Mapa aplicado por enlace (el servidor bloquea copia local por CORS).');
+      }
     });
     this.els.btnEmbedDriveFolder.addEventListener('click', () => {
       const raw = this.els.inpDriveFolderUrl.value.trim();
@@ -328,7 +330,7 @@ export const ModalsViewMethods = {
       ? `${window.location.origin}${window.location.pathname}`
       : 'https://tu-vtt.web.app/';
     const invites = Selector.getPlayerInvites(state);
-    this.els.inpPlayerInviteUrl.value = `${baseUrl}?room=${state.room.code}&role=player&invite=${invites[0]?.id || 'inv-1'}`;
+    this.els.inpPlayerInviteUrl.value = `${baseUrl}?room=${state.room.code}&role=player${invites[0]?.id ? `&invite=${invites[0].id}` : ''}`;
     this.els.inpGmInviteUrl.value = `${baseUrl}?room=${state.room.code}&role=gm`;
 
     const isGm = state.role !== 'player';
@@ -351,6 +353,12 @@ export const ModalsViewMethods = {
           <div class="portal-subpanel rounded-xl px-3 py-2 text-[11px] flex items-center justify-between gap-2">
             <span class="font-semibold">${esc(cur?.label || 'Invitación')}</span>
             <span class="opacity-75">${curNames.length ? esc(curNames.join(', ')) : 'Modo Espectador'}</span>
+          </div>
+        `;
+      } else if (invites.length === 0) {
+        this.els.playerInvitesList.innerHTML = `
+          <div class="portal-subpanel rounded-xl px-3 py-2.5 text-[11px] opacity-65 text-center">
+            Sin enlaces de jugadores todavía. Pulsa <strong>+ Nuevo enlace</strong> para invitar a un jugador o espectador.
           </div>
         `;
       } else {

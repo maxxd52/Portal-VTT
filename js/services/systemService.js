@@ -2,10 +2,10 @@
    SYSTEM SERVICE: PRESETS, REGLAS DEL PORTAL Y CONSTRUCTOR DE PESTAÑAS/ATRIBUTOS
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261121a6';
-import { DEFAULT_VISION_CONFIG, normalizeVisionConfig } from '../utils/lightingModel.js?v=20261121a6';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261123a7';
+import { DEFAULT_VISION_CONFIG, normalizeVisionConfig } from '../utils/lightingModel.js?v=20261123a7';
 
 export const SystemServiceMethods = {
   applySystemPreset(presetKey, targetState = this.state) {

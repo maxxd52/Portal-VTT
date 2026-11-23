@@ -1,16 +1,100 @@
 /* ==========================================================================
-   CONTEXT MENU VIEW: MENÚ CONTEXTUAL SEPARADO PARA TOKEN VS MAPA
+   CONTEXT MENU VIEW: APPLE-STYLE UNIFIED CONTEXTUAL MENU ENGINE
    ========================================================================== */
 
-import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
-import { formatDistance, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261121a6';
+import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
+import { formatDistance, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261123a7';
+import {
+  computeContextMenuPosition,
+  buildDiceDieMenuSpec,
+  buildDiceBarMenuSpec,
+  buildMapMenuSpec,
+  buildTokenMenuSpec,
+  buildMultiTokenMenuSpec,
+  buildWallMenuSpec,
+  parseHpInputExpression,
+  stepPresetValue
+} from '../utils/contextMenuModel.js?v=20261123a7';
+import { WEATHER_META, normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
 
 export const ContextMenuViewMethods = {
+  positionContextMenu(clientX, clientY) {
+    const menu = this.els.contextIconMenu;
+    if (!menu) return;
+    const scale = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
+    // Measure actual rendered size before clamping/flipping
+    const menuWidth = menu.offsetWidth || 248;
+    const menuHeight = menu.offsetHeight || 190;
+    const pos = computeContextMenuPosition({
+      clientX,
+      clientY,
+      menuWidth,
+      menuHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      scale
+    });
+    menu.style.left = `${pos.left}px`;
+    menu.style.top = `${pos.top}px`;
+    menu.style.transformOrigin = pos.origin;
+    menu.classList.add('is-open');
+  },
+
+  renderContextMenuSections(container, sections = [], onAction) {
+    const safeSections = (Array.isArray(sections) ? sections : []).filter((s) => Array.isArray(s) && s.length > 0);
+    const itemsFlat = [];
+    const htmlParts = [];
+
+    safeSections.forEach((sec, sIdx) => {
+      if (sIdx > 0) htmlParts.push('<div class="portal-ctx-sep" role="separator"></div>');
+      sec.forEach((item) => {
+        const idx = itemsFlat.length;
+        itemsFlat.push(item);
+        const dangerCls = item.danger ? ' is-danger' : '';
+        const rightMeta = [];
+        if (item.value) rightMeta.push(`<span>${this.escapeHtml(String(item.value))}</span>`);
+        if (item.shortcut) rightMeta.push(`<span class="portal-ctx-shortcut">${this.escapeHtml(String(item.shortcut))}</span>`);
+        if (item.checked) rightMeta.push('<span class="portal-ctx-check" aria-hidden="true">✓</span>');
+        htmlParts.push(`
+          <button
+            type="button"
+            role="menuitem"
+            data-ctx-item-idx="${idx}"
+            class="portal-ctx-item${dangerCls}"
+            ${item.title ? `title="${this.escapeHtml(item.title)}"` : ''}
+          >
+            <span class="portal-ctx-item-left">
+              <span class="portal-ctx-icon" aria-hidden="true">${item.icon || '•'}</span>
+              <span class="portal-ctx-label">${this.escapeHtml(item.label || '')}</span>
+            </span>
+            ${rightMeta.length > 0 ? `<span class="portal-ctx-meta">${rightMeta.join('')}</span>` : ''}
+          </button>
+        `);
+      });
+    });
+
+    container.className = 'portal-ctx-list pt-1 border-t';
+    container.style.borderColor = 'var(--hairline)';
+    container.innerHTML = htmlParts.join('');
+
+    container.querySelectorAll('[data-ctx-item-idx]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const item = itemsFlat[Number(btn.dataset.ctxItemIdx)];
+        if (!item) return;
+        if (!item.keepOpen) this.hideContextMenu();
+        if (typeof item.onClick === 'function') {
+          await item.onClick();
+        } else if (typeof onAction === 'function') {
+          await onAction(item.id, item);
+        }
+      });
+    });
+  },
+
   openContextMenu(clientX, clientY) {
     const state = Service.state;
-    const menu = this.els.contextIconMenu;
     const isTokenCtx = Boolean(this.ctxTargetTokenId);
     const tok = isTokenCtx ? state.tokens.find((t) => t.id === this.ctxTargetTokenId) : null;
 
@@ -20,13 +104,7 @@ export const ContextMenuViewMethods = {
       this.renderMapContextMenu(state);
     }
 
-    const scale = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
-    const menuHeight = isTokenCtx ? 250 : 215;
-    const x = Math.min(window.innerWidth / scale - 285, Math.max(8, clientX / scale));
-    const y = Math.min(window.innerHeight / scale - menuHeight, Math.max(8, clientY / scale));
-    menu.style.left = `${Math.round(x)}px`;
-    menu.style.top = `${Math.round(y)}px`;
-    menu.classList.add('is-open');
+    this.positionContextMenu(clientX, clientY);
   },
 
   renderTokenContextMenu(tok, state) {
@@ -35,111 +113,262 @@ export const ContextMenuViewMethods = {
       this.els.contextToolsRow.classList.remove('grid');
     }
 
+    const isAlly = tok.isAlly !== false;
+    const maxHp = Math.max(1, Number(tok.maxHp) || 1);
+    const curHp = Math.max(0, Math.min(maxHp, Number(tok.hp) || 0));
+    const hpPct = Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100)));
+    const hpFillColor = hpPct <= 20 ? '#ef4444' : hpPct <= 50 ? '#f59e0b' : '#10b981';
+
     if (this.els.contextTokenHeader) {
-      const isAlly = tok.isAlly !== false;
       this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
       this.els.contextTokenHeader.innerHTML = `
         <div class="flex items-center gap-1.5 min-w-0">
-          <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${tok.color};"></span>
-          <span class="font-semibold truncate max-w-[125px]">${tok.name}</span>
+          <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${this.escapeHtml(tok.color || '#8b5cf6')};"></span>
+          <span class="font-semibold truncate max-w-[130px]">${this.escapeHtml(tok.name)}</span>
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0 font-mono-tech text-[10px]">
-          <span class="opacity-80">HP ${tok.hp}/${tok.maxHp} · CA ${tok.ac}</span>
+          <span class="opacity-75">CA ${tok.ac}</span>
           <button type="button" data-ctx-focus-tok class="portal-btn portal-subpanel w-5 h-5 p-0 rounded-md" title="Centrar cámara en ficha">🎯</button>
         </div>
       `;
       const focusBtn = this.els.contextTokenHeader.querySelector('[data-ctx-focus-tok]');
       if (focusBtn) {
         focusBtn.addEventListener('click', () => {
-          const vp = this.els.viewport.getBoundingClientRect();
-          const z = Service.state.camera.zoom || 1;
-          Service.state.camera.x = vp.width / 2 - tok.x * z;
-          Service.state.camera.y = vp.height / 2 - tok.y * z;
-          Service.notify({ skipVaultSave: true });
+          this.centerCameraOnToken(tok);
           this.hideContextMenu();
         });
       }
       this.els.contextTokenHeader.dataset.ally = isAlly ? '1' : '0';
     }
 
-    this.els.contextDynamicRow.className = 'grid grid-cols-6 gap-1 pt-1 border-t';
-    this.els.contextDynamicRow.innerHTML = `
-      <button type="button" data-ctx-act="hp-minus" class="portal-subpanel portal-btn h-8 font-mono-tech font-bold text-red-400" title="-1 HP">−HP</button>
-      <button type="button" data-ctx-act="hp-plus" class="portal-subpanel portal-btn h-8 font-mono-tech font-bold text-emerald-400" title="+1 HP">+HP</button>
-      <button type="button" data-ctx-act="toggle-hide" class="portal-subpanel portal-btn h-8" title="${tok.hidden ? 'Mostrar ficha' : 'Ocultar ficha'}">👁️</button>
-      <button type="button" data-ctx-act="dup-tok" class="portal-subpanel portal-btn h-8" title="Duplicar Ficha">⧉</button>
-      <button type="button" data-ctx-act="open-sheet" class="portal-subpanel portal-btn h-8" title="Abrir Ficha">📋</button>
-      <button type="button" data-ctx-act="del-tok" class="portal-subpanel portal-btn h-8 text-red-400" title="Eliminar Ficha">🗑️</button>
-    `;
+    const visionCfg = Selector.getSystemVisionConfig(state);
+    const lightMeters = resolveTokenLightMeters(tok);
+    const spec = buildTokenMenuSpec({ role: state.role, token: tok });
 
-    this.els.contextDynamicRow.querySelectorAll('[data-ctx-act]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const act = btn.dataset.ctxAct;
-        if (act === 'hp-minus') Service.adjustTokenHp(tok.id, -1);
-        else if (act === 'hp-plus') Service.adjustTokenHp(tok.id, 1);
-        else if (act === 'toggle-hide') Service.toggleTokenHidden(tok.id);
-        else if (act === 'dup-tok') Service.duplicateToken(tok.id);
-        else if (act === 'open-sheet') Service.selectToken(tok.id, true);
-        else if (act === 'del-tok') Service.deleteToken(tok.id);
-        this.hideContextMenu();
-      });
-    });
+    const handleTokenAction = (act) => {
+      if (act === 'open-sheet') Service.selectToken(tok.id, true);
+      else if (act === 'toggle-hide') Service.toggleTokenHidden(tok.id);
+      else if (act === 'dup-tok') Service.duplicateToken(tok.id);
+      else if (act === 'del-tok') Service.deleteToken(tok.id);
+    };
 
     const activeConds = Array.isArray(tok.conditions) ? tok.conditions : [];
     const statusDefs = Selector.getSystemStatuses(state);
-    const sizeVal = Number(tok.size) || 1;
-    const isAlly = tok.isAlly !== false;
-    const visionCfg = Selector.getSystemVisionConfig(state);
-    const lightMeters = resolveTokenLightMeters(tok);
-    const torchLabel = formatDistance(visionCfg.torchMeters, visionCfg.distanceUnit);
-    const lanternLabel = formatDistance(visionCfg.lanternMeters, visionCfg.distanceUnit);
+    const isGm = state.role === 'gm';
+    const curSize = Math.max(1, Math.min(4, Math.round(Number(tok.size) || 1)));
+    const curAura = Number(tok.auraRadius) || 0;
+    const unit = visionCfg.distanceUnit || 'm';
+    const curVis =
+      tok.visionMeters !== null && tok.visionMeters !== undefined && tok.visionMeters !== '' && Number.isFinite(Number(tok.visionMeters))
+        ? Number(tok.visionMeters)
+        : null;
+    const tpl = tok.actorKey
+      ? (state.customActors || []).find((a) => a && a.key === tok.actorKey)
+      : null;
+    const baseSize = Math.max(1, Math.min(4, Math.round(Number(tpl?.size) || 1)));
+    const baseLight = Math.max(0, Math.min(60, Number(tpl?.lightMeters) || 0));
+    const baseVis =
+      tpl && tpl.visionMeters !== null && tpl.visionMeters !== undefined && tpl.visionMeters !== '' && Number.isFinite(Number(tpl.visionMeters))
+        ? Number(tpl.visionMeters)
+        : null;
+    const hasTempOverride =
+      (isGm && curSize !== baseSize) ||
+      Math.abs(lightMeters - baseLight) > 0.05 ||
+      curVis !== baseVis;
 
-    this.els.contextSubOptionsRow.className = 'grid grid-cols-5 gap-1 pt-1 border-t';
-    this.els.contextSubOptionsRow.innerHTML =
-      statusDefs
-        .map((def) => {
-          const active = activeConds.includes(def.key);
-          return `
-            <button
-              type="button"
-              data-ctx-cond="${this.escapeHtml(def.key)}"
-              title="${this.escapeHtml(def.label)}"
-              class="portal-seg-btn h-7 p-0 rounded-lg flex items-center justify-center transition-transform ${active ? 'is-active scale-105' : 'portal-subpanel opacity-80 hover:opacity-100'}"
-              style="${active ? `background:${def.color}; color:#ffffff; border-color:${def.color};` : `color:${def.color};`}"
-            >${this.renderStatusSymbolSvg(def.icon, 'w-3.5 h-3.5', state)}</button>
-          `;
-        })
-        .join('') +
-      `
-      <div class="col-span-5 grid grid-cols-3 gap-1 pt-1 border-t" style="border-color: var(--border-subtle);">
-        <button type="button" data-ctx-extra="light" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${lightMeters > 0 ? 'portal-btn-active' : ''}" title="Alternar Luz del Token (Apagada / ${torchLabel} / ${lanternLabel})">💡 ${lightMeters > 0 ? formatDistance(lightMeters, visionCfg.distanceUnit) : 'Luz'}</button>
-        <button type="button" data-ctx-extra="aura" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${tok.auraRadius ? 'portal-btn-active' : ''}" title="Alternar Aura del Token (Off / 10ft / 15ft)">⭕ ${tok.auraRadius ? (tok.auraRadius === 135 ? '15ft' : '10ft') : 'Aura'}</button>
-        <button type="button" data-ctx-extra="owner" class="portal-subpanel portal-btn h-7 text-[10px] font-medium ${tok.ownerId ? 'portal-btn-active' : ''}" title="Propiedad de ficha (Libre / Solo DJ o Reclamar)">🔑 ${tok.ownerId === 'gm' ? 'Solo DJ' : tok.ownerId ? 'Mía' : 'Libre'}</button>
+    const lightSteps = [0, 3, 6, 9, 12, 18, 24];
+    const visionSteps = [null, 0, 3, 6, 9, 12, 18, 24, 36];
+    const sizeSteps = [1, 2, 3, 4];
+    const auraSteps = [0, 90, 135];
+
+    const lightValTxt = lightMeters > 0 ? formatDistance(lightMeters, unit) : 'Off';
+    const visValTxt = curVis === null ? 'Base' : curVis === 0 ? '0' : formatDistance(curVis, unit);
+    const auraValTxt = curAura === 135 ? '15 ft' : curAura === 90 ? '10 ft' : curAura > 0 ? `${curAura}px` : 'Off';
+
+    const triLeft = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="10.5,3.5 4.5,8 10.5,12.5"/></svg>';
+    const triRight = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="5.5,3.5 11.5,8 5.5,12.5"/></svg>';
+    const renderStepper = (propKey, icon, label, valTxt) => `
+      <div class="flex items-center justify-between gap-2">
+        <span class="opacity-70 font-medium shrink-0 flex items-center gap-1.5"><span>${icon}</span><span>${label}</span></span>
+        <div class="portal-subpanel rounded-full px-1 py-0.5 flex items-center gap-1 min-w-[94px] justify-between">
+          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="-1" class="portal-btn w-4 h-4 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Reducir ${label}">${triLeft}</button>
+          <span class="font-mono-tech text-[10px] font-semibold tabular-nums px-0.5 select-none">${this.escapeHtml(valTxt)}</span>
+          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="1" class="portal-btn w-4 h-4 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Aumentar ${label}">${triRight}</button>
+        </div>
       </div>
-      <div class="col-span-5 grid grid-cols-5 gap-1 pt-1 border-t" style="border-color: var(--border-subtle);">
-        <button type="button" data-ctx-extra="hp-m5" class="portal-subpanel portal-btn h-7 text-[10px] font-mono-tech text-red-400" title="-5 HP">-5</button>
-        <button type="button" data-ctx-extra="hp-p5" class="portal-subpanel portal-btn h-7 text-[10px] font-mono-tech text-emerald-400" title="+5 HP">+5</button>
-        <button type="button" data-ctx-extra="size" class="portal-subpanel portal-btn h-7 text-[10px] font-mono-tech" title="Cambiar tamaño (1x1 / 2x2 / 3x3)">${sizeVal}x${sizeVal}</button>
-        <button type="button" data-ctx-extra="ally" class="portal-subpanel portal-btn h-7 text-[10px] ${isAlly ? 'text-emerald-400' : 'text-red-400'}" title="Cambiar categoría (Protagonista / Secundario)">${isAlly ? '⭐ Prot.' : '🎭 Sec.'}</button>
-        <button type="button" data-ctx-extra="init" class="portal-subpanel portal-btn h-7 text-[10px] font-mono-tech" title="Tirar Iniciativa (${this.escapeHtml(Service.getSystemInitiativeFormula())})">Init</button>
-      </div>`;
+    `;
 
-    this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-extra]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const ex = b.dataset.ctxExtra;
-        if (ex === 'light') Service.cycleTokenLight(tok.id);
-        else if (ex === 'aura') Service.cycleTokenAura(tok.id);
-        else if (ex === 'owner') Service.toggleTokenOwnership(tok.id);
-        else if (ex === 'hp-m5') Service.adjustTokenHp(tok.id, -5);
-        else if (ex === 'hp-p5') Service.adjustTokenHp(tok.id, 5);
-        else if (ex === 'size') Service.cycleTokenSize(tok.id);
-        else if (ex === 'ally') Service.toggleTokenAlly(tok.id);
-        else if (ex === 'init') {
-          Service.rollTokenInitiative(tok);
-        }
+    const quickHtml = `
+      <div class="flex items-center gap-1.5">
+        <div class="portal-subpanel flex-1 h-7 rounded-full p-0.5 flex items-center gap-1 select-none">
+          <button type="button" data-ctx-hp-step="-1" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center text-rose-400 font-bold text-xs shrink-0 hover:bg-white/10" title="−1 HP (Shift: −5)">−</button>
+          <div data-ctx-hp-track class="relative flex-1 h-5 rounded-full bg-black/30 overflow-hidden cursor-ew-resize flex items-center justify-center" title="Arrastra para ajustar vida o haz clic para escribir (ej. -7)">
+            <div data-ctx-hp-fill class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-75 pointer-events-none" style="width:${hpPct}%; background:${hpFillColor}; opacity:0.55;"></div>
+            <span data-ctx-hp-label class="relative z-10 font-mono-tech text-[10.5px] font-bold tabular-nums drop-shadow">${curHp} / ${maxHp}</span>
+            <input type="text" data-ctx-hp-input class="hidden relative z-20 w-full h-full bg-black/70 text-center font-mono-tech text-[10.5px] font-bold outline-none rounded-full px-1" placeholder="-5 o 12" />
+          </div>
+          <button type="button" data-ctx-hp-step="1" class="portal-btn w-6 h-6 p-0 rounded-full flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 hover:bg-white/10" title="+1 HP (Shift: +5)">+</button>
+        </div>
+        <button type="button" data-ctx-quick="open-sheet" class="portal-subpanel portal-btn w-7 h-7 p-0 rounded-full flex items-center justify-center text-xs shrink-0" title="Abrir Ficha">📋</button>
+      </div>
+      <div class="grid grid-cols-5 gap-1 pt-1 border-t" style="border-color: var(--hairline);">
+        ${statusDefs
+          .map((def) => {
+            const active = activeConds.includes(def.key);
+            return `
+              <button
+                type="button"
+                data-ctx-cond="${this.escapeHtml(def.key)}"
+                title="${this.escapeHtml(def.label)}"
+                class="portal-seg-btn h-6 p-0 rounded-lg flex items-center justify-center transition-transform ${active ? 'is-active scale-105' : 'portal-subpanel opacity-80 hover:opacity-100'}"
+                style="${active ? `background:${def.color}; color:#ffffff; border-color:${def.color};` : `color:${def.color};`}"
+              >${this.renderStatusSymbolSvg(def.icon, 'w-3.5 h-3.5', state)}</button>
+            `;
+          })
+          .join('')}
+      </div>
+      <div class="flex flex-col gap-1.5 pt-1.5 border-t text-[10.5px]" style="border-color: var(--hairline);">
+        ${renderStepper('light', '💡', 'Luz', lightValTxt)}
+        ${isGm ? renderStepper('size', '📐', 'Tamaño', `${curSize}×${curSize}`) : ''}
+        ${isAlly ? renderStepper('vision', '👁', 'Visión', visValTxt) : ''}
+        ${renderStepper('aura', '⭕', 'Aura', auraValTxt)}
+        ${hasTempOverride ? `
+        <button type="button" data-ctx-reset-temp class="portal-btn portal-subpanel w-full py-1 rounded-lg text-[9.5px] opacity-85 hover:opacity-100" title="Restaurar tamaño, luz y visión fijos del personaje">↺ Restablecer a valores fijos</button>
+        ` : ''}
+      </div>
+    `;
+
+    this.els.contextSubOptionsRow.className = 'flex flex-col gap-1.5';
+    this.els.contextSubOptionsRow.style.order = '1';
+    this.els.contextDynamicRow.style.order = '2';
+    if (this.els.contextTokenHeader) this.els.contextTokenHeader.style.order = '0';
+    this.els.contextSubOptionsRow.innerHTML = quickHtml;
+
+    const refreshMenu = () => {
+      const refreshed = Service.state.tokens.find((t) => t.id === tok.id);
+      if (refreshed) this.renderTokenContextMenu(refreshed, Service.state);
+    };
+
+    this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-quick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        handleTokenAction(btn.dataset.ctxQuick);
         this.hideContextMenu();
       });
     });
+
+    this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-hp-step]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const baseDir = Number(btn.dataset.ctxHpStep) || 0;
+        const delta = baseDir * (e.shiftKey ? 5 : 1);
+        Service.adjustTokenHp(tok.id, delta);
+        refreshMenu();
+      });
+    });
+
+    const hpTrack = this.els.contextSubOptionsRow.querySelector('[data-ctx-hp-track]');
+    const hpFill = this.els.contextSubOptionsRow.querySelector('[data-ctx-hp-fill]');
+    const hpLabel = this.els.contextSubOptionsRow.querySelector('[data-ctx-hp-label]');
+    const hpInput = this.els.contextSubOptionsRow.querySelector('[data-ctx-hp-input]');
+    if (hpTrack && hpFill && hpLabel && hpInput) {
+      let dragging = false;
+      let moved = false;
+      let startX = 0;
+      let previewHp = curHp;
+
+      const updateScrub = (clientX) => {
+        const rect = hpTrack.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+        previewHp = Math.round(ratio * maxHp);
+        const pct = Math.round((previewHp / maxHp) * 100);
+        hpFill.style.width = `${pct}%`;
+        hpFill.style.background = pct <= 20 ? '#ef4444' : pct <= 50 ? '#f59e0b' : '#10b981';
+        hpLabel.textContent = `${previewHp} / ${maxHp}`;
+      };
+
+      hpTrack.addEventListener('pointerdown', (e) => {
+        if (e.target === hpInput) return;
+        e.preventDefault();
+        dragging = true;
+        moved = false;
+        startX = e.clientX;
+        previewHp = curHp;
+        try {
+          hpTrack.setPointerCapture(e.pointerId);
+        } catch (_) {}
+      });
+      hpTrack.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        if (Math.abs(e.clientX - startX) > 4) moved = true;
+        if (moved) updateScrub(e.clientX);
+      });
+      hpTrack.addEventListener('pointerup', (e) => {
+        if (!dragging) return;
+        dragging = false;
+        try {
+          hpTrack.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+        if (moved) {
+          Service.setTokenHp(tok.id, previewHp);
+          refreshMenu();
+        } else {
+          hpLabel.classList.add('hidden');
+          hpInput.classList.remove('hidden');
+          hpInput.value = '';
+          hpInput.focus();
+        }
+      });
+
+      const commitInput = () => {
+        const parsed = parseHpInputExpression(hpInput.value, curHp, maxHp);
+        hpInput.classList.add('hidden');
+        hpLabel.classList.remove('hidden');
+        if (parsed !== null) {
+          Service.setTokenHp(tok.id, parsed);
+          refreshMenu();
+        }
+      };
+      hpInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitInput();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          hpInput.classList.add('hidden');
+          hpLabel.classList.remove('hidden');
+        }
+      });
+      hpInput.addEventListener('blur', commitInput);
+    }
+
+    this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-step]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const prop = btn.dataset.ctxStep;
+        const dir = Number(btn.dataset.ctxDir) || 1;
+        if (prop === 'light') {
+          const next = stepPresetValue(lightMeters, lightSteps, dir);
+          Service.setTokenLight(tok.id, next);
+        } else if (prop === 'size') {
+          const next = stepPresetValue(curSize, sizeSteps, dir);
+          Service.setTokenSize(tok.id, next);
+        } else if (prop === 'vision') {
+          const next = stepPresetValue(curVis, visionSteps, dir);
+          Service.setTokenVision(tok.id, next);
+        } else if (prop === 'aura') {
+          const next = stepPresetValue(curAura, auraSteps, dir);
+          Service.setTokenAura(tok.id, next);
+        }
+        refreshMenu();
+      });
+    });
+
+    const resetTempBtn = this.els.contextSubOptionsRow.querySelector('[data-ctx-reset-temp]');
+    if (resetTempBtn) {
+      resetTempBtn.addEventListener('click', () => {
+        Service.resetTokenTempProps(tok.id);
+        refreshMenu();
+      });
+    }
 
     this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-cond]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -157,148 +386,372 @@ export const ContextMenuViewMethods = {
         b.style.borderColor = isNowActive ? def.color : '';
       });
     });
+
+    this.renderContextMenuSections(this.els.contextDynamicRow, spec.sections, handleTokenAction);
   },
 
-  renderMapContextMenu(state) {
-    if (this.els.contextTokenHeader) {
-      this.els.contextTokenHeader.className = 'hidden';
-      this.els.contextTokenHeader.innerHTML = '';
-    }
-    if (this.els.contextToolsRow) {
-      this.els.contextToolsRow.classList.remove('hidden');
-      this.els.contextToolsRow.classList.add('grid');
-    }
+  openMultiTokenContextMenu(clientX, clientY, tokens = []) {
+    const state = Service.state;
+    const list = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+    if (list.length < 2) return;
+    const ids = list.map((t) => t.id);
+    const spec = buildMultiTokenMenuSpec({ role: state.role, tokens: list });
 
-    this.els.contextIconMenu.querySelectorAll('[data-ctx-tool]').forEach((btn) => {
-      btn.classList.toggle('portal-btn-active', btn.dataset.ctxTool === state.tool);
-    });
-
-    this.els.contextDynamicRow.className = 'grid grid-cols-5 gap-1 pt-1 border-t';
-    this.els.contextDynamicRow.innerHTML = `
-      <button type="button" data-ctx-act="ping-here" class="portal-subpanel portal-btn h-8" title="Ping Aquí">📡</button>
-      <button type="button" data-ctx-act="add-note" class="portal-subpanel portal-btn h-8" title="Fijar Nota Aquí">📌</button>
-      <button type="button" data-ctx-act="spawn-here" class="portal-subpanel portal-btn h-8" title="Invocar Ficha Aquí">➕</button>
-      <button type="button" data-ctx-act="toggle-dynlight" class="portal-subpanel portal-btn h-8 ${state.dynamicLighting ? 'portal-btn-active' : ''}" title="Alternar Luz Dinámica del Escenario">💡</button>
-      <button type="button" data-ctx-act="roll-d20" class="portal-subpanel portal-btn h-8 font-mono-tech font-bold" title="Tirar d20">d20</button>
-      <button type="button" data-ctx-act="open-grid" class="col-span-5 portal-subpanel portal-btn h-7 text-[11px] font-medium mt-0.5" title="Grilla e Iluminación del escenario">⚙️ Escenario (Grilla e Iluminación)</button>
-    `;
-
-    this.els.contextDynamicRow.querySelectorAll('[data-ctx-act]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const act = btn.dataset.ctxAct;
-        if (act === 'ping-here') Service.triggerPing(this.ctxWorldPos.x, this.ctxWorldPos.y);
-        else if (act === 'add-note') this.openNoteModal(null, this.ctxWorldPos.x, this.ctxWorldPos.y);
-        else if (act === 'spawn-here') {
-          await Service.spawnActorFromTemplate(COMPENDIUM_ACTORS[0], this.ctxWorldPos.x, this.ctxWorldPos.y);
-        } else if (act === 'toggle-dynlight') {
-          Service.toggleDynamicLighting();
-          this.showActionToast(
-            Service.state.dynamicLighting ? '💡 Luz dinámica activada en este escenario' : '☀️ Luz ambiental activada en este escenario'
-          );
-        } else if (act === 'roll-d20') Service.rollDice(20);
-        else if (act === 'open-grid') {
-          this.openMapGridEditorForActiveScene?.();
-        }
-        this.hideContextMenu();
-      });
-    });
-
-    if (state.tool === 'draw') {
-      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
-      this.els.contextSubOptionsRow.className = 'flex items-center justify-between gap-1 pt-1 border-t';
-      this.els.contextSubOptionsRow.innerHTML = colors
-        .map(
-          (c) =>
-            `<button type="button" data-ctx-color="${c}" class="w-6 h-6 rounded-full border-2 ${state.drawColor === c ? 'border-white scale-110' : 'border-transparent'}" style="background:${c};"></button>`
-        )
-        .join('');
-      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-color]').forEach((b) => {
-        b.addEventListener('click', () => {
-          Service.state.drawColor = b.dataset.ctxColor;
-          Service.notify();
-          this.hideContextMenu();
-        });
-      });
-    } else if (state.tool === 'wall') {
-      this.els.contextSubOptionsRow.className = 'flex flex-wrap items-center gap-1 pt-1 border-t';
-      const wt = state.wallType || 'wall';
-      this.els.contextSubOptionsRow.innerHTML = `
-        <button type="button" data-ctx-wall="wall" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'wall' ? 'portal-btn-active' : ''}" title="Muro sólido (Alt: libre)">🧱 Muro</button>
-        <button type="button" data-ctx-wall="terrain" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'terrain' ? 'portal-btn-active' : ''}" title="Pilar / Terreno: se ve el obstáculo y bloquea detrás (Alt: libre)">🏛 Pilar</button>
-        <button type="button" data-ctx-wall="door" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'door' ? 'portal-btn-active' : ''}" title="Puerta clicable">🚪 Puerta</button>
-        <button type="button" data-ctx-wall="secret" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'secret' ? 'portal-btn-active' : ''}" title="Puerta secreta (solo visible para el DJ cerrada)">🔮 Secreta</button>
-        <button type="button" data-ctx-wall="erase" class="portal-subpanel portal-btn px-2 py-1 text-[11px] ${wt === 'erase' ? 'portal-btn-active' : ''}" title="Borrar muro al hacer clic">🗑</button>
-        <button type="button" data-ctx-wall="undo" class="portal-subpanel portal-btn px-2 py-1 text-[11px]" title="Deshacer último muro">↩</button>
-      `;
-      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-wall]').forEach((b) => {
-        b.addEventListener('click', () => {
-          const mode = b.dataset.ctxWall;
-          if (mode === 'undo') Service.removeLastWall();
-          else {
-            Service.state.wallType = mode;
-            Service.state.wallAnchor = null;
-            Service.notify();
-          }
-          this.hideContextMenu();
-        });
-      });
-    } else {
-      this.els.contextSubOptionsRow.className = 'hidden flex-wrap gap-1 pt-1 border-t';
-    }
-  },
-
-  hideContextMenu() {
-    this.els.contextIconMenu.classList.remove('is-open');
-  },
-
-  openListContextMenu(clientX, clientY, title, subtitle = '', actions = []) {
-    const menu = this.els.contextIconMenu;
     if (this.els.contextToolsRow) {
       this.els.contextToolsRow.classList.add('hidden');
       this.els.contextToolsRow.classList.remove('grid');
     }
     if (this.els.contextTokenHeader) {
+      this.els.contextTokenHeader.style.order = '0';
       this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
       this.els.contextTokenHeader.innerHTML = `
-        <span class="font-semibold truncate max-w-[165px]">${title}</span>
-        ${subtitle ? `<span class="opacity-60 text-[10px] truncate max-w-[85px]">${subtitle}</span>` : ''}
+        <span class="font-semibold truncate">${this.escapeHtml(spec.header.title)}</span>
+        <span class="opacity-65 text-[10px] font-mono-tech">Lote</span>
       `;
     }
-    this.els.contextSubOptionsRow.className = 'hidden';
-    this.els.contextSubOptionsRow.innerHTML = '';
 
-    this.els.contextDynamicRow.className = 'flex flex-col gap-1 pt-1 border-t';
-    this.els.contextDynamicRow.innerHTML = actions
-      .map(
-        (act, idx) => `
-          <button
-            type="button"
-            data-list-ctx-idx="${idx}"
-            class="portal-subpanel portal-btn w-full h-8 px-2.5 justify-start gap-2 text-xs ${act.danger ? 'text-red-400' : ''}"
-          >
-            <span>${act.icon || '•'}</span>
-            <span class="truncate">${act.label}</span>
-          </button>
-        `
-      )
-      .join('');
+    const handleBatchAction = (act) => {
+      if (act === 'hp-minus') Service.adjustTokensHp(ids, -1);
+      else if (act === 'hp-plus') Service.adjustTokensHp(ids, 1);
+      else if (act === 'hp-m5') Service.adjustTokensHp(ids, -5);
+      else if (act === 'hp-p5') Service.adjustTokensHp(ids, 5);
+      else if (act === 'light') Service.cycleTokensLight(ids);
+      else if (act === 'aura') Service.cycleTokensAura(ids);
+      else if (act === 'init') {
+        list.forEach((tok) => Service.rollTokenInitiative(tok));
+      } else if (act === 'toggle-hide') Service.toggleTokensHidden(ids);
+      else if (act === 'dup-toks') Service.duplicateTokens(ids);
+      else if (act === 'del-toks') {
+        const count = Service.deleteTokens(ids);
+        if (count > 0) this.showActionToast?.(`🗑 ${count} fichas eliminadas`);
+      }
+    };
 
-    this.els.contextDynamicRow.querySelectorAll('[data-list-ctx-idx]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const item = actions[Number(btn.dataset.listCtxIdx)];
+    const statusDefs = Selector.getSystemStatuses(state);
+    const quickHtml = `
+      <div class="portal-ctx-quick" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
+        ${spec.quickActions
+          .map((q) => {
+            const toneCls = q.tone === 'danger' ? 'text-red-400' : q.tone === 'success' ? 'text-emerald-400' : '';
+            return `<button type="button" data-ctx-quick="${q.id}" class="portal-subpanel portal-btn portal-ctx-quick-btn font-mono-tech ${toneCls}" title="${this.escapeHtml(q.title || q.label)}">${this.escapeHtml(q.label)}</button>`;
+          })
+          .join('')}
+      </div>
+      <div class="grid grid-cols-5 gap-1 pt-1 border-t" style="border-color: var(--hairline);">
+        ${statusDefs
+          .map((def) => {
+            const allHave = list.every((t) => Array.isArray(t.conditions) && t.conditions.includes(def.key));
+            return `
+              <button
+                type="button"
+                data-ctx-cond="${this.escapeHtml(def.key)}"
+                title="${this.escapeHtml(def.label)} (aplicar a todas)"
+                class="portal-seg-btn h-6 p-0 rounded-lg flex items-center justify-center transition-transform ${allHave ? 'is-active scale-105' : 'portal-subpanel opacity-80 hover:opacity-100'}"
+                style="${allHave ? `background:${def.color}; color:#ffffff; border-color:${def.color};` : `color:${def.color};`}"
+              >${this.renderStatusSymbolSvg(def.icon, 'w-3.5 h-3.5', state)}</button>
+            `;
+          })
+          .join('')}
+      </div>
+    `;
+
+    this.els.contextSubOptionsRow.className = 'flex flex-col gap-1.5';
+    this.els.contextSubOptionsRow.style.order = '1';
+    this.els.contextDynamicRow.style.order = '2';
+    this.els.contextSubOptionsRow.innerHTML = quickHtml;
+
+    this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-quick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        handleBatchAction(btn.dataset.ctxQuick);
         this.hideContextMenu();
-        if (item && typeof item.onClick === 'function') {
-          await item.onClick();
-        }
       });
     });
 
-    const scale = typeof Service.getUiScale === 'function' ? Service.getUiScale() : 1;
-    const estHeight = Math.max(110, 56 + actions.length * 36);
-    const x = Math.min(window.innerWidth / scale - 285, Math.max(8, clientX / scale));
-    const y = Math.min(window.innerHeight / scale - estHeight, Math.max(8, clientY / scale));
-    menu.style.left = `${Math.round(x)}px`;
-    menu.style.top = `${Math.round(y)}px`;
-    menu.classList.add('is-open');
+    this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-cond]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const key = b.dataset.ctxCond;
+        Service.toggleTokensCondition(ids, key);
+        const refreshed = Service.getSelectedControllableTokens(ids);
+        const allNow = refreshed.length > 0 && refreshed.every((t) => Array.isArray(t.conditions) && t.conditions.includes(key));
+        const def = Selector.getStatusDef(Service.state, key);
+        b.classList.toggle('is-active', allNow);
+        b.classList.toggle('scale-105', allNow);
+        b.classList.toggle('portal-subpanel', !allNow);
+        b.classList.toggle('opacity-80', !allNow);
+        b.style.background = allNow ? def.color : '';
+        b.style.color = allNow ? '#ffffff' : def.color;
+        b.style.borderColor = allNow ? def.color : '';
+      });
+    });
+
+    this.renderContextMenuSections(this.els.contextDynamicRow, spec.sections, handleBatchAction);
+    this.positionContextMenu(clientX, clientY);
+  },
+
+  renderMapContextMenu(state) {
+    if (this.els.contextTokenHeader) {
+      this.els.contextTokenHeader.style.order = '';
+      this.els.contextTokenHeader.className = 'hidden';
+      this.els.contextTokenHeader.innerHTML = '';
+    }
+    this.els.contextSubOptionsRow.style.order = '';
+    this.els.contextDynamicRow.style.order = '';
+
+    const ownedToken = state.role !== 'gm'
+      ? (state.tokens || []).find((t) => Service.canControlToken(t))
+      : null;
+
+    const isNarrative = Selector.isNarrativeScene(state);
+    const spec = buildMapMenuSpec({
+      role: state.role,
+      dynamicLighting: Boolean(state.dynamicLighting),
+      hasOwnedToken: Boolean(ownedToken),
+      isNarrative
+    });
+
+    if (this.els.contextToolsRow) {
+      if (spec.showToolsRow) {
+        this.els.contextToolsRow.classList.remove('hidden');
+        this.els.contextToolsRow.classList.add('grid');
+        this.els.contextIconMenu.querySelectorAll('[data-ctx-tool]').forEach((btn) => {
+          btn.classList.toggle('portal-btn-active', btn.dataset.ctxTool === state.tool);
+        });
+      } else {
+        this.els.contextToolsRow.classList.add('hidden');
+        this.els.contextToolsRow.classList.remove('grid');
+      }
+    }
+
+    this.renderContextMenuSections(this.els.contextDynamicRow, spec.sections, async (act) => {
+      if (act === 'ping-here') {
+        Service.triggerPing(this.ctxWorldPos.x, this.ctxWorldPos.y);
+      } else if (act === 'measure-here') {
+        Service.setTool('ruler');
+      } else if (act === 'focus-my-token' && ownedToken) {
+        this.centerCameraOnToken(ownedToken);
+      } else if (act === 'reset-zoom') {
+        Service.setZoom(1);
+      } else if (act === 'add-note') {
+        this.openNoteModal(null, this.ctxWorldPos.x, this.ctxWorldPos.y);
+      } else if (act === 'spawn-here') {
+        await Service.spawnActorFromTemplate(COMPENDIUM_ACTORS[0], this.ctxWorldPos.x, this.ctxWorldPos.y);
+      } else if (act === 'toggle-dynlight') {
+        Service.toggleDynamicLighting();
+        this.showActionToast(
+          Service.state.dynamicLighting ? '💡 Luz dinámica activada en este escenario' : '☀️ Luz ambiental activada en este escenario'
+        );
+      } else if (act === 'open-grid') {
+        this.openMapGridEditorForActiveScene?.();
+      }
+    });
+
+    if (!spec.showToolsRow) {
+      this.els.contextDynamicRow.style.borderTopWidth = '0px';
+      this.els.contextDynamicRow.classList.remove('pt-1', 'border-t');
+    } else {
+      this.els.contextDynamicRow.style.borderTopWidth = '';
+    }
+
+    if (state.role === 'gm' && this.els.contextSubOptionsRow) {
+      const curWeather = normalizeWeatherType(state.sceneWeather);
+      const pills = WEATHER_META.map(
+        (w) =>
+          `<button type="button" data-ctx-weather="${w.id}" class="portal-seg-btn py-1 px-1.5 text-[10px] font-semibold flex items-center justify-center gap-0.5 ${curWeather === w.id ? 'is-active' : ''}" title="Clima: ${w.label}"><span>${w.icon}</span></button>`
+      ).join('');
+      this.els.contextSubOptionsRow.className = 'pt-1.5 border-t flex flex-col gap-1';
+      this.els.contextSubOptionsRow.style.borderColor = 'var(--hairline)';
+      this.els.contextSubOptionsRow.innerHTML = `
+        <div class="flex items-center justify-between px-1 text-[10px] opacity-65">
+          <span>Clima · ${isNarrative ? 'Narrativo' : 'Táctico'}</span>
+          <span class="font-semibold opacity-90">${WEATHER_META.find((w) => w.id === curWeather)?.label || 'Sin'}</span>
+        </div>
+        <div class="portal-seg grid grid-cols-5 gap-0.5">${pills}</div>
+      `;
+      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-weather]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const next = Service.setSceneWeather(btn.dataset.ctxWeather);
+          this.hideContextMenu();
+          const label = WEATHER_META.find((w) => w.id === next)?.label || 'Sin';
+          this.showActionToast(next === 'none' ? 'Clima desactivado.' : `Clima: ${label}`);
+        });
+      });
+    } else {
+      this.els.contextSubOptionsRow.className = 'hidden';
+      this.els.contextSubOptionsRow.innerHTML = '';
+    }
+  },
+
+  openWallContextMenu(clientX, clientY, walls = []) {
+    const list = Array.isArray(walls) ? walls.filter(Boolean) : [];
+    if (list.length === 0) return;
+    const ids = list.map((w) => w.id);
+    const spec = buildWallMenuSpec(list);
+
+    if (this.els.contextToolsRow) {
+      this.els.contextToolsRow.classList.add('hidden');
+      this.els.contextToolsRow.classList.remove('grid');
+    }
+    if (this.els.contextTokenHeader) {
+      this.els.contextTokenHeader.style.order = '';
+      this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
+      this.els.contextTokenHeader.innerHTML = `
+        <span class="font-semibold truncate max-w-[175px]">${this.escapeHtml(spec.header.title)}</span>
+        ${spec.header.subtitle ? `<span class="opacity-65 text-[10px] font-mono-tech truncate max-w-[75px]">${this.escapeHtml(spec.header.subtitle)}</span>` : ''}
+      `;
+    }
+    this.els.contextSubOptionsRow.style.order = '';
+    this.els.contextDynamicRow.style.order = '';
+    this.els.contextSubOptionsRow.className = 'hidden';
+    this.els.contextSubOptionsRow.innerHTML = '';
+
+    this.renderContextMenuSections(this.els.contextDynamicRow, spec.sections, (act) => {
+      if (act === 'kind-wall') Service.setWallsKind(ids, 'wall');
+      else if (act === 'kind-terrain') Service.setWallsKind(ids, 'terrain');
+      else if (act === 'kind-invisible') Service.setWallsKind(ids, 'invisible');
+      else if (act === 'kind-door') Service.setWallsKind(ids, 'door');
+      else if (act === 'kind-secret') Service.setWallsKind(ids, 'secret');
+      else if (act === 'toggle-open') {
+        ids.forEach((id) => Service.toggleDoor(id));
+      } else if (act === 'toggle-lock') {
+        const res = Service.toggleSelectedDoorsLocked(ids);
+        if (res > 0) this.showActionToast?.(res > 1 ? `🔒 ${res} puertas bloqueadas` : '🔒 Puerta bloqueada');
+        else if (res < 0) this.showActionToast?.(Math.abs(res) > 1 ? `🔓 ${Math.abs(res)} puertas desbloqueadas` : '🔓 Puerta desbloqueada');
+      } else if (act === 'duplicate-walls') {
+        const dup = Service.duplicateWalls(ids);
+        if (dup.length > 0) {
+          this.showActionToast?.(dup.length > 1 ? `⧉ ${dup.length} muros duplicados` : '⧉ Muro duplicado');
+        }
+      } else if (act === 'delete-walls') {
+        const count = Service.removeWallsByIds(ids);
+        if (count > 0) {
+          this.showActionToast?.(count > 1 ? `🗑 ${count} muros eliminados` : '🗑 Muro eliminado');
+        }
+      }
+    });
+
+    this.positionContextMenu(clientX, clientY);
+  },
+
+  openDiceBarContextMenu(clientX, clientY, dieKey = null) {
+    const dice = Service.state.dice || {};
+    const hand = Array.isArray(dice.hand) ? dice.hand : [];
+    const modifier = Number(dice.modifier) || 0;
+    const visibility = dice.visibility || 'public';
+    const historyCount = Array.isArray(dice.history) ? dice.history.length : 0;
+    const deckRemaining = Array.isArray(dice.deck) ? dice.deck.length : 54;
+
+    const spec = dieKey !== null && dieKey !== undefined
+      ? buildDiceDieMenuSpec(dieKey, { modifier, deckRemaining })
+      : buildDiceBarMenuSpec({ hand, modifier, visibility, historyCount });
+
+    if (this.els.contextToolsRow) {
+      this.els.contextToolsRow.classList.add('hidden');
+      this.els.contextToolsRow.classList.remove('grid');
+    }
+    if (this.els.contextTokenHeader) {
+      this.els.contextTokenHeader.style.order = '';
+      this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
+      this.els.contextTokenHeader.innerHTML = `
+        <span class="font-semibold truncate max-w-[165px]">${this.escapeHtml(spec.header?.title || 'Dados')}</span>
+        ${spec.header?.subtitle ? `<span class="opacity-65 text-[10px] font-mono-tech truncate max-w-[85px]">${this.escapeHtml(spec.header.subtitle)}</span>` : ''}
+      `;
+    }
+    this.els.contextSubOptionsRow.style.order = '';
+    this.els.contextDynamicRow.style.order = '';
+    this.els.contextSubOptionsRow.className = 'hidden';
+    this.els.contextSubOptionsRow.innerHTML = '';
+
+    const rollTwoWithMode = (sides, mode) => {
+      const prevMode = Service.state.dice.resultMode || 'sum';
+      Service.state.dice.resultMode = mode;
+      Service.state.dice.hand = [sides, sides];
+      Service.throwDiceHand();
+      Service.state.dice.resultMode = prevMode;
+      Service.notify({ skipVaultSave: true });
+    };
+
+    this.renderContextMenuSections(this.els.contextDynamicRow, spec.sections, (act) => {
+      if (act === 'roll-now') {
+        Service.rollDice(Number(dieKey) || 20);
+      } else if (act === 'roll-adv') {
+        rollTwoWithMode(Number(dieKey) || 20, 'max');
+      } else if (act === 'roll-dis') {
+        rollTwoWithMode(Number(dieKey) || 20, 'min');
+      } else if (act === 'add-two') {
+        Service.addDieToHand(dieKey);
+        Service.addDieToHand(dieKey);
+      } else if (act === 'add-one') {
+        Service.addDieToHand(dieKey);
+      } else if (act === 'roll-coin') {
+        Service.rollCoin();
+      } else if (act === 'roll-fudge-4') {
+        Service.rollFudge(4);
+      } else if (act === 'draw-card') {
+        Service.state.dice.hand = ['card'];
+        Service.throwDiceHand();
+      } else if (act === 'shuffle-deck') {
+        Service.shuffleDeck();
+        this.showActionToast?.('🔀 Baraja mezclada (54/54)');
+      } else if (act === 'clear-hand') {
+        Service.clearDiceHand();
+      } else if (act === 'reset-mod') {
+        Service.state.dice.modifier = 0;
+        Service.notify();
+      } else if (act === 'vis-public') {
+        Service.setDiceVisibility('public');
+      } else if (act === 'vis-private') {
+        Service.setDiceVisibility('private');
+      } else if (act === 'open-customize') {
+        this.setDicePopoverOpen?.(true);
+      } else if (act === 'open-history') {
+        this.setDiceHistoryOpen?.(true);
+      } else if (act === 'clear-history') {
+        Service.clearDiceHistory();
+      }
+    });
+
+    this.positionContextMenu(clientX, clientY);
+  },
+
+  centerCameraOnToken(tok) {
+    if (!tok || !this.els.viewport) return;
+    const vp = this.els.viewport.getBoundingClientRect();
+    const z = Service.state.camera.zoom || 1;
+    Service.state.camera.x = vp.width / 2 - tok.x * z;
+    Service.state.camera.y = vp.height / 2 - tok.y * z;
+    Service.notify({ skipVaultSave: true });
+  },
+
+  hideContextMenu() {
+    this.els.contextIconMenu?.classList.remove('is-open');
+  },
+
+  openListContextMenu(clientX, clientY, title, subtitle = '', actions = []) {
+    if (this.els.contextToolsRow) {
+      this.els.contextToolsRow.classList.add('hidden');
+      this.els.contextToolsRow.classList.remove('grid');
+    }
+    if (this.els.contextTokenHeader) {
+      this.els.contextTokenHeader.style.order = '';
+      this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
+      this.els.contextTokenHeader.innerHTML = `
+        <span class="font-semibold truncate max-w-[165px]">${this.escapeHtml(title)}</span>
+        ${subtitle ? `<span class="opacity-65 text-[10px] truncate max-w-[85px]">${this.escapeHtml(subtitle)}</span>` : ''}
+      `;
+    }
+    this.els.contextSubOptionsRow.style.order = '';
+    this.els.contextDynamicRow.style.order = '';
+    this.els.contextSubOptionsRow.className = 'hidden';
+    this.els.contextSubOptionsRow.innerHTML = '';
+
+    const normal = actions.filter((a) => !a.danger);
+    const dangerous = actions.filter((a) => a.danger);
+    const sections = [];
+    if (normal.length > 0) sections.push(normal);
+    if (dangerous.length > 0) sections.push(dangerous);
+
+    this.renderContextMenuSections(this.els.contextDynamicRow, sections);
+    this.positionContextMenu(clientX, clientY);
   }
 };

@@ -2,8 +2,8 @@
    SEQUENCE VIEW: TARJETA ÚNICA PROGRESIVA Y BANNER DE SOLICITUD ENTRANTE
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 const SEQ_STEP_SVGS = {
   info: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
@@ -11,6 +11,7 @@ const SEQ_STEP_SVGS = {
   targets: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>',
   area: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>',
   roll_request: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>',
+  opposed: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>',
   save_request: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>',
   modify: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>',
   apply_hp: '<svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>',
@@ -20,6 +21,7 @@ const SEQ_STEP_SVGS = {
 const getStepSvg = (step) => {
   if (!step) return SEQ_STEP_SVGS.play;
   if (step.type === 'roll' && step.rollKind === 'request') return SEQ_STEP_SVGS.roll_request;
+  if (step.type === 'roll' && step.rollKind === 'opposed') return SEQ_STEP_SVGS.opposed;
   return SEQ_STEP_SVGS[step.type] || SEQ_STEP_SVGS.play;
 };
 
@@ -294,10 +296,17 @@ export const SequenceViewMethods = {
           const sv = seq.saveResults ? seq.saveResults[t.id] : null;
           let saveBadge = '';
           if (sv) {
-            const passed = sv.dc > 0 ? sv.total >= sv.dc : null;
-            const tone = passed === true ? 'text-emerald-400' : passed === false ? 'text-rose-400' : 'opacity-80';
-            const mark = passed === true ? ' ✓' : passed === false ? ' ✗' : '';
-            saveBadge = `<span class="text-[10px] font-mono-tech tabular-nums ${tone}">${sv.total}${mark}</span>`;
+            if (sv.opposed) {
+              const ref = Number(sv.casterTotal ?? sv.dc) || 0;
+              const tone = sv.total > ref ? 'text-emerald-400' : sv.total === ref ? 'text-amber-300' : 'text-rose-400';
+              const mark = sv.total > ref ? ' ✓' : sv.total === ref ? ' =' : ' ✗';
+              saveBadge = `<span class="text-[10px] font-mono-tech tabular-nums ${tone}">${sv.total}${mark}</span>`;
+            } else {
+              const passed = sv.dc > 0 ? sv.total >= sv.dc : null;
+              const tone = passed === true ? 'text-emerald-400' : passed === false ? 'text-rose-400' : 'opacity-80';
+              const mark = passed === true ? ' ✓' : passed === false ? ' ✗' : '';
+              saveBadge = `<span class="text-[10px] font-mono-tech tabular-nums ${tone}">${sv.total}${mark}</span>`;
+            }
           }
 
           let actionHtml = '';
@@ -409,21 +418,24 @@ export const SequenceViewMethods = {
         })
         .join('');
 
-      const reqDiffLabel = activeReq.evalMode === 'pool' && activeReq.requiredSuccesses
-        ? `${activeReq.requiredSuccesses} éx. (≥${activeReq.successThreshold || 6})`
-        : activeReq.evalMode === 'low'
-          ? (activeReq.lowScale === 5 ? 'Extremo ÷5' : activeReq.lowScale === 2 ? 'Difícil ÷2' : 'Normal')
-          : activeReq.dc
-            ? `CD ${activeReq.dc}`
-            : '';
+      const reqDiffLabel = activeReq.opposed
+        ? `vs ${activeReq.casterName || 'Atacante'} (${activeReq.casterTotal ?? activeReq.dc})`
+        : activeReq.evalMode === 'pool' && activeReq.requiredSuccesses
+          ? `${activeReq.requiredSuccesses} éx. (≥${activeReq.successThreshold || 6})`
+          : activeReq.evalMode === 'low'
+            ? (activeReq.lowScale === 5 ? 'Extremo ÷5' : activeReq.lowScale === 2 ? 'Difícil ÷2' : 'Normal')
+            : activeReq.dc
+              ? `CD ${activeReq.dc}`
+              : '';
       const diffBadge = reqDiffLabel
         ? `<span>${activeReq.secretDc ? '🔒 ' : ''}${esc(reqDiffLabel)}</span>`
         : '';
+      const reqSvg = activeReq.opposed ? SEQ_STEP_SVGS.opposed : SEQ_STEP_SVGS.save_request;
 
       slot.innerHTML = `
         <div class="flex flex-col gap-1 w-full text-left">
           <div class="flex items-center justify-between text-[10px] opacity-70 px-1">
-            <span class="inline-flex items-center gap-1">${SEQ_STEP_SVGS.save_request}<span>${esc(activeReq.label)}</span></span>
+            <span class="inline-flex items-center gap-1">${reqSvg}<span>${esc(activeReq.label)}</span></span>
             ${diffBadge}
           </div>
           ${rows || '<div class="text-[10.5px] opacity-60 text-center">Sin objetivos seleccionados.</div>'}
@@ -505,17 +517,26 @@ export const SequenceViewMethods = {
 
     panel.innerHTML = headerRow + pending
       .map(
-        (req) => `
+        (req) => {
+          const refLabel = req.secretDc
+            ? ''
+            : req.opposed
+              ? ` · vs ${esc(req.casterName || 'Atacante')}: ${req.casterTotal ?? req.dc ?? 0}`
+              : req.dc
+                ? ` · CD ${req.dc}`
+                : '';
+          return `
         <div class="flex items-center justify-between gap-2 text-[11px]">
           <div class="min-w-0">
             <div class="font-semibold truncate">${esc(req.tokenName)} · ${esc(req.label)}</div>
-            <div class="text-[10px] opacity-65 font-mono-tech">${esc(req.formula)}${req.dc ? ` · CD ${req.dc}` : ''}</div>
+            <div class="text-[10px] opacity-65 font-mono-tech">${esc(req.formula)}${refLabel}</div>
           </div>
           <div class="flex items-center gap-1 shrink-0">
             <button type="button" data-req-roll="${esc(req.requestId)}:${esc(req.tokenId)}" class="portal-btn portal-btn-accent px-2.5 py-1 rounded-full text-[10px] font-semibold gap-1">${SEQ_STEP_SVGS.roll}<span>Tirar</span></button>
             <button type="button" data-req-dismiss="${esc(req.requestId)}:${esc(req.tokenId)}" class="w-5 h-5 rounded-full hover:bg-white/10 text-[11px] opacity-65" title="Omitir">✕</button>
           </div>
-        </div>`
+        </div>`;
+        }
       )
       .join('');
 

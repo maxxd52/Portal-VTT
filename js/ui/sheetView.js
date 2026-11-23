@@ -2,15 +2,16 @@
    SHEET VIEW: FICHA DE PERSONAJE, ATRIBUTOS, HABILIDADES, RASGOS E INVENTARIO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 import {
   displayValueToMeters,
   formatDistance,
   hasExplicitTokenVision,
   metersToDisplayValue,
   resolveTokenLightMeters
-} from '../utils/lightingModel.js?v=20261121a6';
+} from '../utils/lightingModel.js?v=20261123a7';
+import { clampTokenSize } from '../utils/tokenTemplateSync.js?v=20261123a7';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
@@ -119,6 +120,29 @@ export const SheetViewMethods = {
         const tok = Selector.getSelectedToken(Service.state);
         if (!tok || !Service.canControlToken(tok)) return;
         Service.cycleTokenLight(tok.id);
+      });
+    }
+    if (this.els.sheetSizeSeg) {
+      this.els.sheetSizeSeg.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-sheet-size]');
+        if (!btn) return;
+        const tok = Selector.getSelectedToken(Service.state);
+        if (!tok || Service.state.role !== 'gm') return;
+        Service.setTokenSize(tok.id, Number(btn.dataset.sheetSize) || 1);
+      });
+    }
+    if (this.els.btnSheetSaveToVault) {
+      this.els.btnSheetSaveToVault.addEventListener('click', () => {
+        const tok = Selector.getSelectedToken(Service.state);
+        if (!tok || Service.state.role !== 'gm') return;
+        const saved = Service.saveTokenToVault(tok.id);
+        if (saved) {
+          this.showActionToast(
+            tok.isAlly === false
+              ? `Molde "${saved.name}" guardado en el Baúl.`
+              : `"${saved.name}" vinculado al Baúl.`
+          );
+        }
       });
     }
     if (this.els.btnLoadDnd55Skills) {
@@ -394,6 +418,32 @@ export const SheetViewMethods = {
     if (this.els.btnSheetLightCycle) {
       this.els.btnSheetLightCycle.textContent = lightMeters > 0 ? formatDistance(lightMeters, vUnit) : 'Apagada';
       this.els.btnSheetLightCycle.classList.toggle('portal-btn-accent', lightMeters > 0);
+    }
+
+    if (this.els.sheetTokenPresenceRow) {
+      const isGm = state.role === 'gm';
+      this.els.sheetTokenPresenceRow.classList.toggle('hidden', !isGm);
+      this.els.sheetTokenPresenceRow.classList.toggle('flex', isGm);
+      if (isGm) {
+        const tokSize = clampTokenSize(tok.size, 1);
+        this.els.sheetSizeSeg?.querySelectorAll('[data-sheet-size]').forEach((btn) => {
+          btn.classList.toggle('is-active', Number(btn.dataset.sheetSize) === tokSize);
+        });
+        const linkedActor = tok.actorKey
+          ? (state.customActors || []).find((a) => a && a.key === tok.actorKey)
+          : null;
+        const isLinkedProtagonist = Boolean(isAllyTok && linkedActor && linkedActor.isAlly !== false);
+        this.els.badgeSheetVaultLinked?.classList.toggle('hidden', !isLinkedProtagonist);
+        this.els.badgeSheetVaultLinked?.classList.toggle('inline-flex', isLinkedProtagonist);
+        if (this.els.btnSheetSaveToVault) {
+          this.els.btnSheetSaveToVault.classList.toggle('hidden', isLinkedProtagonist);
+          this.els.btnSheetSaveToVault.textContent = !isAllyTok
+            ? linkedActor
+              ? 'Actualizar molde'
+              : 'Guardar molde'
+            : 'Guardar en Baúl';
+        }
+      }
     }
 
     const sysCfg = state.systemConfig || {};

@@ -2,14 +2,14 @@
    MEDIA REGISTRY SERVICE: POOL DEDUPLICADO Y RETENCIÓN DE IMÁGENES
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { DriveUrlHelper } from '../utils/driveUrlHelper.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { DriveUrlHelper } from '../utils/driveUrlHelper.js?v=20261123a7';
 import {
   collectPlayerAuthorizedMedia,
   collectReferencedMediaIds,
   hashMediaSource,
   normalizeMediaAssets
-} from '../utils/worldRedaction.js?v=20261121a6';
+} from '../utils/worldRedaction.js?v=20261123a7';
 
 export const MediaRegistryServiceMethods = {
   ensureMediaAssets() {

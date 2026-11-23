@@ -5,11 +5,11 @@ globalThis.window = globalThis.window || {
   location: { search: '', origin: 'http://localhost', pathname: '/' }
 };
 
-const { SYSTEM_PRESETS, createInitialState } = await import('../js/core/model.js?v=20261121a6');
-const { Selector } = await import('../js/core/selector.js?v=20261121a6');
-const { Service } = await import('../js/core/service.js?v=20261121a6');
-const { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS } = await import('../js/data/compendium.js?v=20261121a6');
-const { VIEJA_ESCUELA_ACTORS, VIEJA_ESCUELA_ITEMS } = await import('../js/data/viejaEscuela.js?v=20261121a6');
+const { SYSTEM_PRESETS, createInitialState } = await import('../js/core/model.js?v=20261123a7');
+const { Selector } = await import('../js/core/selector.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS } = await import('../js/data/compendium.js?v=20261123a7');
+const { VIEJA_ESCUELA_ACTORS, VIEJA_ESCUELA_ITEMS } = await import('../js/data/viejaEscuela.js?v=20261123a7');
 
 test('Vieja Escuela preset registers rules, sheet schema, tray dice, and GM screen', () => {
   assert.ok(SYSTEM_PRESETS.vieja_escuela, 'SYSTEM_PRESETS.vieja_escuela must exist');

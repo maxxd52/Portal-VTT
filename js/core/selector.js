@@ -2,23 +2,25 @@
    SELECTOR: CONSULTAS PURAS DE COORDENADAS, RAYCASTING 2D Y SERIALIZACIÓN
    ========================================================================== */
 
-import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261121a6';
-import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261121a6';
-import { normalizeGridConfig, snapToGrid } from '../utils/gridGeometry.js?v=20261121a6';
+import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261123a7';
+import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261123a7';
+import { normalizeGridConfig, snapToGrid } from '../utils/gridGeometry.js?v=20261123a7';
+import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
 import {
   castVisibilityRay,
   collectUniqueRayAngles,
   findWallNearPoint,
+  isWallBlockingSight,
   isWallOpenDoor,
   redactWallsForPlayer
-} from '../utils/wallGeometry.js?v=20261121a6';
+} from '../utils/wallGeometry.js?v=20261123a7';
 import {
   normalizeSceneLighting,
   normalizeVisionConfig,
   resolveTokenVisionMeters,
   resolveTokenLightMeters,
   metersToPixels
-} from '../utils/lightingModel.js?v=20261121a6';
+} from '../utils/lightingModel.js?v=20261123a7';
 import {
   canSeatSeeJournalBlock,
   collectPlayerAuthorizedMedia,
@@ -29,7 +31,7 @@ import {
   normalizeMediaAssets,
   redactCombatForSeat,
   redactTokenForNonOwner
-} from '../utils/worldRedaction.js?v=20261121a6';
+} from '../utils/worldRedaction.js?v=20261123a7';
 
 export const Selector = {
   normalizeStatKey(raw) {
@@ -297,7 +299,8 @@ export const Selector = {
           return;
         }
         if (s.type === 'roll') {
-          actionSteps.push({ ...s, type: 'roll', rollKind: s.rollKind === 'request' ? 'request' : 'self' });
+          const rollKind = s.rollKind === 'request' ? 'request' : s.rollKind === 'opposed' ? 'opposed' : 'self';
+          actionSteps.push({ ...s, type: 'roll', rollKind });
           return;
         }
         if (s.type === 'area' || s.type === 'targets') {
@@ -446,7 +449,7 @@ export const Selector = {
     ];
 
     for (const w of walls || []) {
-      if (isWallOpenDoor(w)) continue;
+      if (!isWallBlockingSight(w)) continue;
       if (Math.max(w.x1, w.x2) < minX || Math.min(w.x1, w.x2) > maxX) continue;
       if (Math.max(w.y1, w.y2) < minY || Math.min(w.y1, w.y2) > maxY) continue;
       segments.push(w);
@@ -507,6 +510,19 @@ export const Selector = {
       }
     }
 
+    const walls = Array.isArray(state?.walls) ? state.walls : [];
+    let wallsSig = `${walls.length}`;
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i];
+      if (!isWallBlockingSight(w)) continue;
+      wallsSig += `|${w.x1},${w.y1},${w.x2},${w.y2},${w.kind === 'terrain' ? 't' : 's'}`;
+    }
+    if (!this._visPolyCache) this._visPolyCache = new Map();
+    if (this._visPolyCacheWallsSig !== wallsSig) {
+      this._visPolyCache.clear();
+      this._visPolyCacheWallsSig = wallsSig;
+    }
+
     const out = [];
     for (const tok of viewers) {
       const visionMeters = resolveTokenVisionMeters(tok, visionCfg);
@@ -514,12 +530,22 @@ export const Selector = {
       const effectiveMeters = Math.max(visionMeters, lightMeters);
       const radius = metersToPixels(effectiveMeters, grid);
       if (radius <= 0) continue;
+      const cacheKey = `${tok.id}|${Math.round(tok.x * 2)}|${Math.round(tok.y * 2)}|${Math.round(radius * 2)}`;
+      let poly = this._visPolyCache.get(cacheKey);
+      if (!poly) {
+        poly = this.computeVisibilityPolygon({ x: tok.x, y: tok.y }, radius, walls);
+        if (this._visPolyCache.size > 64) {
+          const oldest = this._visPolyCache.keys().next().value;
+          if (oldest !== undefined) this._visPolyCache.delete(oldest);
+        }
+        this._visPolyCache.set(cacheKey, poly);
+      }
       out.push({
         token: tok,
         radius,
         visionRadiusPx: metersToPixels(visionMeters, grid),
         lightRadiusPx: metersToPixels(lightMeters, grid),
-        poly: this.computeVisibilityPolygon({ x: tok.x, y: tok.y }, radius, state?.walls)
+        poly
       });
     }
     return out;
@@ -812,12 +838,13 @@ export const Selector = {
 
   getPlayerInvites(state) {
     const list = state?.playerInvites;
-    return Array.isArray(list) && list.length > 0 ? list : [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }];
+    return Array.isArray(list) ? list : [];
   },
 
   getActiveInvite(state) {
     const list = this.getPlayerInvites(state);
-    return list.find((i) => i.id === state?.activeInviteId) || list[0] || null;
+    if (!state?.activeInviteId) return null;
+    return list.find((i) => i.id === state.activeInviteId) || null;
   },
 
   getPlayerAssignedTokenIds(state) {
@@ -829,6 +856,10 @@ export const Selector = {
 
   isSpectator(state) {
     return state?.role === 'player' && this.getPlayerAssignedTokenIds(state).length === 0;
+  },
+
+  isNarrativeScene(state) {
+    return state?.sceneMode === 'narrative';
   },
 
   getGmScreenState(state) {
@@ -911,6 +942,16 @@ export const Selector = {
     if (mode === 'none') {
       return { status: 'none', badge: '', detail: '' };
     }
+    if (mode === 'opposed' || req.opposed) {
+      const refVal = Number(req.casterTotal ?? req.dc) || 0;
+      if (total > refVal) {
+        return { status: 'pass', badge: '✓', detail: `Gana objetivo (vs ${refVal})` };
+      }
+      if (total === refVal) {
+        return { status: 'partial', badge: '=', detail: `Empate (vs ${refVal})` };
+      }
+      return { status: 'fail', badge: '✗', detail: `Gana atacante (vs ${refVal})` };
+    }
     if (mode === 'pool') {
       const reqHits = Number(req.requiredSuccesses) || Number(req.dc) || 0;
       if (reqHits <= 0) return { status: 'none', badge: '', detail: '' };
@@ -965,11 +1006,18 @@ export const Selector = {
     if (fullReq.isInitiative) wire.isInitiative = true;
     if (fullReq.resultMode) wire.resultMode = fullReq.resultMode;
     if (Number(fullReq.successThreshold) > 0) wire.successThreshold = Number(fullReq.successThreshold);
+    if (fullReq.opposed) {
+      wire.opposed = true;
+      wire.casterName = String(fullReq.casterName || '');
+    }
     if (wire.secretDc) {
       wire.dc = 0;
       return wire;
     }
     wire.dc = Number(fullReq.dc) || 0;
+    if (fullReq.opposed) {
+      wire.casterTotal = Number(fullReq.casterTotal ?? fullReq.dc) || 0;
+    }
     if (fullReq.evalMode) wire.evalMode = fullReq.evalMode;
     if (fullReq.lowScale) wire.lowScale = fullReq.lowScale;
     if (Number.isFinite(Number(fullReq.difficultyMod)) && Number(fullReq.difficultyMod) !== 0) {
@@ -1272,7 +1320,10 @@ export const Selector = {
         deck: state.deck ? JSON.parse(JSON.stringify(state.deck)) : null,
         mapId: state.mapId,
         activeMapKey: state.activeMapKey || state.mapId || 'bastion',
+        sceneMode: state.sceneMode === 'narrative' ? 'narrative' : 'tactical',
+        sceneWeather: normalizeWeatherType(state.sceneWeather),
         customMapUrl: state.customMapUrl,
+        customMapSourceUrl: state.customMapSourceUrl || '',
         mapGrids: JSON.parse(JSON.stringify(state.mapGrids || {})),
         notes: JSON.parse(JSON.stringify(state.notes || [])),
         combat: JSON.parse(JSON.stringify(state.combat || { active: false, round: 1, turnIndex: 0, order: [] })),
@@ -1337,6 +1388,8 @@ export const Selector = {
       deck: state.deck ? JSON.parse(JSON.stringify(state.deck)) : null,
       mapId: state.mapId,
       activeMapKey: state.activeMapKey || state.mapId || 'bastion',
+      sceneMode: state.sceneMode === 'narrative' ? 'narrative' : 'tactical',
+      sceneWeather: normalizeWeatherType(state.sceneWeather),
       customMapUrl: state.customMapUrl,
       mapGrids: JSON.parse(JSON.stringify(state.mapGrids || {})),
       notes: filterVisibleMapNotes(state.notes, false),

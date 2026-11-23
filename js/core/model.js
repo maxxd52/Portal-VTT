@@ -2,8 +2,8 @@
    MODEL: ESTADO INICIAL Y GENERADOR DE CÓDIGOS DE SALA
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261121a6';
-import { DEFAULT_VISION_CONFIG } from '../utils/lightingModel.js?v=20261121a6';
+import { COMPENDIUM_ITEMS, buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
+import { DEFAULT_VISION_CONFIG } from '../utils/lightingModel.js?v=20261123a7';
 
 export const DEFAULT_DICE_STYLE = {
   bodyColor: '#8b5cf6',
@@ -246,11 +246,19 @@ export function createInitialState() {
     exploredMask: '',
     exploredRev: 0,
     wallType: 'wall', // 'wall' | 'door'
+    wallMode: 'draw', // 'draw' | 'select'
+    wallDrawKind: 'wall', // 'wall' | 'terrain' | 'door' | 'secret'
+    selectedWallIds: [],
+    wallSelectBox: null,
     wallAnchor: null, // { x, y }
     walls: isGuestPlayer ? [] : buildPresetWallsForMap('bastion'),
     mapId: isGuestPlayer ? 'empty' : 'bastion',
     activeMapKey: isGuestPlayer ? 'empty' : 'bastion',
+    sceneMode: 'tactical',
+    sceneWeather: 'none',
+    sceneWeathers: {},
     customMapUrl: '',
+    customMapSourceUrl: '',
     mapGrids: {},
     sceneLighting: {},
     sceneLayers: {},
@@ -278,7 +286,7 @@ export function createInitialState() {
     activeJournalPresentation: null,
     inspectTokenId: null,
     activeInviteId: inviteParam || '',
-    playerInvites: [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }],
+    playerInvites: [],
     room: {
       code: roomParam,
       moduleTitle: 'Aventura_Bastion'

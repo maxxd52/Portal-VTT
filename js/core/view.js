@@ -2,38 +2,42 @@
    VIEW: RENDERIZADO DE LIENZOS, COMPENDIO, FICHA IZQUIERDA Y MENÚ CONTEXTUAL
    ========================================================================== */
 
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261121a6';
-import { TabletopAudio } from '../services/tabletopAudio.js?v=20261121a6';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261121a6';
-import { Selector } from './selector.js?v=20261121a6';
-import { Service } from './service.js?v=20261121a6';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261121a6';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261121a6';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261121a6';
-import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261121a6';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261121a6';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261121a6';
-import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261121a6';
-import { GmScreenViewMethods } from '../ui/gmScreenView.js?v=20261121a6';
-import { GmScreenWidgetsViewMethods } from '../ui/gmScreenWidgetsView.js?v=20261121a6';
-import { GmScreenConfigViewMethods } from '../ui/gmScreenConfigView.js?v=20261121a6';
-import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261121a6';
-import { JournalPresentationViewMethods } from '../ui/journalPresentationView.js?v=20261121a6';
-import { JournalShareViewMethods } from '../ui/journalShareView.js?v=20261121a6';
-import { JournalViewMethods } from '../ui/journalView.js?v=20261121a6';
-import { MapGridEditorViewMethods } from '../ui/mapGridEditorView.js?v=20261121a6';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261121a6';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261121a6';
-import { PresenceViewMethods } from '../ui/presenceView.js?v=20261121a6';
-import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261121a6';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261121a6';
-import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261121a6';
-import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261121a6';
-import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261121a6';
-import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261121a6';
-import { TokenEditorViewMethods } from '../ui/tokenEditorView.js?v=20261121a6';
-import { TokenInspectViewMethods } from '../ui/tokenInspectView.js?v=20261121a6';
-import { TokenPhysicsViewMethods } from '../ui/tokenPhysicsView.js?v=20261121a6';
+import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
+import { TabletopAudio } from '../services/tabletopAudio.js?v=20261123a7';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
+import { Selector } from './selector.js?v=20261123a7';
+import { Service } from './service.js?v=20261123a7';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261123a7';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261123a7';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261123a7';
+import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261123a7';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261123a7';
+import { shouldAllowNativeContextMenu } from '../utils/contextMenuModel.js?v=20261123a7';
+import { resolveItemBadgeStyle } from '../utils/compendiumCardModel.js?v=20261123a7';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261123a7';
+import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261123a7';
+import { GmScreenViewMethods } from '../ui/gmScreenView.js?v=20261123a7';
+import { GmScreenWidgetsViewMethods } from '../ui/gmScreenWidgetsView.js?v=20261123a7';
+import { GmScreenConfigViewMethods } from '../ui/gmScreenConfigView.js?v=20261123a7';
+import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261123a7';
+import { JournalPresentationViewMethods } from '../ui/journalPresentationView.js?v=20261123a7';
+import { JournalShareViewMethods } from '../ui/journalShareView.js?v=20261123a7';
+import { JournalViewMethods } from '../ui/journalView.js?v=20261123a7';
+import { MapGridEditorViewMethods } from '../ui/mapGridEditorView.js?v=20261123a7';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261123a7';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261123a7';
+import { PortalSelectViewMethods } from '../ui/portalSelectView.js?v=20261123a7';
+import { PresenceViewMethods } from '../ui/presenceView.js?v=20261123a7';
+import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261123a7';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261123a7';
+import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261123a7';
+import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261123a7';
+import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261123a7';
+import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261123a7';
+import { TokenEditorViewMethods } from '../ui/tokenEditorView.js?v=20261123a7';
+import { TokenInspectViewMethods } from '../ui/tokenInspectView.js?v=20261123a7';
+import { TokenPhysicsViewMethods } from '../ui/tokenPhysicsView.js?v=20261123a7';
 
 export const View = {
   els: {},
@@ -78,6 +82,7 @@ export const View = {
   ...MapGridEditorViewMethods,
   ...ModalsViewMethods,
   ...PortalLobbyViewMethods,
+  ...PortalSelectViewMethods,
   ...PresenceViewMethods,
   ...SequenceViewMethods,
   ...SheetViewMethods,
@@ -114,10 +119,12 @@ export const View = {
   renderItemIconBadge(item, opts = {}) {
     const iconKey = item?.icon && ITEM_ICON_DEFS[item.icon] ? item.icon : this.getDefaultItemIcon(item?.kind);
     const color = item?.color || '#8b5cf6';
+    const style = resolveItemBadgeStyle(opts.size);
     if (opts.interactive && item?.uid) {
-      return `<button type="button" draggable="false" data-use-inv="${item.uid}" class="portal-item-use-btn w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="--item-color:${color}; background:${color}22; color:${color}; border-color:${color}55;" title="Usar / Tirar ${item.name || ''}" aria-label="Usar ${item.name || 'objeto'}">${this.renderItemIconSvg(iconKey)}</button>`;
+      return `<button type="button" draggable="false" data-use-inv="${item.uid}" class="portal-item-use-btn ${style.boxClass} flex items-center justify-center flex-shrink-0" style="--item-color:${color}; background:${color}22; color:${color}; border-color:${color}55;" title="Usar / Tirar ${item.name || ''}" aria-label="Usar ${item.name || 'objeto'}">${this.renderItemIconSvg(iconKey, style.iconClass, style.strokeWidth)}</button>`;
     }
-    return `<span class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="background:${color}22; color:${color};">${this.renderItemIconSvg(iconKey)}</span>`;
+    const ringCss = style.ring ? ` box-shadow: inset 0 0 0 1px ${color}40;` : '';
+    return `<span class="${style.boxClass} flex items-center justify-center flex-shrink-0" style="background:${color}22; color:${color};${ringCss}">${this.renderItemIconSvg(iconKey, style.iconClass, style.strokeWidth)}</span>`;
   },
 
   bindDrawerResize(drawerEl, side, storageKey) {
@@ -255,16 +262,25 @@ export const View = {
       trayEl: this.els.diceTrayBar
     });
     this.bindEvents();
+    this.initPortalSelects?.();
+    BrowserVault.requestPersistentStorage();
+    BrowserVault.onSaveError = () => {
+      this.showActionToast('Error al guardar en el navegador (espacio lleno o pestaña bloqueada). Exporta tu .portal.');
+    };
+    Service.subscribe((state, opts) => this.render(state, opts));
     await Service.restoreFromVault();
+
+    if (Service.isHostNetwork() && Service.state.mapId === 'custom' && Service.state.customMapSourceUrl) {
+      Service.refreshExternalMapFromSource();
+    }
 
     RealtimeBridge.connect(
       Service.state.room.code,
       (msg) => this.handleRealtimeMessage(msg),
-      () => Service.state.role
+      () => (Service.isHostNetwork() ? 'gm' : 'player')
     );
     this.startPresenceHeartbeat();
 
-    Service.subscribe((state, opts) => this.render(state, opts));
     this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
 
     const hasRoomParam = new URLSearchParams(window.location.search).has('room');
@@ -275,22 +291,23 @@ export const View = {
 
   startPresenceHeartbeat() {
     const sendPing = () => {
-      const inviteId = Service.state.activeInviteId || '';
+      const netIsGm = Service.isHostNetwork();
+      const inviteId = netIsGm ? '' : (Service.state.activeInviteId || '');
       const primaryTokenId = inviteId && Service.playerPrimaryTokens instanceof Map
         ? (Service.playerPrimaryTokens.get(inviteId) || '')
         : '';
       RealtimeBridge.send({
         kind: 'PRESENCE_PING',
         clientId: Service.clientId,
-        role: Service.state.role || 'gm',
+        role: netIsGm ? 'gm' : 'player',
         inviteId,
-        seatKey: Service.getSelfSeatKey(),
+        seatKey: netIsGm ? 'gm' : Service.getSelfSeatKey(),
         primaryTokenId,
-        profile: Service.state.role === 'gm' ? Service.getLocalProfile() : null
+        profile: netIsGm ? Service.getLocalProfile() : null
       });
     };
     sendPing();
-    if (Service.state.role === 'player') {
+    if (!Service.isHostNetwork()) {
       const reqPayload = {
         kind: 'SYNC_REQUEST',
         clientId: Service.clientId,
@@ -314,8 +331,13 @@ export const View = {
     this._presenceTimer = setInterval(sendPing, 10000);
     if (!this._presenceUnloadBound) {
       this._presenceUnloadBound = true;
-      window.addEventListener('beforeunload', () => {
+      window.addEventListener('beforeunload', (e) => {
         RealtimeBridge.send({ kind: 'PRESENCE_BYE', clientId: Service.clientId, leaving: true });
+        BrowserVault.flushPendingSaves();
+        if (BrowserVault.hasPendingSaves()) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
       });
     }
   },
@@ -340,7 +362,7 @@ export const View = {
       Service.state.activeHandout = null;
       Service.notify({ skipVaultSave: true });
     } else if (msg.kind === 'SYNC_REQUEST') {
-      if (Service.state.role === 'gm') {
+      if (Service.isHostNetwork()) {
         const reqSeat = msg.seatKey || msg.inviteId || (msg.clientId ? `peer:${msg.clientId}` : null);
         Service.syncWorldToPeers(reqSeat);
       }
@@ -348,7 +370,7 @@ export const View = {
       const isNewPeer = msg.clientId && msg.clientId !== Service.clientId && !Service.peers.has(msg.clientId);
       Service.updatePeerPresence(msg);
       const now = Date.now();
-      if (isNewPeer && Service.state.role === 'gm' && now - (this._lastWorldSyncAt || 0) > 400) {
+      if (isNewPeer && Service.isHostNetwork() && now - (this._lastWorldSyncAt || 0) > 400) {
         this._lastWorldSyncAt = now;
         const pingSeat = msg.seatKey || msg.inviteId || (msg.clientId ? `peer:${msg.clientId}` : null);
         Service.syncWorldToPeers(pingSeat);
@@ -437,11 +459,11 @@ export const View = {
       }
       Service.state.sheetOpen = !Service.state.sheetOpen;
       if (Service.state.sheetOpen) Service.state.gmScreenOpen = false;
-      Service.notify();
+      Service.notify({ skipVaultSave: true, skipPeerSync: true });
     });
     this.els.btnCloseSheet.addEventListener('click', () => {
       Service.state.sheetOpen = false;
-      Service.notify();
+      Service.notify({ skipVaultSave: true, skipPeerSync: true });
     });
 
     this.els.btnToggleJournal?.addEventListener('click', () => {
@@ -513,6 +535,57 @@ export const View = {
       if (!btn) return;
       Service.state.rulerShape = btn.dataset.rulerShape;
       Service.notify();
+    });
+
+    this.els.drawColorRow?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-draw-color]');
+      if (!btn) return;
+      Service.setDrawColor(btn.dataset.drawColor);
+    });
+
+    this.els.btnClearDrawStrokes?.addEventListener('click', () => {
+      const cleared = Service.clearStrokes();
+      if (cleared > 0) {
+        this.showActionToast('🗑 Trazos del marcador borrados');
+      }
+    });
+
+    this.els.wallModeSeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-wall-mode]');
+      if (!btn) return;
+      Service.setWallMode(btn.dataset.wallMode);
+    });
+
+    this.els.wallKindSeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-wall-kind]');
+      if (!btn) return;
+      const res = Service.applyWallKind(btn.dataset.wallKind);
+      if (res.mode === 'transform' && res.count > 0) {
+        const labels = {
+          wall: 'Muro sólido',
+          terrain: 'Pilar / Terreno',
+          door: 'Puerta',
+          secret: 'Puerta secreta'
+        };
+        this.showActionToast(
+          res.count > 1
+            ? `✨ ${res.count} segmentos → ${labels[res.kind] || 'Muro'}`
+            : `✨ Segmento → ${labels[res.kind] || 'Muro'}`
+        );
+      }
+    });
+
+    this.els.btnWallToggleDoorOpen?.addEventListener('click', () => {
+      const selIds = Array.isArray(Service.state.selectedWallIds) ? Service.state.selectedWallIds : [];
+      if (selIds.length === 0) return;
+      selIds.forEach((id) => Service.toggleDoor(id));
+    });
+
+    this.els.btnWallDeleteSelected?.addEventListener('click', () => {
+      const removed = Service.deleteSelectedWalls();
+      if (removed > 0) {
+        this.showActionToast(removed > 1 ? `🗑 ${removed} muros eliminados` : '🗑 Muro eliminado');
+      }
     });
 
     this.els.btnCloseNoteModal.addEventListener('click', () => this.closeNoteModal());
@@ -627,6 +700,19 @@ export const View = {
         !e.target.closest('#btnOpenOptions')
       ) {
         this.els.optionsPopover.classList.remove('is-open');
+      }
+      if (
+        this.els.contextIconMenu?.classList.contains('is-open') &&
+        !e.target.closest('#contextIconMenu')
+      ) {
+        this.hideContextMenu?.();
+      }
+    });
+
+    document.addEventListener('contextmenu', (e) => {
+      if (e.defaultPrevented) return;
+      if (!shouldAllowNativeContextMenu(e.target)) {
+        e.preventDefault();
       }
     });
 
@@ -781,6 +867,60 @@ export const View = {
         b.classList.toggle('is-active', b.dataset.rulerShape === shape);
       });
     }
+    if (this.els.drawToolPill) {
+      const showDraw = !isPlayer && !isSpectator && state.tool === 'draw';
+      this.els.drawToolPill.classList.toggle('hidden', !showDraw);
+      this.els.drawToolPill.classList.toggle('flex', showDraw);
+      const curColor = state.drawColor || '#ef4444';
+      this.els.drawColorRow?.querySelectorAll('[data-draw-color]').forEach((b) => {
+        const active = b.dataset.drawColor === curColor;
+        b.classList.toggle('border-white', active);
+        b.classList.toggle('scale-110', active);
+        b.classList.toggle('border-transparent', !active);
+      });
+      if (this.els.btnClearDrawStrokes) {
+        const strokeCount = Array.isArray(state.strokes) ? state.strokes.length : 0;
+        this.els.btnClearDrawStrokes.disabled = strokeCount === 0;
+      }
+    }
+    if (this.els.wallModePill) {
+      const showWall = !isPlayer && !isSpectator && state.tool === 'wall';
+      this.els.wallModePill.classList.toggle('hidden', !showWall);
+      this.els.wallModePill.classList.toggle('flex', showWall);
+      const wMode = state.wallMode === 'select' ? 'select' : 'draw';
+      this.els.wallModeSeg?.querySelectorAll('[data-wall-mode]').forEach((b) => {
+        b.classList.toggle('is-active', b.dataset.wallMode === wMode);
+      });
+      const selIds = Array.isArray(state.selectedWallIds) ? state.selectedWallIds : [];
+      const selSet = new Set(selIds);
+      const selectedWalls = (state.walls || []).filter((w) => w && selSet.has(w.id));
+      const count = selectedWalls.length;
+
+      let activeKind = state.wallDrawKind || 'wall';
+      if (wMode === 'select' && count > 0) {
+        const firstKind = selectedWalls[0].kind || 'wall';
+        activeKind = selectedWalls.every((w) => (w.kind || 'wall') === firstKind) ? firstKind : '';
+      }
+      this.els.wallKindSeg?.querySelectorAll('[data-wall-kind]').forEach((b) => {
+        b.classList.toggle('is-active', b.dataset.wallKind === activeKind);
+      });
+
+      if (this.els.btnWallToggleDoorOpen) {
+        const allDoors = wMode === 'select' && count > 0 && selectedWalls.every((w) => w.kind === 'door' || w.kind === 'secret');
+        this.els.btnWallToggleDoorOpen.classList.toggle('hidden', !allDoors);
+        if (allDoors) {
+          const allOpen = selectedWalls.every((w) => Boolean(w.open));
+          this.els.btnWallToggleDoorOpen.textContent = allOpen ? '🔒 Cerrar' : '🔓 Abrir';
+        }
+      }
+
+      if (this.els.btnWallDeleteSelected) {
+        this.els.btnWallDeleteSelected.disabled = count === 0;
+      }
+      if (this.els.lblWallSelectCount) {
+        this.els.lblWallSelectCount.textContent = count > 0 ? `Eliminar (${count})` : 'Eliminar';
+      }
+    }
 
     const selTok = Selector.getSelectedToken(state);
     const sheetOpen = Boolean(!isSpectator && state.sheetOpen && selTok && Service.canControlToken(selTok));
@@ -856,6 +996,13 @@ export const View = {
   handleEscapeKey() {
     const els = this.els || {};
     const state = Service.state;
+    if (this.closePortalSelect?.(true)) {
+      return 'popover';
+    }
+    if (this.customTokenItemsPickerOpen) {
+      this.setCustomTokenItemsPickerOpen?.(false);
+      return 'popover';
+    }
     const active = typeof document !== 'undefined' ? document.activeElement : null;
     if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && typeof active.blur === 'function') {
       active.blur();
@@ -896,6 +1043,18 @@ export const View = {
     }
     if (state.wallAnchor) {
       state.wallAnchor = null;
+      closedOverlay = true;
+      needsNotify = true;
+    }
+    if (Array.isArray(state.selectedWallIds) && state.selectedWallIds.length > 0) {
+      state.selectedWallIds = [];
+      state.wallSelectBox = null;
+      closedOverlay = true;
+      needsNotify = true;
+    }
+    if (Array.isArray(state.selectedTokenIds) && state.selectedTokenIds.length > 1) {
+      state.selectedTokenIds = state.selectedTokenId ? [state.selectedTokenId] : [];
+      state.tokenSelectBox = null;
       closedOverlay = true;
       needsNotify = true;
     }

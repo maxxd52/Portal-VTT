@@ -2,9 +2,9 @@
    GM SCREEN CONFIG VIEW: OPCIONES DE PANTALLA EN SISTEMA Y REGLAS
    ========================================================================== */
 
-import { GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 export const GmScreenConfigViewMethods = {
   renderGmScreenConfigPane(state) {

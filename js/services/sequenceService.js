@@ -2,10 +2,29 @@
    SEQUENCE SERVICE: SECUENCIAS DE ACCIONES, ÁREAS Y SOLICITUDES DE TIRADA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
 
 export const SequenceServiceMethods = {
+  _resolveRequestFormula(rawStatKey, explicitFormula, actor = null) {
+    const statKey = rawStatKey ? Selector.normalizeStatKey(rawStatKey) : '';
+    const statDef = statKey
+      ? Selector.getSheetStatsDef(this.state, actor).find((s) => s.key === statKey || s.alias === statKey)
+      : null;
+    const statLabel = statDef ? statDef.label : (statKey ? statKey.toUpperCase() : '');
+    let formula = String(explicitFormula || '').trim();
+    if (!formula) {
+      const sysBase = String(this.state.systemConfig?.rollFormula || '1d20+@stat').trim();
+      if (statDef || statKey) {
+        const ref = statDef ? statDef.alias : statKey;
+        formula = sysBase.includes('@stat') ? sysBase.replace(/@stat\b/gi, `@${ref}`) : `${sysBase}+@${ref}`;
+      } else {
+        formula = sysBase.replace(/\+\s*@stat\b|@stat\b/gi, '').trim() || '1d20';
+      }
+    }
+    return { statKey, statLabel, formula };
+  },
+
   startItemSequence(tokenId, invItem) {
     const normalized = Selector.normalizeItemSchema(invItem);
     const steps = normalized.steps || [];
@@ -81,22 +100,11 @@ export const SequenceServiceMethods = {
     if (step.type === 'save_request' || (step.type === 'roll' && step.rollKind === 'request')) {
       const fallbackTargets = this.state.selectedTokenId ? [this.state.selectedTokenId] : [];
       const targetIds = seq.targetTokenIds.length > 0 ? seq.targetTokenIds : fallbackTargets;
-      const rawStatKey = String(step.statKey || '').trim();
-      const statKey = rawStatKey ? Selector.normalizeStatKey(rawStatKey) : '';
-      const statDef = statKey
-        ? Selector.getSheetStatsDef(this.state, caster).find((s) => s.key === statKey || s.alias === statKey)
-        : null;
-      const statLabel = statDef ? statDef.label : (statKey ? statKey.toUpperCase() : '');
-      let formula = String(step.formula || '').trim();
-      if (!formula) {
-        const sysBase = String(this.state.systemConfig?.rollFormula || '1d20+@stat').trim();
-        if (statDef || statKey) {
-          const ref = statDef ? statDef.alias : statKey;
-          formula = sysBase.includes('@stat') ? sysBase.replace(/@stat\b/gi, `@${ref}`) : `${sysBase}+@${ref}`;
-        } else {
-          formula = sysBase.replace(/\+\s*@stat\b|@stat\b/gi, '').trim() || '1d20';
-        }
-      }
+      const { statKey, statLabel, formula } = this._resolveRequestFormula(
+        String(step.statKey || '').trim(),
+        step.formula,
+        caster
+      );
       seq.mode = 'roll_request';
       this.sendRollRequest({
         label: step.label || (statLabel ? `Salvación de ${statLabel}` : 'Tirada solicitada'),
@@ -105,6 +113,61 @@ export const SequenceServiceMethods = {
         dc: Number(step.dc) || 0,
         targetTokenIds: targetIds,
         damageTotal: seq.lastDamageTotal || 0
+      });
+      return;
+    }
+
+    if (step.type === 'roll' && step.rollKind === 'opposed') {
+      const casterFormula = String(step.formula || '').trim() || '1d20';
+      const rollOpts = {
+        resultMode: step.resultMode || 'inherit',
+        successThreshold: Number(step.successThreshold) || 6
+      };
+      const roll = this.rollFormula(
+        casterFormula,
+        caster,
+        `${casterPrefix}${step.label || seq.itemName}`,
+        stepMsg,
+        rollOpts
+      );
+      const casterTotal = roll ? Number(roll.total) || 0 : 0;
+      if (!seq.stepResults) seq.stepResults = {};
+      seq.stepResults[stepIndex] = {
+        stepIndex,
+        label: step.label || seq.itemName,
+        total: casterTotal,
+        opposed: true
+      };
+
+      const oppStatRaw = String(step.opposedStatKey || '').trim();
+      const oppFormulaRaw = String(step.opposedFormula || '').trim();
+      let targetStatKey = '';
+      let targetFormula = casterFormula;
+      if (oppFormulaRaw || oppStatRaw) {
+        const resolved = this._resolveRequestFormula(oppStatRaw, oppFormulaRaw, caster);
+        targetStatKey = resolved.statKey;
+        targetFormula = resolved.formula;
+      }
+
+      const fallbackTargets =
+        this.state.selectedTokenId && this.state.selectedTokenId !== seq.tokenId
+          ? [this.state.selectedTokenId]
+          : [];
+      const targetIds = seq.targetTokenIds.length > 0 ? seq.targetTokenIds : fallbackTargets;
+      seq.mode = 'roll_request';
+      this.sendRollRequest({
+        label: step.label || 'Tirada enfrentada',
+        statKey: targetStatKey,
+        formula: targetFormula,
+        dc: casterTotal,
+        targetTokenIds: targetIds,
+        damageTotal: seq.lastDamageTotal || 0,
+        evalMode: 'opposed',
+        opposed: true,
+        casterTotal,
+        casterName: caster ? caster.name : '',
+        resultMode: step.resultMode && step.resultMode !== 'inherit' ? step.resultMode : '',
+        poolThreshold: Number(step.successThreshold) || 0
       });
       return;
     }
@@ -333,7 +396,10 @@ export const SequenceServiceMethods = {
     difficultyMod = 0,
     poolThreshold = 0,
     requiredSuccesses = 0,
-    resultMode = ''
+    resultMode = '',
+    opposed = false,
+    casterTotal = 0,
+    casterName = ''
   }) {
     const targets = targetTokenIds
       .map((id) => (this.state.tokens || []).find((t) => t.id === id))
@@ -355,6 +421,9 @@ export const SequenceServiceMethods = {
       successThreshold: Number(poolThreshold) || 0,
       requiredSuccesses: Number(requiredSuccesses) || 0,
       resultMode: String(resultMode || ''),
+      opposed: Boolean(opposed),
+      casterTotal: Number(casterTotal) || 0,
+      casterName: String(casterName || ''),
       targets
     };
 
@@ -365,7 +434,13 @@ export const SequenceServiceMethods = {
 
     const wireReq = Selector.buildWireRollRequest(req);
     RealtimeBridge.send({ kind: 'ROLL_REQUEST', request: wireReq });
-    const logDc = req.secretDc ? ' (Secreta)' : req.dc ? ` (CD ${req.dc})` : '';
+    const logDc = req.secretDc
+      ? ' (Secreta)'
+      : req.opposed
+        ? ` (vs ${req.casterName || 'Atacante'}: ${req.casterTotal})`
+        : req.dc
+          ? ` (CD ${req.dc})`
+          : '';
     this.recordEvent('SOLICITUD_TIRADA', `${req.label}${logDc} → ${targets.map((t) => t.name).join(', ') || 'Mesa'}`);
     this.notify({ skipVaultSave: true });
     return this.state.activeRollRequest;
@@ -396,6 +471,9 @@ export const SequenceServiceMethods = {
           formula: req.formula,
           dc: req.secretDc ? 0 : (req.dc || 0),
           secretDc: Boolean(req.secretDc),
+          opposed: Boolean(req.opposed),
+          casterTotal: req.secretDc ? 0 : (Number(req.casterTotal ?? req.dc) || 0),
+          casterName: String(req.casterName || ''),
           resultMode: req.resultMode || '',
           successThreshold: Number(req.successThreshold) || 0
         });
@@ -497,7 +575,9 @@ export const SequenceServiceMethods = {
       if (!this.state.activeSequence.saveResults) this.state.activeSequence.saveResults = {};
       this.state.activeSequence.saveResults[resp.tokenId] = {
         ...resp,
-        dc: active.dc || 0
+        dc: active.dc || 0,
+        opposed: Boolean(active.opposed),
+        casterTotal: active.opposed ? (Number(active.casterTotal ?? active.dc) || 0) : undefined
       };
     }
     this.notify({ skipVaultSave: true });

@@ -1,7 +1,7 @@
-import { Dice3DEngine } from './dice3dEngine.js?v=20261121a6';
-import { DiceFormulaServiceMethods } from './diceFormulaService.js?v=20261121a6';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
-import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261121a6';
+import { Dice3DEngine } from './dice3dEngine.js?v=20261123a7';
+import { DiceFormulaServiceMethods } from './diceFormulaService.js?v=20261123a7';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261123a7';
 
 /**
  * Dice hand, style, rolling & private/public visibility methods mixed into Service.

@@ -2,12 +2,13 @@
    ITEM CREATOR VIEW: CREADOR MODULAR DE COMPLEMENTOS EN 3 BLOQUES
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 const CREATOR_ICONS = {
   passive: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6l7-3z"/></svg>',
   roll: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg>',
+  opposed: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>',
   targets: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg>',
   request: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg>',
   modify: '<svg class="w-3 h-3 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 6.2 5.5 10.5a5.5 5.5 0 1 1-11 0C6.5 9.2 12 3 12 3z"/></svg>',
@@ -146,9 +147,12 @@ export const ItemCreatorViewMethods = {
       .map((s, idx) => {
         const isPassive = s.type === 'modify' && s.effectMode === 'passive';
         if (!isPassive) activeStepNum += 1;
+        const rollSvg = s.type === 'roll'
+          ? (s.rollKind === 'request' ? CREATOR_ICONS.request : s.rollKind === 'opposed' ? CREATOR_ICONS.opposed : CREATOR_ICONS.roll)
+          : (CREATOR_ICONS[s.type] || CREATOR_ICONS.modify);
         const stepBadge = isPassive
           ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider shrink-0" style="background: var(--accent-soft); color: var(--accent-primary);">${CREATOR_ICONS.passive}<span>Pasivo</span></span>`
-          : `<span class="inline-flex items-center gap-1 font-semibold opacity-80 shrink-0">${s.type === 'roll' && s.rollKind === 'request' ? CREATOR_ICONS.request : (CREATOR_ICONS[s.type] || CREATOR_ICONS.modify)}<span>${activeStepNum}.</span></span>`;
+          : `<span class="inline-flex items-center gap-1 font-semibold opacity-80 shrink-0">${rollSvg}<span>${activeStepNum}.</span></span>`;
 
         const controls = `
           <div class="flex items-center gap-0.5 shrink-0">
@@ -161,10 +165,12 @@ export const ItemCreatorViewMethods = {
 
         if (s.type === 'roll') {
           const isRequest = s.rollKind === 'request';
+          const isOpposed = s.rollKind === 'opposed';
           const kindSwitch = `
-            <div class="portal-seg grid grid-cols-2 gap-0.5 text-[9.5px] flex-1 min-w-0">
-              <button type="button" data-b-rollkind="${idx}:self" class="portal-seg-btn py-0.5 font-semibold ${!isRequest ? 'is-active' : ''}">Propia</button>
+            <div class="portal-seg grid grid-cols-3 gap-0.5 text-[9.5px] flex-1 min-w-0">
+              <button type="button" data-b-rollkind="${idx}:self" class="portal-seg-btn py-0.5 font-semibold ${!isRequest && !isOpposed ? 'is-active' : ''}">Propia</button>
               <button type="button" data-b-rollkind="${idx}:request" class="portal-seg-btn py-0.5 font-semibold ${isRequest ? 'is-active' : ''}">Solicitar</button>
+              <button type="button" data-b-rollkind="${idx}:opposed" class="portal-seg-btn py-0.5 font-semibold ${isOpposed ? 'is-active' : ''}">Enfrentada</button>
             </div>`;
 
           if (isRequest) {
@@ -223,6 +229,21 @@ export const ItemCreatorViewMethods = {
           const thrInput = rMode === 'success'
             ? `<span class="text-[10px] opacity-65">≥</span><input type="number" data-b-thr="${idx}" value="${rThr}" min="1" max="100" class="portal-num-input w-10 py-0.5 text-center text-[10px]" title="Umbral de éxito" />`
             : '';
+          const oppStatKey = s.opposedStatKey ?? '';
+          const opposedDefenseHtml = isOpposed
+            ? `<div class="pt-1 mt-0.5 border-t flex flex-col gap-1" style="border-color: var(--hairline);">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[9.5px] opacity-65 shrink-0">Defensa objetivo</span>
+                  <select data-b-opp-stat="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
+                    <option value="" ${!oppStatKey ? 'selected' : ''}>Igual que atacante</option>
+                    ${stats
+                      .map((st) => `<option value="${esc(st.key)}" ${oppStatKey === st.key ? 'selected' : ''}>${esc(st.label)}</option>`)
+                      .join('')}
+                  </select>
+                </div>
+                <input type="text" data-b-opp-formula="${idx}" value="${esc(s.opposedFormula || '')}" placeholder="Fórmula rival (vacío = igual que atacante)" class="portal-input px-2 py-0.5 text-[10px] font-mono-tech" />
+              </div>`
+            : '';
           return `
             <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1.5 text-[10.5px]">
               <div class="flex items-center justify-between gap-1.5">
@@ -230,7 +251,7 @@ export const ItemCreatorViewMethods = {
                 ${kindSwitch}
                 ${controls}
               </div>
-              <input type="text" data-b-label="${idx}" value="${esc(s.label)}" placeholder="Etiqueta (ej. Ataque)" class="portal-input px-2 py-0.5 text-[10.5px]" />
+              <input type="text" data-b-label="${idx}" value="${esc(s.label)}" placeholder="${isOpposed ? 'Etiqueta (ej. Agarre / Engaño)' : 'Etiqueta (ej. Ataque)'}" class="portal-input px-2 py-0.5 text-[10.5px]" />
               <input type="text" data-b-formula="${idx}" value="${esc(s.formula)}" placeholder="1d20+@fue" class="portal-input px-2 py-1 text-[11px] font-mono-tech" />
               <div class="flex items-center gap-1">
                 <select data-b-rmode="${idx}" class="portal-input px-1.5 py-0.5 text-[10px] font-semibold flex-1 min-w-0 cursor-pointer">
@@ -242,6 +263,7 @@ export const ItemCreatorViewMethods = {
                 ${opSwitch}${diceChips}
                 ${statChips ? `<div class="w-full pt-1 mt-0.5 border-t flex flex-wrap gap-1" style="border-color: var(--hairline);">${statChips}</div>` : ''}
               </div>
+              ${opposedDefenseHtml}
               ${stepNoteInput}
             </div>`;
         }
@@ -399,20 +421,40 @@ export const ItemCreatorViewMethods = {
         const [iRaw, kind] = btn.dataset.bRollkind.split(':');
         const blk = this.creatorBlocks[Number(iRaw)];
         if (!blk) return;
-        blk.rollKind = kind === 'request' ? 'request' : 'self';
+        blk.rollKind = kind === 'request' ? 'request' : kind === 'opposed' ? 'opposed' : 'self';
         if (blk.rollKind === 'request') {
           const st = stats.find((x) => x.key === blk.statKey) || stats[1] || stats[0];
-          if (!blk.label || blk.label === 'Ataque' || blk.label === 'Daño') {
+          if (!blk.label || blk.label === 'Ataque' || blk.label === 'Daño' || blk.label === 'Tirada enfrentada') {
             blk.label = st ? `Salvación de ${st.label}` : 'Tirada requerida';
           }
           if (blk.formula === '1d8' || /^1d20\+@/.test(blk.formula || '')) {
             blk.formula = '';
           }
-        } else if (!blk.formula) {
-          blk.formula = `1d20+@${stats[0]?.alias || stats[0]?.key || 'fue'}`;
-          if (!blk.label || blk.label.startsWith('Salvación')) blk.label = 'Ataque';
+        } else {
+          if (!blk.formula) {
+            blk.formula = `1d20+@${stats[0]?.alias || stats[0]?.key || 'fue'}`;
+          }
+          if (blk.rollKind === 'opposed') {
+            if (!blk.label || blk.label === 'Ataque' || blk.label.startsWith('Salvación')) {
+              blk.label = 'Tirada enfrentada';
+            }
+          } else if (!blk.label || blk.label.startsWith('Salvación') || blk.label === 'Tirada enfrentada') {
+            blk.label = 'Ataque';
+          }
         }
         this.renderCreatorBlocks();
+      });
+    });
+    box.querySelectorAll('[data-b-opp-stat]').forEach((el) => {
+      el.addEventListener('change', () => {
+        const blk = this.creatorBlocks[Number(el.dataset.bOppStat)];
+        if (blk) blk.opposedStatKey = el.value;
+      });
+    });
+    box.querySelectorAll('[data-b-opp-formula]').forEach((el) => {
+      el.addEventListener('input', () => {
+        const blk = this.creatorBlocks[Number(el.dataset.bOppFormula)];
+        if (blk) blk.opposedFormula = el.value;
       });
     });
     box.querySelectorAll('[data-b-formula-op]').forEach((el) => {

@@ -342,10 +342,11 @@ html[data-ui-scale="large"] #diceDockContainer {
 }
 
 .portal-toast {
+  left: min(calc(50% + 144px), calc(100vw - 262px));
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translate3d(-50%, -10px, 0) scale(0.96);
+  transform: translate3d(0, 10px, 0) scale(0.96);
   will-change: transform, opacity;
   transition:
     transform var(--dur-ui) var(--ease-mac),
@@ -356,7 +357,7 @@ html[data-ui-scale="large"] #diceDockContainer {
 .portal-toast.is-open {
   opacity: 1;
   visibility: visible;
-  transform: translate3d(-50%, 0, 0) scale(1);
+  transform: translate3d(0, 0, 0) scale(1);
   transition:
     transform var(--dur-ui) var(--ease-mac),
     opacity var(--dur-ui) var(--ease-mac),
@@ -432,6 +433,177 @@ html[data-ui-scale="large"] #diceDockContainer {
 .portal-list-row:hover::before,
 .portal-list-row:hover + .portal-list-row::before {
   opacity: 0;
+}
+
+/* Apple-style Scenario Preview Cards (Baúl -> Escenarios) */
+.portal-map-card {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  transition:
+    background-color var(--dur-fast) var(--ease-mac),
+    border-color var(--dur-fast) var(--ease-mac),
+    box-shadow var(--dur-fast) var(--ease-mac),
+    transform var(--dur-fast) var(--ease-mac);
+}
+
+.portal-map-card + .portal-map-card,
+.portal-list-row + .portal-map-card,
+.portal-map-card + .portal-list-row {
+  margin-top: 8px;
+}
+
+.portal-map-card:hover {
+  background: var(--die-hover-bg);
+  border-color: var(--border-strong);
+  transform: translate3d(0, -1px, 0);
+}
+
+.portal-map-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.portal-map-card-preview {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  background: #0f172a;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.portal-map-card-preview img {
+  transition: transform 280ms var(--ease-mac);
+}
+
+.portal-map-card:hover .portal-map-card-preview img {
+  transform: scale(1.03);
+}
+
+.portal-map-card-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.14) 0%, rgba(15, 23, 42, 0) 45%, rgba(15, 23, 42, 0.36) 100%);
+}
+
+.portal-map-active-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.portal-map-badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.portal-map-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #e9d5ff;
+  background: rgba(88, 28, 135, 0.72);
+  border: 1px solid rgba(216, 180, 254, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+#narrativeBackdropLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #0b0e14;
+  pointer-events: none;
+}
+
+#narrativeBackdropImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.portal-narrative-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, rgba(11, 14, 20, 0) 52%, rgba(11, 14, 20, 0.56) 100%),
+    linear-gradient(180deg, rgba(11, 14, 20, 0.28) 0%, rgba(11, 14, 20, 0) 24%, rgba(11, 14, 20, 0) 76%, rgba(11, 14, 20, 0.42) 100%);
+}
+
+#vttStage.is-narrative {
+  cursor: default;
+}
+
+#vttStage.is-narrative #worldTransformLayer {
+  display: none;
+}
+
+#weatherCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.portal-map-card-menu {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-mac), background-color var(--dur-fast) var(--ease-mac);
+}
+
+.portal-map-card:hover .portal-map-card-menu,
+.portal-map-card:focus-within .portal-map-card-menu,
+.portal-map-card-menu:focus {
+  opacity: 1;
+}
+
+.portal-map-card-menu:hover {
+  background: rgba(15, 23, 42, 0.88);
 }
 
 .portal-list-action {
@@ -511,9 +683,31 @@ html[data-ui-scale="large"] #diceDockContainer {
   -webkit-appearance: none;
 }
 
+select.portal-input,
+select.portal-subpanel {
+  cursor: pointer;
+}
+
+select.portal-input.is-portal-select-open,
+select.portal-subpanel.is-portal-select-open {
+  border-color: var(--accent-primary);
+}
+
+.portal-select-popover {
+  z-index: 9999;
+  min-width: 140px;
+  max-width: 320px;
+  animation: portalCtxIn 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.portal-select-popover .portal-ctx-item.is-highlighted {
+  background: var(--accent-soft);
+}
+
 select.portal-subpanel option,
 select.portal-subpanel optgroup,
-select.portal-input option {
+select.portal-input option,
+select.portal-input optgroup {
   background-color: #1c1c1e;
   color: #f5f5f7;
 }
@@ -801,16 +995,37 @@ select.portal-input option {
   box-shadow: 0 0 0 1.5px var(--text-muted), 0 4px 12px rgba(0, 0, 0, 0.28);
 }
 
-/* Tarjeta flotante de resultado estilo Dynamic HUD */
+/* Tarjeta flotante de resultado estilo Dynamic HUD (tamaño estandarizado) */
 .portal-roll-card {
   position: relative;
-  min-width: 176px;
-  max-width: 340px;
+  width: min(268px, 92vw);
+  min-width: min(268px, 92vw);
+  max-width: min(268px, 92vw);
+  min-height: 106px;
   background:
     radial-gradient(circle at 50% 42%, var(--roll-glow, rgba(139, 92, 246, 0.22)), transparent 70%),
     var(--roll-card-bg);
   border: 1px solid var(--dock-border);
   box-shadow: var(--shadow-float), inset 0 1px 0 var(--surface-spec);
+}
+
+.portal-roll-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  overscroll-behavior: contain;
+}
+
+.portal-roll-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.portal-roll-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.portal-roll-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
 }
 
 .portal-roll-close {
@@ -2377,4 +2592,125 @@ html[data-rails-swapped="true"] .portal-drawer-right {
 
 html[data-rails-swapped="true"] .portal-drawer-right:not(.is-open) {
   transform: translate3d(-16px, 0, 0) scale(0.985);
+}
+
+/* ==========================================================================
+   APPLE-STYLE UNIFIED CONTEXT MENU
+   ========================================================================== */
+#contextIconMenu {
+  min-width: 228px;
+  max-width: 280px;
+  padding: 6px;
+  gap: 5px;
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--surface-spec);
+}
+
+.portal-ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--hairline);
+}
+
+.portal-ctx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.portal-ctx-item {
+  width: 100%;
+  min-height: 29px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-mac), color var(--dur-fast) var(--ease-mac);
+}
+
+.portal-ctx-item:hover,
+.portal-ctx-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.portal-ctx-item-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.portal-ctx-icon {
+  width: 16px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.portal-ctx-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-ctx-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.portal-ctx-check {
+  color: var(--accent-primary);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.portal-ctx-shortcut {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  opacity: 0.72;
+}
+
+.portal-ctx-item.is-danger {
+  color: #f87171;
+}
+
+[data-theme="parchment"] .portal-ctx-item.is-danger,
+[data-theme="light"] .portal-ctx-item.is-danger {
+  color: #dc2626;
+}
+
+.portal-ctx-item.is-danger:hover,
+.portal-ctx-item.is-danger:focus-visible {
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.portal-ctx-quick {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hairline);
+}
+
+.portal-ctx-quick-btn {
+  height: 28px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
 }

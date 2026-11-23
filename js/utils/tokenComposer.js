@@ -2,7 +2,7 @@
    TOKEN COMPOSER: DETECCIÓN DE TRANSPARENCIA, ENCUADRE Y MARCOS EN CANVAS 2D
    ========================================================================== */
 
-import { DriveUrlHelper } from './driveUrlHelper.js?v=20261121a6';
+import { DriveUrlHelper } from './driveUrlHelper.js?v=20261123a7';
 
 export const TOKEN_OUTPUT_SIZE = 384;
 export const TOKEN_OUTPUT_QUALITY = 0.86;

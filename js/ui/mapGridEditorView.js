@@ -2,19 +2,19 @@
    MAP GRID EDITOR VIEW: ESCENARIO UNIFICADO (GRILLA/ESCALA + ILUMINACIÓN)
    ========================================================================== */
 
-import { COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { fitGridToBounds, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
+import { fitGridToBounds, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
 import {
   displayValueToMeters,
   formatDistance,
   metersToDisplayValue,
   normalizeSceneLighting
-} from '../utils/lightingModel.js?v=20261121a6';
-import { drawScenePreview } from '../utils/scenePreviewDraw.js?v=20261121a6';
-import { drawPresetMapBackground } from './canvasView.js?v=20261121a6';
+} from '../utils/lightingModel.js?v=20261123a7';
+import { drawScenePreview } from '../utils/scenePreviewDraw.js?v=20261123a7';
+import { drawPresetMapBackground } from './canvasView.js?v=20261123a7';
 
 export const MapGridEditorViewMethods = {
   _ensureMapGridEditorState() {

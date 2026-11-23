@@ -2,8 +2,8 @@
    WORLD REDACTION & MEDIA AUTHORIZATION (PURE HELPERS)
    ========================================================================== */
 
-import { DriveUrlHelper } from './driveUrlHelper.js?v=20261121a6';
-import { resolveTokenLightMeters } from './lightingModel.js?v=20261121a6';
+import { DriveUrlHelper } from './driveUrlHelper.js?v=20261123a7';
+import { resolveTokenLightMeters } from './lightingModel.js?v=20261123a7';
 
 /**
  * Computes a deterministic short asset identifier for an image URL or Data URL.

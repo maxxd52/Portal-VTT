@@ -2,9 +2,9 @@
    GM SCREEN VIEW: CAJÓN LATERAL DERECHO, PESTAÑAS Y BANDEJA DEL COMPENDIO
    ========================================================================== */
 
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 export const GmScreenViewMethods = {
   bindGmScreenEvents() {
@@ -168,7 +168,7 @@ export const GmScreenViewMethods = {
                     const initials = String(data.name || '?').slice(0, 2).toUpperCase();
                     const hasImg = Boolean(data.imageUrl);
                     const avatar = hasImg
-                      ? `<img src="${esc(data.imageUrl)}" alt="" class="w-full h-full object-contain" />`
+                      ? `<img src="${esc(data.imageUrl)}" alt="" draggable="false" class="w-full h-full object-contain pointer-events-none select-none" />`
                       : initials;
                     return `
                       <div draggable="true" data-drag-spec="actor:${esc(data.key)}" class="portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-grab">
@@ -249,7 +249,10 @@ export const GmScreenViewMethods = {
   bindGmRenderedWidgets(content, state, gm, activeTab) {
     content.querySelectorAll('[data-drag-spec]').forEach((card) => {
       card.addEventListener('dragstart', (e) => {
-        if (e.dataTransfer) e.dataTransfer.setData('text/plain', card.dataset.dragSpec);
+        if (e.dataTransfer) {
+          e.dataTransfer.setData('text/plain', card.dataset.dragSpec);
+          e.dataTransfer.setData('application/x-portal-drag', card.dataset.dragSpec);
+        }
       });
     });
 

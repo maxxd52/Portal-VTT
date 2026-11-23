@@ -1,6 +1,6 @@
-import { Dice3DEngine } from './dice3dEngine.js?v=20261121a6';
-import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
+import { Dice3DEngine } from './dice3dEngine.js?v=20261123a7';
+import { DEFAULT_DICE_STYLE } from '../core/model.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
 
 /**
  * Deck management, arithmetic & formula evaluation, and roll summary methods mixed into DiceServiceMethods.

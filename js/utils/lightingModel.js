@@ -2,7 +2,7 @@
    LIGHTING MODEL: UNIDADES MÉTRICAS, VISIÓN BASE Y LUCES DE ESCENARIO (PURO)
    ========================================================================== */
 
-import { normalizeGridConfig } from './gridGeometry.js?v=20261121a6';
+import { normalizeGridConfig } from './gridGeometry.js?v=20261123a7';
 
 export const DISTANCE_UNITS = ['m', 'ft'];
 export const VISION_MODES = ['shared', 'individual'];

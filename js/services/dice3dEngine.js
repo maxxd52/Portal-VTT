@@ -3,7 +3,7 @@
    Soporta d4, d6, d8, d10 (trapezoedro pentagonal), d12, d20 y d100 (2×d10)
    ========================================================================== */
 
-import { TabletopAudio as DiceAudio } from './tabletopAudio.js?v=20261121a6';
+import { TabletopAudio as DiceAudio } from './tabletopAudio.js?v=20261123a7';
 
 export const Dice3DEngine = {
   renderer: null,

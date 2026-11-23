@@ -1,8 +1,14 @@
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
-import { fillFogMist } from '../utils/fogShader.js?v=20261121a6';
-import { drawGridOverlay, measureGridDistance, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
-import { formatDistance } from '../utils/lightingModel.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
+import { fillFogMist } from '../utils/fogShader.js?v=20261123a7';
+import { drawGridOverlay, measureGridDistance, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
+import { formatDistance } from '../utils/lightingModel.js?v=20261123a7';
+import {
+  createWeatherSimulation,
+  drawWeatherSimulation,
+  normalizeWeatherType,
+  stepWeatherSimulation
+} from '../utils/weatherEngine.js?v=20261123a7';
 import {
   buildWallShadowCacheKey,
   collectWallShadowSegments,
@@ -10,8 +16,15 @@ import {
   getLightingTemperaturePalette,
   getSurfaceGrainDataUrl,
   resolveGridBlendConfig
-} from '../utils/tabletopMaterial.js?v=20261121a6';
-import { findWallNearPoint, resolveWallDrawPoint } from '../utils/wallGeometry.js?v=20261121a6';
+} from '../utils/tabletopMaterial.js?v=20261123a7';
+import {
+  findWallNearPoint,
+  isDoorKind,
+  isDoorVisibleToSeat,
+  resolveDoorVisualState,
+  resolveWallDrawPoint,
+  shouldShowWallBlueprint
+} from '../utils/wallGeometry.js?v=20261123a7';
 
 const EXPLORED_W = 600;
 const EXPLORED_H = 400;
@@ -157,18 +170,70 @@ export function drawPresetMapBackground(ctx, mapId) {
  * Canvas, Fog of War, Map Notes & Vector Overlay rendering methods mixed into View.
  */
 export const CanvasViewMethods = {
-  clearExploredMemory() {
-    if (this._saveExploredTimer) {
-      clearTimeout(this._saveExploredTimer);
-      this._saveExploredTimer = null;
-    }
+  getExploredContext() {
     if (!this.exploredCanvas && typeof document !== 'undefined') {
       this.exploredCanvas = document.createElement('canvas');
       this.exploredCanvas.width = EXPLORED_W;
       this.exploredCanvas.height = EXPLORED_H;
     }
-    if (this.exploredCanvas) {
-      const ectx = this.exploredCanvas.getContext('2d');
+    return this.exploredCanvas ? this.exploredCanvas.getContext('2d', { willReadFrequently: true }) : null;
+  },
+
+  /**
+   * Pre-caches the 2400x1600 base fog mist + cool night glaze per (theme, opacity)
+   * so drawFogCanvas blits it in one drawImage instead of 2 full-canvas passes every frame.
+   */
+  getFogBaseCanvas(theme, opacity) {
+    if (typeof document === 'undefined') return null;
+    const key = `${theme || 'slate'}|${Number(opacity).toFixed(2)}`;
+    if (this._fogBaseCanvas && this._fogBaseCacheKey === key) {
+      return this._fogBaseCanvas;
+    }
+    if (!this._fogBaseCanvas) {
+      this._fogBaseCanvas = document.createElement('canvas');
+      this._fogBaseCanvas.width = 2400;
+      this._fogBaseCanvas.height = 1600;
+    }
+    const bctx = this._fogBaseCanvas.getContext('2d');
+    bctx.clearRect(0, 0, 2400, 1600);
+    fillFogMist(bctx, 2400, 1600, { opacity });
+    const tempPalette = getLightingTemperaturePalette(theme);
+    bctx.save();
+    bctx.globalCompositeOperation = 'source-atop';
+    bctx.fillStyle = tempPalette.coolGlazeColor;
+    bctx.fillRect(0, 0, 2400, 1600);
+    bctx.restore();
+    this._fogBaseCacheKey = key;
+    return this._fogBaseCanvas;
+  },
+
+  scheduleFogRedraw(state) {
+    this._pendingFogState = state || Service.state;
+    if (this._fogRafId != null) return;
+    const raf = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame.bind(window)
+      : null;
+    if (!raf) {
+      const st = this._pendingFogState;
+      this._pendingFogState = null;
+      this.drawFogCanvas(st);
+      return;
+    }
+    this._fogRafId = raf(() => {
+      this._fogRafId = null;
+      const st = this._pendingFogState || Service.state;
+      this._pendingFogState = null;
+      this.drawFogCanvas(st);
+    });
+  },
+
+  clearExploredMemory() {
+    if (this._saveExploredTimer) {
+      clearTimeout(this._saveExploredTimer);
+      this._saveExploredTimer = null;
+    }
+    const ectx = this.getExploredContext();
+    if (ectx) {
       ectx.clearRect(0, 0, EXPLORED_W, EXPLORED_H);
     }
     this._exploredHasPixels = false;
@@ -204,7 +269,7 @@ export const CanvasViewMethods = {
         clearTimeout(this._saveExploredTimer);
         this._saveExploredTimer = null;
       }
-      this.exploredCanvas.getContext('2d').clearRect(0, 0, EXPLORED_W, EXPLORED_H);
+      this.getExploredContext()?.clearRect(0, 0, EXPLORED_W, EXPLORED_H);
       this._exploredHasPixels = false;
       this._loadedExploredKey = key;
       this._loadedExploredRev = rev;
@@ -215,7 +280,7 @@ export const CanvasViewMethods = {
       const img = new Image();
       img.onload = () => {
         if (seq !== this._exploredLoadSeq || !this.exploredCanvas) return;
-        const ectx = this.exploredCanvas.getContext('2d');
+        const ectx = this.getExploredContext();
         ectx.drawImage(img, 0, 0, EXPLORED_W, EXPLORED_H);
         this._exploredHasPixels = true;
         this.drawFogCanvas(Service.state);
@@ -323,10 +388,41 @@ export const CanvasViewMethods = {
 
   drawMapCanvas(state) {
     this.ensureBoardGrainLayer();
+    const isNarrative = Selector.isNarrativeScene(state);
+    this.els.stage?.classList.toggle('is-narrative', isNarrative);
+    const customSrc = state.mapId === 'custom' ? (state.customMapUrl || Service.loadedMapImage?.src || '') : '';
+
+    if (isNarrative) {
+      if (this.els.narrativeBackdropLayer) {
+        this.els.narrativeBackdropLayer.classList.remove('hidden');
+      }
+      if (this.els.narrativeBackdropImg) {
+        if (customSrc) {
+          if (this.els.narrativeBackdropImg.getAttribute('src') !== customSrc) {
+            this.els.narrativeBackdropImg.src = customSrc;
+          }
+          this.els.narrativeBackdropImg.classList.remove('hidden');
+        } else {
+          this.els.narrativeBackdropImg.classList.add('hidden');
+          this.els.narrativeBackdropImg.removeAttribute('src');
+        }
+      }
+      if (this.els.customMapImg) {
+        this.els.customMapImg.classList.add('hidden');
+        this.els.customMapImg.removeAttribute('src');
+      }
+      this.syncSceneAtmosphere?.(state);
+      this.syncWeatherOverlay?.(state);
+      return;
+    }
+
+    if (this.els.narrativeBackdropLayer) {
+      this.els.narrativeBackdropLayer.classList.add('hidden');
+    }
+
     const ctx = this.els.mapCanvas.getContext('2d');
     ctx.clearRect(0, 0, 2400, 1600);
 
-    const customSrc = state.mapId === 'custom' ? (state.customMapUrl || Service.loadedMapImage?.src || '') : '';
     if (customSrc && this.els.customMapImg) {
       if (!this._customMapAtmoBound) {
         this._customMapAtmoBound = true;
@@ -347,6 +443,7 @@ export const CanvasViewMethods = {
       this.els.customMapImg.classList.remove('hidden');
       this.syncBoardBoundsToDom(state);
       this.syncSceneAtmosphere?.(state);
+      this.syncWeatherOverlay?.(state);
       return;
     }
     if (this.els.customMapImg) {
@@ -357,6 +454,79 @@ export const CanvasViewMethods = {
     drawPresetMapBackground(ctx, state.mapId);
     this.syncBoardBoundsToDom(state);
     this.syncSceneAtmosphere?.(state);
+    this.syncWeatherOverlay?.(state);
+  },
+
+  syncWeatherOverlay(state) {
+    const canvas = this.els?.weatherCanvas;
+    if (!canvas || typeof window === 'undefined') return;
+    const weather = normalizeWeatherType(state?.sceneWeather);
+    const mode = Selector.isNarrativeScene(state) ? 'narrative' : 'tactical';
+
+    if (weather === 'none') {
+      if (this._weatherRafId) {
+        cancelAnimationFrame(this._weatherRafId);
+        this._weatherRafId = 0;
+      }
+      this._weatherSim = null;
+      this._weatherSimKey = '';
+      canvas.classList.add('hidden');
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    if (!this._weatherResizeBound) {
+      this._weatherResizeBound = true;
+      window.addEventListener('resize', () => {
+        if (Service.state && normalizeWeatherType(Service.state.sceneWeather) !== 'none') {
+          this.syncWeatherOverlay(Service.state);
+        }
+      });
+    }
+
+    const w = Math.max(320, window.innerWidth || 1280);
+    const h = Math.max(240, window.innerHeight || 800);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    this._weatherDpr = dpr;
+    const targetW = Math.round(w * dpr);
+    const targetH = Math.round(h * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    canvas.classList.remove('hidden');
+
+    const simKey = `${weather}|${mode}|${w}x${h}`;
+    if (this._weatherSimKey !== simKey || !this._weatherSim) {
+      this._weatherSimKey = simKey;
+      this._weatherSim = createWeatherSimulation({ weather, mode, width: w, height: h });
+    }
+
+    if (!this._weatherRafId) {
+      let lastTs = performance.now();
+      const tick = (now) => {
+        if (!this._weatherSim) {
+          this._weatherRafId = 0;
+          return;
+        }
+        const dt = Math.min(0.05, Math.max(0.001, (now - lastTs) / 1000));
+        lastTs = now;
+        if (!document.hidden) {
+          stepWeatherSimulation(this._weatherSim, dt);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const curDpr = this._weatherDpr || 1;
+            ctx.save();
+            ctx.setTransform(curDpr, 0, 0, curDpr, 0, 0);
+            drawWeatherSimulation(ctx, this._weatherSim);
+            ctx.restore();
+          }
+        }
+        this._weatherRafId = requestAnimationFrame(tick);
+      };
+      this._weatherRafId = requestAnimationFrame(tick);
+    }
   },
 
   drawWallShadowCanvas(state) {
@@ -462,25 +632,187 @@ export const CanvasViewMethods = {
     }
   },
 
+  isPointExplored(wx, wy) {
+    if (!this.exploredCanvas || !this._exploredHasPixels) return false;
+    const ex = Math.max(0, Math.min(EXPLORED_W - 1, Math.round(Number(wx) * EXPLORED_SCALE)));
+    const ey = Math.max(0, Math.min(EXPLORED_H - 1, Math.round(Number(wy) * EXPLORED_SCALE)));
+    try {
+      const ectx = this.getExploredContext();
+      if (!ectx) return false;
+      const data = ectx.getImageData(ex, ey, 1, 1).data;
+      return data[3] > 24;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  isDoorVisibleOnBoard(door, state) {
+    if (!door || !isDoorKind(door.kind)) return false;
+    const useDynamic = Boolean(state?.dynamicLighting);
+    const rememberExplored = state?.rememberExplored !== false;
+    const visSources = useDynamic && state?.role !== 'gm' ? Selector.getAlliedVisibilityPolygons(state) : [];
+    return isDoorVisibleToSeat(door, {
+      role: state?.role || 'gm',
+      dynamicLighting: useDynamic,
+      visSources,
+      isExploredFn: rememberExplored ? (x, y) => this.isPointExplored(x, y) : null
+    });
+  },
+
+  drawMinimalistDoorIcon(ctx, door, { role = 'gm' } = {}) {
+    if (!ctx || !door) return;
+    const mx = (Number(door.x1) + Number(door.x2)) / 2;
+    const my = (Number(door.y1) + Number(door.y2)) / 2;
+    const isSecret = door.kind === 'secret';
+    const visualState = resolveDoorVisualState(door, { role });
+    const isOpen = visualState === 'open';
+    const isLocked = visualState === 'locked';
+
+    ctx.save();
+    ctx.translate(mx, my);
+
+    // Subtle frosted dark medallion for crisp legibility over any map art
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.52)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 1.5;
+    ctx.fillStyle = isSecret
+      ? 'rgba(38, 18, 62, 0.84)'
+      : isLocked
+        ? 'rgba(42, 24, 10, 0.82)'
+        : isOpen
+          ? 'rgba(15, 23, 42, 0.56)'
+          : 'rgba(15, 23, 42, 0.78)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 13.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Hairline ring (white for normal closed, amber for locked, emerald for open, dashed violet for GM secret door)
+    ctx.lineWidth = isSecret || isLocked ? 1.5 : 1.3;
+    ctx.strokeStyle = isSecret
+      ? 'rgba(192, 132, 252, 0.92)'
+      : isLocked
+        ? 'rgba(251, 191, 36, 0.88)'
+        : isOpen
+          ? 'rgba(52, 211, 153, 0.85)'
+          : 'rgba(255, 255, 255, 0.65)';
+    if (isSecret) ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.arc(0, 0, 13.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Minimalist white line-art glyph
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 1.65;
+    const lineColor = isSecret ? '#f3e8ff' : isLocked ? '#fef3c7' : '#ffffff';
+
+    if (isLocked) {
+      // Minimalist white padlock line icon
+      ctx.strokeStyle = lineColor;
+      ctx.globalAlpha = 1;
+      // Shackle arch
+      ctx.beginPath();
+      ctx.arc(0, -2.1, 3.0, Math.PI, 0, false);
+      ctx.lineTo(3.0, -0.3);
+      ctx.moveTo(-3.0, -2.1);
+      ctx.lineTo(-3.0, -0.3);
+      ctx.stroke();
+      // Lock body
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(-4.8, -0.3, 9.6, 6.6, 1.8);
+      } else {
+        ctx.rect(-4.8, -0.3, 9.6, 6.6);
+      }
+      ctx.stroke();
+      // Keyhole dot
+      ctx.fillStyle = lineColor;
+      ctx.beginPath();
+      ctx.arc(0, 3.0, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // Threshold base line
+    ctx.strokeStyle = lineColor;
+    ctx.globalAlpha = isOpen ? 0.7 : 0.95;
+    ctx.beginPath();
+    ctx.moveTo(-6.5, 5.5);
+    ctx.lineTo(6.5, 5.5);
+    ctx.stroke();
+
+    if (!isOpen) {
+      // Closed door panel
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(-4.5, 5.5);
+      ctx.lineTo(-4.5, -5.5);
+      ctx.lineTo(4.5, -5.5);
+      ctx.lineTo(4.5, 5.5);
+      ctx.stroke();
+
+      // Minimalist handle dot
+      ctx.fillStyle = lineColor;
+      ctx.beginPath();
+      ctx.arc(2.1, 0.5, 1.15, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Open doorway frame (receded)
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.moveTo(-4.5, 5.5);
+      ctx.lineTo(-4.5, -5.5);
+      ctx.lineTo(4.5, -5.5);
+      ctx.lineTo(4.5, 5.5);
+      ctx.stroke();
+
+      // Swung-open door leaf
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = isSecret ? '#e9d5ff' : '#ecfdf5';
+      ctx.beginPath();
+      ctx.moveTo(-4.5, 5.5);
+      ctx.lineTo(-4.5, -5.5);
+      ctx.lineTo(1.8, -3.2);
+      ctx.lineTo(1.8, 7.2);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Handle dot on swung leaf
+      ctx.fillStyle = isSecret ? '#e9d5ff' : '#a7f3d0';
+      ctx.beginPath();
+      ctx.arc(-0.2, 1.6, 1.05, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  },
+
   drawFogCanvas(state) {
     const ctx = this.els.fogCanvas.getContext('2d');
     ctx.clearRect(0, 0, 2400, 1600);
 
     const useDynamic = Boolean(state.dynamicLighting);
     const rememberExplored = state.rememberExplored !== false;
+    const showBlueprint = shouldShowWallBlueprint(state);
+    const hasAnyDoors = (state.walls || []).some((w) => w && isDoorKind(w.kind));
 
-    if (!useDynamic && state.role !== 'gm') return;
+    if (!useDynamic && !showBlueprint && !hasAnyDoors) return;
 
     const bounds = this.getActiveMapBounds(state);
     ctx.save();
     clipToActiveMapBounds(ctx, bounds);
 
+    let visSources = [];
     if (useDynamic) {
-      const visSources = Selector.getAlliedVisibilityPolygons(state);
+      visSources = Selector.getAlliedVisibilityPolygons(state);
 
       // 1. Actualizar capa persistente de memoria explorada
       if (rememberExplored && this.exploredCanvas && visSources.length > 0) {
-        const ectx = this.exploredCanvas.getContext('2d');
+        const ectx = this.getExploredContext();
         ectx.save();
         ectx.scale(EXPLORED_SCALE, EXPLORED_SCALE);
         ectx.fillStyle = '#ffffff';
@@ -504,9 +836,15 @@ export const CanvasViewMethods = {
         this.scheduleSaveExploredMask();
       }
 
-      // 2. Cubrir el tablero con niebla de guerra procedural (60% para GM, 100% opaca para Jugador)
+      // 2. Cubrir el tablero con niebla de guerra procedural pre-cacheada (60% GM, 100% Jugador)
       const fogOpacity = state.role === 'gm' ? 0.60 : 1;
-      fillFogMist(ctx, 2400, 1600, { opacity: fogOpacity });
+      const tempPalette = getLightingTemperaturePalette(state.theme);
+      const baseFog = this.getFogBaseCanvas(state.theme, fogOpacity);
+      if (baseFog) {
+        ctx.drawImage(baseFog, 0, 0);
+      } else {
+        fillFogMist(ctx, 2400, 1600, { opacity: fogOpacity });
+      }
 
       // 3. Revelar en penumbra las zonas previamente exploradas
       if (rememberExplored && this.exploredCanvas && this._exploredHasPixels) {
@@ -516,14 +854,6 @@ export const CanvasViewMethods = {
         ctx.drawImage(this.exploredCanvas, 0, 0, 2400, 1600);
         ctx.restore();
       }
-
-      // 3.5. Temperatura fría nocturna en niebla y penumbra (preserva alpha=255 en zonas sin explorar)
-      const tempPalette = getLightingTemperaturePalette(state.theme);
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-atop';
-      ctx.fillStyle = tempPalette.coolGlazeColor;
-      ctx.fillRect(0, 0, 2400, 1600);
-      ctx.restore();
 
       // 4. Recortar visión/luz dinámica activa con degradado circular suave
       if (visSources.length > 0) {
@@ -586,46 +916,63 @@ export const CanvasViewMethods = {
       }
     }
 
-    // 6. Dibujar plano de muros y puertas interactivas (visibles para GM; para Jugador solo puertas normales)
-    for (const w of state.walls || []) {
-      if (state.role !== 'gm' && w.kind !== 'door') continue;
-      ctx.save();
-      ctx.lineCap = 'round';
-      if (w.kind === 'door' || w.kind === 'secret') {
-        const isSecret = w.kind === 'secret';
-        ctx.strokeStyle = w.open ? '#10b981' : (isSecret ? '#a855f7' : '#f59e0b');
-        ctx.lineWidth = 6;
-        if (w.open) ctx.setLineDash([8, 8]);
-        else if (isSecret) ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(w.x1, w.y1);
-        ctx.lineTo(w.x2, w.y2);
-        ctx.stroke();
-
-        // Indicador central clicable de puerta
-        const mx = (w.x1 + w.x2) / 2;
-        const my = (w.y1 + w.y2) / 2;
-        ctx.setLineDash([]);
-        ctx.fillStyle = w.open ? '#10b981' : (isSecret ? '#a855f7' : '#f59e0b');
-        ctx.beginPath();
-        ctx.arc(mx, my, 7, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (w.kind === 'terrain') {
-        ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(w.x1, w.y1);
-        ctx.lineTo(w.x2, w.y2);
-        ctx.stroke();
-      } else {
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(w.x1, w.y1);
-        ctx.lineTo(w.x2, w.y2);
-        ctx.stroke();
+    // 6. Plano técnico de muros (solo cuando el DJ edita muros [W]) + iconos minimalistas de puerta
+    if (showBlueprint) {
+      for (const w of state.walls || []) {
+        if (!w) continue;
+        ctx.save();
+        ctx.lineCap = 'round';
+        if (w.kind === 'door' || w.kind === 'secret') {
+          const isSecret = w.kind === 'secret';
+          ctx.strokeStyle = w.open ? '#10b981' : (isSecret ? '#a855f7' : '#f59e0b');
+          ctx.lineWidth = 5;
+          if (w.open) ctx.setLineDash([8, 8]);
+          else if (isSecret) ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(w.x1, w.y1);
+          ctx.lineTo(w.x2, w.y2);
+          ctx.stroke();
+        } else if (w.kind === 'terrain') {
+          ctx.strokeStyle = '#34d399';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(w.x1, w.y1);
+          ctx.lineTo(w.x2, w.y2);
+          ctx.stroke();
+        } else if (w.kind === 'invisible') {
+          ctx.strokeStyle = '#22d3ee';
+          ctx.lineWidth = 3.5;
+          ctx.setLineDash([6, 5]);
+          ctx.beginPath();
+          ctx.moveTo(w.x1, w.y1);
+          ctx.lineTo(w.x2, w.y2);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(w.x1, w.y1);
+          ctx.lineTo(w.x2, w.y2);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
-      ctx.restore();
+    }
+
+    const isExploredFn = rememberExplored ? (x, y) => this.isPointExplored(x, y) : null;
+    for (const w of state.walls || []) {
+      if (!w || !isDoorKind(w.kind)) continue;
+      if (
+        !isDoorVisibleToSeat(w, {
+          role: state.role,
+          dynamicLighting: useDynamic,
+          visSources,
+          isExploredFn
+        })
+      ) {
+        continue;
+      }
+      this.drawMinimalistDoorIcon(ctx, w, { role: state.role });
     }
     ctx.restore();
   },
@@ -634,14 +981,44 @@ export const CanvasViewMethods = {
     const parts = [];
     const grid = normalizeGridConfig(state.grid);
     const visionCfg = Selector.getSystemVisionConfig(state);
+    if (state.tokenSelectBox) {
+      const rx = Math.min(state.tokenSelectBox.x1, state.tokenSelectBox.x2);
+      const ry = Math.min(state.tokenSelectBox.y1, state.tokenSelectBox.y2);
+      const rw = Math.abs(state.tokenSelectBox.x2 - state.tokenSelectBox.x1);
+      const rh = Math.abs(state.tokenSelectBox.y2 - state.tokenSelectBox.y1);
+      parts.push(`
+        <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" rx="5" fill="rgba(139, 92, 246, 0.14)" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6 4" />
+      `);
+    }
     if (state.tool === 'wall') {
-      if (state.wallType === 'erase') {
-        const hit = findWallNearPoint(state.walls, this.hoverWorldPos.x, this.hoverWorldPos.y, 16);
-        if (hit) {
+      const selIds = new Set(Array.isArray(state.selectedWallIds) ? state.selectedWallIds : []);
+      if (selIds.size > 0 && Array.isArray(state.walls)) {
+        for (const w of state.walls) {
+          if (!w || !selIds.has(w.id)) continue;
           parts.push(`
-            <line x1="${hit.x1}" y1="${hit.y1}" x2="${hit.x2}" y2="${hit.y2}" stroke="#ef4444" stroke-width="8" stroke-linecap="round" opacity="0.85" />
-            <circle cx="${(hit.x1 + hit.x2) / 2}" cy="${(hit.y1 + hit.y2) / 2}" r="9" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+            <line x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke="#a78bfa" stroke-width="10" stroke-linecap="round" opacity="0.45" />
+            <line x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.95" />
+            <circle cx="${w.x1}" cy="${w.y1}" r="5" fill="#8b5cf6" stroke="#ffffff" stroke-width="1.8" />
+            <circle cx="${w.x2}" cy="${w.y2}" r="5" fill="#8b5cf6" stroke="#ffffff" stroke-width="1.8" />
           `);
+        }
+      }
+      if (state.wallMode === 'select') {
+        if (state.wallSelectBox) {
+          const rx = Math.min(state.wallSelectBox.x1, state.wallSelectBox.x2);
+          const ry = Math.min(state.wallSelectBox.y1, state.wallSelectBox.y2);
+          const rw = Math.abs(state.wallSelectBox.x2 - state.wallSelectBox.x1);
+          const rh = Math.abs(state.wallSelectBox.y2 - state.wallSelectBox.y1);
+          parts.push(`
+            <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" rx="4" fill="rgba(139, 92, 246, 0.14)" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6 4" />
+          `);
+        } else {
+          const hoverHit = findWallNearPoint(state.walls, this.hoverWorldPos.x, this.hoverWorldPos.y, 18);
+          if (hoverHit && !selIds.has(hoverHit.id)) {
+            parts.push(`
+              <line x1="${hoverHit.x1}" y1="${hoverHit.y1}" x2="${hoverHit.x2}" y2="${hoverHit.y2}" stroke="#c4b5fd" stroke-width="7" stroke-linecap="round" opacity="0.55" />
+            `);
+          }
         }
       } else {
         const pt = resolveWallDrawPoint(this.hoverWorldPos.x, this.hoverWorldPos.y, {
@@ -649,8 +1026,15 @@ export const CanvasViewMethods = {
           walls: state.walls,
           freehand: Boolean(this.wallFreehand)
         });
-        const colorMap = { wall: '#38bdf8', terrain: '#34d399', door: '#f59e0b', secret: '#a855f7' };
-        const color = colorMap[state.wallType] || '#38bdf8';
+        const drawKind = state.wallDrawKind || 'wall';
+        const kindColors = {
+          wall: '#38bdf8',
+          terrain: '#34d399',
+          invisible: '#22d3ee',
+          door: '#f59e0b',
+          secret: '#a855f7'
+        };
+        const color = kindColors[drawKind] || '#38bdf8';
         if (state.wallAnchor) {
           parts.push(`
             <line x1="${state.wallAnchor.x}" y1="${state.wallAnchor.y}" x2="${pt.x}" y2="${pt.y}" stroke="${color}" stroke-width="5" stroke-dasharray="6 4" />
@@ -788,18 +1172,20 @@ export const CanvasViewMethods = {
       if (this.els.gridCanvas) ctx.drawImage(this.els.gridCanvas, 0, 0, 2400, 1600);
       if (this.els.drawCanvas) ctx.drawImage(this.els.drawCanvas, 0, 0, 2400, 1600);
 
-      for (const w of state.walls || []) {
-        const isDoor = w.kind === 'door';
-        ctx.save();
-        ctx.strokeStyle = isDoor ? (w.open ? '#10b981' : '#f59e0b') : '#38bdf8';
-        ctx.lineWidth = isDoor ? 5 : 4;
-        ctx.lineCap = 'round';
-        if (isDoor && w.open) ctx.setLineDash([8, 6]);
-        ctx.beginPath();
-        ctx.moveTo(w.x1, w.y1);
-        ctx.lineTo(w.x2, w.y2);
-        ctx.stroke();
-        ctx.restore();
+      if (shouldShowWallBlueprint(state)) {
+        for (const w of state.walls || []) {
+          const isDoor = w.kind === 'door' || w.kind === 'secret';
+          ctx.save();
+          ctx.strokeStyle = isDoor ? (w.open ? '#10b981' : (w.kind === 'secret' ? '#a855f7' : '#f59e0b')) : '#38bdf8';
+          ctx.lineWidth = isDoor ? 5 : 4;
+          ctx.lineCap = 'round';
+          if (isDoor && w.open) ctx.setLineDash([8, 6]);
+          ctx.beginPath();
+          ctx.moveTo(w.x1, w.y1);
+          ctx.lineTo(w.x2, w.y2);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
 
       const cs = state.grid?.cellSize || 60;

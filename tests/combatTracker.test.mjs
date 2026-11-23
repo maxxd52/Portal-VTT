@@ -25,10 +25,10 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261121a6');
-const { Selector } = await import('../js/core/selector.js?v=20261121a6');
-const { Service } = await import('../js/core/service.js?v=20261121a6');
-const { redactCombatForSeat } = await import('../js/utils/worldRedaction.js?v=20261121a6');
+const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
+const { Selector } = await import('../js/core/selector.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { redactCombatForSeat } = await import('../js/utils/worldRedaction.js?v=20261123a7');
 
 function resetGmForTest() {
   Service.cancelAllTokenGlides();
@@ -280,7 +280,7 @@ test('S2: index.html places minimalist #btnNextTurn in #tablePresenceBar and ext
 });
 
 test('S2: renderCombatTracker handles turnIndex=-1 (hidden active enemy) without wrapping is-active to last row', async () => {
-  const { PresenceViewMethods } = await import('../js/ui/presenceView.js?v=20261121a6');
+  const { PresenceViewMethods } = await import('../js/ui/presenceView.js?v=20261123a7');
   const state = resetGmForTest();
   state.role = 'player';
   state.systemConfig.combatTrackerPublic = true;
@@ -331,7 +331,7 @@ test('S2: renderCombatTracker handles turnIndex=-1 (hidden active enemy) without
 });
 
 test('S3: pill and tracker avatars drop circular double-frame for image tokens while keeping pill height compact', async () => {
-  const { PresenceViewMethods } = await import('../js/ui/presenceView.js?v=20261121a6');
+  const { PresenceViewMethods } = await import('../js/ui/presenceView.js?v=20261123a7');
   const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
 

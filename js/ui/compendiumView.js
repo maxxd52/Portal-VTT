@@ -1,10 +1,294 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
-import { normalizeSceneLighting } from '../utils/lightingModel.js?v=20261121a6';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
+import {
+  displayValueToMeters,
+  metersToDisplayValue,
+  normalizeSceneLighting
+} from '../utils/lightingModel.js?v=20261123a7';
+import { clampTokenSize } from '../utils/tokenTemplateSync.js?v=20261123a7';
+import { groupCompendiumItemsForPicker } from '../utils/pickerModel.js?v=20261123a7';
+import { resolveMapCardDescriptor } from '../utils/compendiumCardModel.js?v=20261123a7';
+import { drawPresetMapBackground } from './canvasView.js?v=20261123a7';
 
 export const CompendiumViewMethods = {
+  getPresetMapThumbnail(mapId) {
+    if (!mapId) return '';
+    if (!this._presetMapThumbCache) this._presetMapThumbCache = new Map();
+    if (this._presetMapThumbCache.has(mapId)) return this._presetMapThumbCache.get(mapId);
+    if (typeof document === 'undefined') return '';
+    try {
+      const w = 320;
+      const h = 213;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      ctx.save();
+      ctx.scale(w / 2400, h / 1600);
+      drawPresetMapBackground(ctx, mapId);
+      ctx.restore();
+      let url = canvas.toDataURL('image/webp', 0.82);
+      if (!url || !url.startsWith('data:image/webp')) {
+        url = canvas.toDataURL('image/png');
+      }
+      this._presetMapThumbCache.set(mapId, url);
+      return url;
+    } catch {
+      return '';
+    }
+  },
+  setCustomTokenDetailsOpen(open) {
+    const isOpen = Boolean(open);
+    this.els.customTokenDetailsBody?.classList.toggle('hidden', !isOpen);
+    this.els.customTokenDetailsBody?.classList.toggle('flex', isOpen);
+    this.els.customTokenDetailsToggle?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (this.els.customTokenDetailsChevron) {
+      this.els.customTokenDetailsChevron.textContent = isOpen ? '▾' : '▸';
+    }
+  },
+
+  setCustomTokenItemsPickerOpen(open) {
+    const isOpen = Boolean(open);
+    this.customTokenItemsPickerOpen = isOpen;
+    this.els.customTokenItemsPicker?.classList.toggle('hidden', !isOpen);
+    this.els.customTokenItemsPicker?.classList.toggle('flex', isOpen);
+    this.els.btnToggleCustomTokenItemsPicker?.classList.toggle('portal-btn-accent', isOpen);
+    this.els.btnToggleCustomTokenItemsPicker?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (isOpen) {
+      this.renderCustomTokenItemsPickerList(Service.state);
+      this.els.inpCustomTokenItemSearch?.focus();
+    } else {
+      this.customTokenItemsPickerQuery = '';
+      if (this.els.inpCustomTokenItemSearch) this.els.inpCustomTokenItemSearch.value = '';
+    }
+  },
+
+  syncCustomTokenSizeSeg() {
+    const size = clampTokenSize(this.selectedTokenSize, 1);
+    this.selectedTokenSize = size;
+    this.els.customTokenSizeSeg?.querySelectorAll('[data-token-size]').forEach((btn) => {
+      btn.classList.toggle('is-active', Number(btn.dataset.tokenSize) === size);
+    });
+  },
+
+  syncCustomTokenAllyHint() {
+    const mode = this.selectedTokenAlly === 'enemy' ? 'enemy' : 'ally';
+    this.selectedTokenAlly = mode;
+    this.els.customTokenAllySeg?.querySelectorAll('[data-token-ally]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.tokenAlly === mode);
+    });
+    const el = this.els.lblCustomTokenAllyHint;
+    if (!el) return;
+    el.textContent =
+      mode === 'ally'
+        ? 'Protagonista: identidad única que conserva HP y equipo en partida.'
+        : 'Secundario: molde fijo que crea instancias independientes en cada despliegue.';
+  },
+
+  renderCustomTokenStatsGrid(state, presetStats = null) {
+    const grid = this.els.customTokenStatsGrid;
+    if (!grid) return;
+    const defs = Selector.getSheetStatsDef(state);
+    const statList = defs.length > 0 ? defs.slice(0, 9) : [
+      { key: 'str', label: 'FUE' },
+      { key: 'dex', label: 'DES' },
+      { key: 'con', label: 'CON' },
+      { key: 'int', label: 'INT' },
+      { key: 'wis', label: 'SAB' },
+      { key: 'cha', label: 'CAR' }
+    ];
+    const currentVals = {};
+    if (!presetStats) {
+      grid.querySelectorAll('[data-custom-stat-key]').forEach((inp) => {
+        currentVals[inp.dataset.customStatKey] = Number(inp.value) || 0;
+      });
+    }
+    const esc = (s) => this.escapeHtml(s);
+    grid.innerHTML = statList
+      .map((def, idx) => {
+        const val = presetStats
+          ? Number(presetStats[def.key] ?? 0)
+          : currentVals[def.key] !== undefined
+            ? currentVals[def.key]
+            : idx < 3
+              ? 1
+              : 0;
+        return `
+          <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
+            <span class="opacity-55 truncate max-w-full">${esc(def.label || def.key.toUpperCase())}</span>
+            <input type="number" data-custom-stat-key="${esc(def.key)}" value="${val}" min="-99" max="999" class="portal-num-input w-full text-[11px] font-semibold" />
+          </label>
+        `;
+      })
+      .join('');
+  },
+
+  getAvailableCompendiumItems(state) {
+    const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
+    const baseItems =
+      preset === 'vieja_escuela'
+        ? COMPENDIUM_ITEMS.filter((i) => i.system === 'vieja_escuela')
+        : state.ruleset === 'free'
+          ? COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela' && !String(i.key || '').startsWith('55_'))
+          : COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela');
+    return {
+      custom: Array.isArray(state.customItems) ? state.customItems : [],
+      base: baseItems
+    };
+  },
+
+  renderCustomTokenItemsPickerList(state) {
+    const listEl = this.els.customTokenItemsPickerList;
+    if (!listEl) return;
+    if (!this.expandedPickerFolders) this.expandedPickerFolders = new Set();
+    const { custom, base } = this.getAvailableCompendiumItems(state);
+    const { groups, totalMatches, hasQuery } = groupCompendiumItemsForPicker({
+      customItems: custom,
+      baseItems: base,
+      query: this.customTokenItemsPickerQuery || '',
+      selectedKeys: this.pendingCustomTokenItems || []
+    });
+    const esc = (s) => this.escapeHtml(s);
+
+    if (totalMatches === 0) {
+      listEl.innerHTML = `<div class="text-[10.5px] opacity-55 text-center py-4">Sin complementos que coincidan.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = groups
+      .map((grp) => {
+        const isOpen = hasQuery || this.expandedPickerFolders.has(grp.id);
+        const selBadge =
+          grp.selectedTotal > 0
+            ? `<span class="text-[9px] font-mono-tech px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 shrink-0">${grp.selectedTotal}✓</span>`
+            : '';
+        const itemsHtml = isOpen
+          ? `<div class="pl-2.5 ml-2 border-l flex flex-col gap-0.5 my-0.5" style="border-color: var(--hairline);">
+              ${grp.items
+                .map((it) => {
+                  const cnt = it.selectedCount || 0;
+                  const iconColor = esc(it.color || '#8b5cf6');
+                  return `
+                    <div class="portal-ctx-item justify-between gap-1.5 rounded-lg !min-h-[28px] !py-1 !px-1.5">
+                      <button type="button" data-picker-add-item="${esc(it.key)}" class="flex items-center gap-2 min-w-0 flex-1 text-left" title="Añadir ${esc(it.name)}">
+                        <span class="w-2 h-2 rounded-full shrink-0" style="background:${iconColor};"></span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-[11px] font-medium truncate leading-tight">${esc(it.name)}</span>
+                          ${it.badge ? `<span class="block text-[9.5px] opacity-55 truncate leading-tight">${esc(it.badge)}</span>` : ''}
+                        </span>
+                      </button>
+                      <div class="flex items-center gap-1 shrink-0">
+                        ${
+                          cnt > 0
+                            ? `<button type="button" data-picker-dec-item="${esc(it.key)}" class="w-5 h-5 rounded-full portal-subpanel flex items-center justify-center text-[10px] opacity-80 hover:opacity-100" title="Quitar 1">−</button>
+                               <span class="text-[10px] font-mono-tech font-semibold text-violet-300 min-w-[16px] text-center">×${cnt}</span>`
+                            : ''
+                        }
+                        <button type="button" data-picker-add-item="${esc(it.key)}" class="w-5 h-5 rounded-full ${cnt > 0 ? 'portal-btn-accent' : 'portal-subpanel'} flex items-center justify-center text-[11px] font-semibold" title="Añadir">+</button>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join('')}
+            </div>`
+          : '';
+        return `
+          <div class="flex flex-col">
+            <button
+              type="button"
+              data-picker-toggle-folder="${esc(grp.id)}"
+              class="portal-list-row px-1.5 py-1 flex items-center justify-between gap-2 text-left rounded-lg select-none"
+            >
+              <span class="flex items-center gap-1.5 min-w-0">
+                <svg class="w-3 h-3 opacity-60 shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4" /></svg>
+                <svg class="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5h5.1A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5V4.5z" /></svg>
+                <span class="text-[11px] font-semibold truncate">${esc(grp.label)}</span>
+                <span class="text-[9.5px] opacity-50 tabular-nums shrink-0">${grp.items.length}</span>
+              </span>
+              ${selBadge}
+            </button>
+            ${itemsHtml}
+          </div>
+        `;
+      })
+      .join('');
+  },
+
+  renderCustomTokenStarterItems(state) {
+    const chips = this.els.customTokenStarterItems;
+    const countBadge = this.els.lblCustomTokenItemsCount;
+    if (!Array.isArray(this.pendingCustomTokenItems)) this.pendingCustomTokenItems = [];
+    const { custom, base } = this.getAvailableCompendiumItems(state);
+    const allByKey = new Map();
+    [...custom, ...base].forEach((it) => {
+      if (it?.key && !allByKey.has(it.key)) allByKey.set(it.key, it);
+    });
+    const esc = (s) => this.escapeHtml(s);
+
+    if (countBadge) {
+      const n = this.pendingCustomTokenItems.length;
+      countBadge.textContent = String(n);
+      countBadge.classList.toggle('hidden', n === 0);
+    }
+
+    if (chips) {
+      chips.innerHTML = this.pendingCustomTokenItems
+        .map((key, idx) => {
+          const item = allByKey.get(key);
+          const label = item ? item.name : key;
+          const dotColor = esc(item?.color || '#8b5cf6');
+          return `
+            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium bg-white/10 border border-white/10 max-w-full">
+              <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:${dotColor};"></span>
+              <span class="truncate max-w-[130px]">${esc(label)}</span>
+              <button type="button" data-remove-starter-idx="${idx}" class="opacity-65 hover:opacity-100 leading-none" title="Quitar complemento" aria-label="Quitar ${esc(label)}">×</button>
+            </span>
+          `;
+        })
+        .join('');
+    }
+
+    if (this.customTokenItemsPickerOpen) {
+      this.renderCustomTokenItemsPickerList(state);
+    }
+  },
+
+  resetCustomTokenFormDraft(state) {
+    const visionCfg = Selector.getSystemVisionConfig(state);
+    const vUnit = visionCfg.distanceUnit;
+    if (this.els.inpCustomTokenName) this.els.inpCustomTokenName.value = '';
+    if (this.els.inpCustomTokenRole) this.els.inpCustomTokenRole.value = '';
+    if (this.els.inpCustomTokenHp) this.els.inpCustomTokenHp.value = '16';
+    if (this.els.inpCustomTokenAc) this.els.inpCustomTokenAc.value = '13';
+    this.selectedTokenAlly = 'ally';
+    this.selectedTokenSize = 1;
+    this.pendingCustomTokenItems = [];
+    this.expandedPickerFolders = new Set();
+    this.setCustomTokenItemsPickerOpen(false);
+    if (this.els.inpCustomTokenImg) this.els.inpCustomTokenImg.value = '';
+    if (this.els.inpCustomTokenVision) {
+      this.els.inpCustomTokenVision.value = '';
+      this.els.inpCustomTokenVision.placeholder = String(metersToDisplayValue(visionCfg.defaultVisionMeters, vUnit));
+      this.els.inpCustomTokenVision.step = vUnit === 'ft' ? '5' : '0.5';
+    }
+    if (this.els.lblCustomTokenVisionUnit) this.els.lblCustomTokenVisionUnit.textContent = vUnit;
+    if (this.els.inpCustomTokenLight) {
+      this.els.inpCustomTokenLight.value = '';
+      this.els.inpCustomTokenLight.step = vUnit === 'ft' ? '5' : '0.5';
+    }
+    if (this.els.lblCustomTokenLightUnit) this.els.lblCustomTokenLightUnit.textContent = vUnit;
+    if (this.els.inpCustomTokenPublicDesc) this.els.inpCustomTokenPublicDesc.value = '';
+    if (this.els.inpCustomTokenFolder) this.els.inpCustomTokenFolder.value = '';
+    this.syncCustomTokenSizeSeg();
+    this.syncCustomTokenAllyHint();
+    this.renderCustomTokenStatsGrid(state, {});
+    this.renderCustomTokenStarterItems(state);
+    this.renderCustomTokenPreview();
+    this.setCustomTokenDetailsOpen(false);
+  },
   renderCustomMapGridSummary() {
     const el = this.els.lblCustomMapGridSummary;
     if (!el) return;
@@ -20,6 +304,15 @@ export const CompendiumViewMethods = {
             : 'Cuadrada';
     const lightLabel = l.dynamicLighting ? 'Luz dinámica' : 'Luz ambiental';
     el.textContent = `${label} · ${Number(g.cellSize.toFixed(1))}px · ${lightLabel}`;
+  },
+
+  syncCustomMapModeSeg() {
+    const mode = this.selectedCustomMapMode === 'narrative' ? 'narrative' : 'tactical';
+    this.selectedCustomMapMode = mode;
+    this.els.customMapModeSeg?.querySelectorAll('[data-map-mode]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.mapMode === mode);
+    });
+    this.els.customMapGridSection?.classList.toggle('hidden', mode === 'narrative');
   },
 
   renderCustomTokenPreview() {
@@ -61,11 +354,15 @@ export const CompendiumViewMethods = {
         this.els.customItemIconGrid.classList.add('hidden');
         this.renderCustomItemIconGrid();
       }
+      this.setCustomTokenItemsPickerOpen(false);
       if (this.els.lblCustomItemFormTitle) this.els.lblCustomItemFormTitle.textContent = 'Nuevo complemento';
       if (this.els.lblCustomFormTitle) this.els.lblCustomFormTitle.textContent = 'Nuevo personaje';
       if (this.els.lblCustomMapFormTitle) this.els.lblCustomMapFormTitle.textContent = 'Nuevo escenario';
       this.pendingCustomMapGrid = normalizeGridConfig({});
       this.pendingCustomMapLighting = normalizeSceneLighting({});
+      this.selectedCustomMapMode = 'tactical';
+      this.syncCustomMapModeSeg();
+      if (this.els.selCustomMapWeather) this.els.selCustomMapWeather.value = 'none';
       this.renderCustomMapGridSummary();
       if (this.els.btnToggleCustomToken) this.els.btnToggleCustomToken.classList.remove('portal-btn-accent');
       if (this.els.btnNewCompendiumFolder) this.els.btnNewCompendiumFolder.classList.remove('portal-btn-accent');
@@ -162,13 +459,22 @@ export const CompendiumViewMethods = {
       });
     };
 
+    this.els.customMapModeSeg?.querySelectorAll('[data-map-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.selectedCustomMapMode = btn.dataset.mapMode === 'narrative' ? 'narrative' : 'tactical';
+        this.syncCustomMapModeSeg();
+      });
+    });
+
     if (this.els.fileCustomMapImg) {
       this.els.fileCustomMapImg.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-          this.els.inpCustomMapImg.value = await Service.compressImageFile(file, 1600, 0.82);
-          openCustomMapGridCalibrator();
+          this.els.inpCustomMapImg.value = await Service.compressImageFile(file, 4096, 0.85);
+          if (this.selectedCustomMapMode !== 'narrative') {
+            openCustomMapGridCalibrator();
+          }
         } catch (err) {
           this.showActionToast(err.message);
         }
@@ -220,7 +526,7 @@ export const CompendiumViewMethods = {
           openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName);
         }
         else {
-          this.renderCustomTokenPreview();
+          this.resetCustomTokenFormDraft(Service.state);
           openCompendiumForm(this.els.customTokenForm, this.els.btnToggleCustomToken, this.els.inpCustomTokenName);
         }
       });
@@ -228,6 +534,71 @@ export const CompendiumViewMethods = {
     if (this.els.btnCancelCustomToken) this.els.btnCancelCustomToken.addEventListener('click', closeAllCompendiumForms);
     if (this.els.btnCancelCustomItem) this.els.btnCancelCustomItem.addEventListener('click', closeAllCompendiumForms);
     if (this.els.btnCancelCustomMap) this.els.btnCancelCustomMap.addEventListener('click', closeAllCompendiumForms);
+
+    this.els.customTokenSizeSeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-token-size]');
+      if (!btn) return;
+      this.selectedTokenSize = clampTokenSize(btn.dataset.tokenSize, 1);
+      this.syncCustomTokenSizeSeg();
+    });
+    this.els.customTokenAllySeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-token-ally]');
+      if (!btn) return;
+      this.selectedTokenAlly = btn.dataset.tokenAlly === 'enemy' ? 'enemy' : 'ally';
+      this.syncCustomTokenAllyHint();
+    });
+    this.els.customTokenDetailsToggle?.addEventListener('click', () => {
+      const isOpen = this.els.customTokenDetailsBody && !this.els.customTokenDetailsBody.classList.contains('hidden');
+      this.setCustomTokenDetailsOpen(!isOpen);
+    });
+    this.els.btnToggleCustomTokenItemsPicker?.addEventListener('click', () => {
+      this.setCustomTokenItemsPickerOpen(!this.customTokenItemsPickerOpen);
+    });
+    this.els.btnCloseCustomTokenItemsPicker?.addEventListener('click', () => {
+      this.setCustomTokenItemsPickerOpen(false);
+    });
+    this.els.inpCustomTokenItemSearch?.addEventListener('input', (e) => {
+      this.customTokenItemsPickerQuery = e.target.value;
+      this.renderCustomTokenItemsPickerList(Service.state);
+    });
+    this.els.customTokenItemsPickerList?.addEventListener('click', (e) => {
+      const folderBtn = e.target.closest('[data-picker-toggle-folder]');
+      if (folderBtn) {
+        if (!this.expandedPickerFolders) this.expandedPickerFolders = new Set();
+        const id = folderBtn.dataset.pickerToggleFolder;
+        if (this.expandedPickerFolders.has(id)) this.expandedPickerFolders.delete(id);
+        else this.expandedPickerFolders.add(id);
+        this.renderCustomTokenItemsPickerList(Service.state);
+        return;
+      }
+      const decBtn = e.target.closest('[data-picker-dec-item]');
+      if (decBtn && Array.isArray(this.pendingCustomTokenItems)) {
+        const key = decBtn.dataset.pickerDecItem;
+        const idx = this.pendingCustomTokenItems.lastIndexOf(key);
+        if (idx >= 0) {
+          this.pendingCustomTokenItems.splice(idx, 1);
+          this.renderCustomTokenStarterItems(Service.state);
+        }
+        return;
+      }
+      const addBtn = e.target.closest('[data-picker-add-item]');
+      if (addBtn) {
+        const key = addBtn.dataset.pickerAddItem;
+        if (!key) return;
+        if (!Array.isArray(this.pendingCustomTokenItems)) this.pendingCustomTokenItems = [];
+        this.pendingCustomTokenItems.push(key);
+        this.renderCustomTokenStarterItems(Service.state);
+      }
+    });
+    this.els.customTokenStarterItems?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-remove-starter-idx]');
+      if (!btn || !Array.isArray(this.pendingCustomTokenItems)) return;
+      const idx = Number(btn.dataset.removeStarterIdx);
+      if (Number.isInteger(idx) && idx >= 0 && idx < this.pendingCustomTokenItems.length) {
+        this.pendingCustomTokenItems.splice(idx, 1);
+        this.renderCustomTokenStarterItems(Service.state);
+      }
+    });
 
     this.bindItemCreatorEvents();
     this.renderCreatorBlocks();
@@ -245,33 +616,36 @@ export const CompendiumViewMethods = {
       e.preventDefault();
       const name = this.els.inpCustomTokenName.value.trim();
       if (!name) return;
-      const isAlly = this.els.selCustomTokenAlly.value !== 'enemy';
+      const isAlly = this.selectedTokenAlly !== 'enemy';
+      const stats = {};
+      this.els.customTokenStatsGrid?.querySelectorAll('[data-custom-stat-key]').forEach((inp) => {
+        const k = inp.dataset.customStatKey;
+        if (k) stats[k] = Number(inp.value) || 0;
+      });
+      const vUnit = Selector.getSystemVisionConfig(Service.state).distanceUnit;
+      const rawVision = String(this.els.inpCustomTokenVision?.value ?? '').trim();
+      const visionMeters = rawVision === '' ? null : displayValueToMeters(Number(rawVision), vUnit);
+      const rawLight = String(this.els.inpCustomTokenLight?.value ?? '').trim();
+      const lightMeters = rawLight === '' ? 0 : displayValueToMeters(Number(rawLight), vUnit);
+
       const saved = Service.saveCustomActor({
         key: this.editingCompendiumKey || undefined,
         name,
         role: this.els.inpCustomTokenRole.value.trim() || (isAlly ? 'Protagonista' : 'Secundario'),
         folder: this.els.inpCustomTokenFolder.value.trim(),
         isAlly,
+        size: clampTokenSize(this.selectedTokenSize, 1),
+        visionMeters,
+        lightMeters,
         imageUrl: this.els.inpCustomTokenImg.value.trim(),
         publicDescription: this.els.inpCustomTokenPublicDesc ? this.els.inpCustomTokenPublicDesc.value.trim() : '',
         color: this.selectedTokenColor || '#8b5cf6',
         hp: Number(this.els.inpCustomTokenHp.value) || 16,
         ac: Number(this.els.inpCustomTokenAc.value) || 13,
-        stats: {
-          str: Number(this.els.inpCustomStr.value) || 0,
-          dex: Number(this.els.inpCustomDex.value) || 0,
-          con: Number(this.els.inpCustomCon.value) || 0,
-          int: Number(this.els.inpCustomInt.value) || 0,
-          wis: Number(this.els.inpCustomWis?.value) || 0,
-          cha: Number(this.els.inpCustomCha?.value) || 0
-        }
+        stats,
+        starterItems: Array.isArray(this.pendingCustomTokenItems) ? [...this.pendingCustomTokenItems] : []
       });
-      this.els.inpCustomTokenName.value = '';
-      this.els.inpCustomTokenRole.value = '';
-      this.els.inpCustomTokenImg.value = '';
-      if (this.els.inpCustomTokenPublicDesc) this.els.inpCustomTokenPublicDesc.value = '';
-      this.els.inpCustomTokenFolder.value = '';
-      this.renderCustomTokenPreview();
+      this.resetCustomTokenFormDraft(Service.state);
       closeAllCompendiumForms();
       this.showActionToast(`${saved.name} guardado en Personajes.`);
     });
@@ -313,6 +687,8 @@ export const CompendiumViewMethods = {
         imageUrl,
         desc: this.els.inpCustomMapDesc.value.trim() || 'Escenario personalizado',
         folder: this.els.inpCustomMapFolder.value.trim(),
+        sceneMode: this.selectedCustomMapMode || 'tactical',
+        weather: this.els.selCustomMapWeather?.value || 'none',
         grid: this.pendingCustomMapGrid,
         lighting: this.pendingCustomMapLighting
       });
@@ -442,21 +818,50 @@ export const CompendiumViewMethods = {
     const editCustomActor = (key) => {
       const a = (Service.state.customActors || []).find((x) => x.key === key);
       if (!a) return;
+      const visionCfg = Selector.getSystemVisionConfig(Service.state);
+      const vUnit = visionCfg.distanceUnit;
       this.editingCompendiumKey = a.key;
+      if (this.els.lblCustomFormTitle) this.els.lblCustomFormTitle.textContent = 'Editar personaje';
       this.els.inpCustomTokenName.value = a.name || '';
       this.els.inpCustomTokenRole.value = a.role || '';
-      this.els.inpCustomTokenHp.value = String(a.hp || 16);
+      this.els.inpCustomTokenHp.value = String(a.maxHp || a.hp || 16);
       this.els.inpCustomTokenAc.value = String(a.ac || 13);
-      this.els.selCustomTokenAlly.value = a.isAlly === false ? 'enemy' : 'ally';
-      this.els.inpCustomStr.value = String(a.stats?.str || 0);
-      this.els.inpCustomDex.value = String(a.stats?.dex || 0);
-      this.els.inpCustomCon.value = String(a.stats?.con || 0);
-      this.els.inpCustomInt.value = String(a.stats?.int || 0);
-      if (this.els.inpCustomWis) this.els.inpCustomWis.value = String(a.stats?.wis || 0);
-      if (this.els.inpCustomCha) this.els.inpCustomCha.value = String(a.stats?.cha || 0);
+      this.selectedTokenAlly = a.isAlly === false ? 'enemy' : 'ally';
+      this.selectedTokenSize = clampTokenSize(a.size, 1);
+      this.expandedPickerFolders = new Set();
+      this.setCustomTokenItemsPickerOpen(false);
+      this.syncCustomTokenSizeSeg();
+      this.syncCustomTokenAllyHint();
+      this.renderCustomTokenStatsGrid(Service.state, a.stats || {});
+      this.pendingCustomTokenItems = Array.isArray(a.starterItems)
+        ? [...a.starterItems]
+        : Array.isArray(a.inventory)
+          ? a.inventory.map((it) => it?.key).filter((k) => k && k !== 'custom_item')
+          : [];
+      this.renderCustomTokenStarterItems(Service.state);
       this.els.inpCustomTokenImg.value = a.imageUrl || '';
+      if (this.els.inpCustomTokenVision) {
+        const hasVis = a.visionMeters !== null && a.visionMeters !== undefined && Number.isFinite(Number(a.visionMeters));
+        this.els.inpCustomTokenVision.value = hasVis ? String(metersToDisplayValue(a.visionMeters, vUnit)) : '';
+        this.els.inpCustomTokenVision.placeholder = String(metersToDisplayValue(visionCfg.defaultVisionMeters, vUnit));
+        this.els.inpCustomTokenVision.step = vUnit === 'ft' ? '5' : '0.5';
+      }
+      if (this.els.lblCustomTokenVisionUnit) this.els.lblCustomTokenVisionUnit.textContent = vUnit;
+      if (this.els.inpCustomTokenLight) {
+        const hasLight = Number(a.lightMeters) > 0;
+        this.els.inpCustomTokenLight.value = hasLight ? String(metersToDisplayValue(a.lightMeters, vUnit)) : '';
+        this.els.inpCustomTokenLight.step = vUnit === 'ft' ? '5' : '0.5';
+      }
+      if (this.els.lblCustomTokenLightUnit) this.els.lblCustomTokenLightUnit.textContent = vUnit;
       if (this.els.inpCustomTokenPublicDesc) this.els.inpCustomTokenPublicDesc.value = a.publicDescription || '';
       this.els.inpCustomTokenFolder.value = a.folder || '';
+      const hasDetails = Boolean(
+        (a.visionMeters !== null && a.visionMeters !== undefined) ||
+          Number(a.lightMeters) > 0 ||
+          a.publicDescription ||
+          a.folder
+      );
+      this.setCustomTokenDetailsOpen(hasDetails);
       this.selectedTokenColor = a.color || '#8b5cf6';
       this.renderCustomColorGrids();
       this.renderCustomTokenPreview();
@@ -490,6 +895,9 @@ export const CompendiumViewMethods = {
       this.els.inpCustomMapFolder.value = m.folder || '';
       this.pendingCustomMapGrid = normalizeGridConfig(m.grid || Service.state.mapGrids?.[m.key] || {});
       this.pendingCustomMapLighting = normalizeSceneLighting(m.lighting || Service.getSceneLighting(m.key));
+      this.selectedCustomMapMode = m.sceneMode === 'narrative' ? 'narrative' : 'tactical';
+      this.syncCustomMapModeSeg();
+      if (this.els.selCustomMapWeather) this.els.selCustomMapWeather.value = m.weather || 'none';
       this.renderCustomMapGridSummary();
       this.openCompendiumForm(this.els.customMapForm, this.els.btnToggleCustomToken, this.els.inpCustomMapName, true);
     };
@@ -532,7 +940,30 @@ export const CompendiumViewMethods = {
       const list = allActors.filter((a) => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q));
       renderWithFolders(
         list,
-        (a) => `
+        (a) => {
+          const size = clampTokenSize(a.size, 1);
+          const maxHp = Math.max(1, Number(a.maxHp ?? a.hp) || 16);
+          const curHp = Number.isFinite(Number(a.hp)) ? Number(a.hp) : maxHp;
+          const hpLabel = a.isAlly !== false && curHp < maxHp ? `HP ${curHp}/${maxHp}` : `HP ${maxHp}`;
+          const itemCount = Array.isArray(a.inventory)
+            ? a.inventory.length
+            : Array.isArray(a.starterItems)
+              ? a.starterItems.length
+              : 0;
+          const categoryLabel = a.isAlly === false ? 'Secundario' : 'Protagonista';
+          const roleLabel =
+            a.role && String(a.role).trim().toLowerCase() !== categoryLabel.toLowerCase()
+              ? String(a.role).trim()
+              : '';
+          const metaParts = [
+            categoryLabel,
+            size > 1 ? `${size}×${size}` : '',
+            roleLabel,
+            hpLabel,
+            `CA ${a.ac || 12}`,
+            itemCount > 0 ? `${itemCount} obj` : ''
+          ].filter(Boolean);
+          return `
           <div
             draggable="true"
             data-drag-spec="actor:${a.key}"
@@ -541,16 +972,17 @@ export const CompendiumViewMethods = {
           >
             <div class="flex items-center gap-3 min-w-0">
               <span class="w-11 h-11 ${a.imageUrl ? '' : 'rounded-full overflow-hidden'} flex items-center justify-center font-bold text-xs text-white flex-shrink-0" style="background:${a.imageUrl ? 'transparent' : a.color};">
-                ${a.imageUrl ? `<img src="${this.escapeHtml(a.imageUrl)}" alt="${this.escapeHtml(a.name)}" class="w-full h-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.45)]" />` : this.escapeHtml(a.name.slice(0, 2).toUpperCase())}
+                ${a.imageUrl ? `<img src="${this.escapeHtml(a.imageUrl)}" alt="${this.escapeHtml(a.name)}" draggable="false" class="w-full h-full object-contain pointer-events-none select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.45)]" />` : this.escapeHtml(a.name.slice(0, 2).toUpperCase())}
               </span>
               <div class="min-w-0">
-                <div class="font-semibold text-xs truncate">${a.name}</div>
-                <div class="text-[11px] opacity-65 truncate">${a.isAlly === false ? 'Secundario' : 'Protagonista'} · ${a.role} · HP ${a.hp} · CA ${a.ac || 12}</div>
+                <div class="font-semibold text-xs truncate">${this.escapeHtml(a.name)}</div>
+                <div class="text-[11px] opacity-65 truncate">${this.escapeHtml(metaParts.join(' · '))}</div>
               </div>
             </div>
             ${moreDotsBtn('data-actor-menu', a.key)}
           </div>
-        `
+        `;
+        }
       );
 
       const openActorMenu = (key, cx, cy) => {
@@ -619,15 +1051,15 @@ export const CompendiumViewMethods = {
         (it) => `
           <div
             draggable="true"
-            data-drag-spec="item:${it.key}"
-            data-item-key="${it.key}"
-            class="group portal-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            data-drag-spec="item:${this.escapeHtml(it.key)}"
+            data-item-key="${this.escapeHtml(it.key)}"
+            class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 cursor-grab"
           >
-            <div class="flex items-center gap-2.5 min-w-0">
-              ${this.renderItemIconBadge(it)}
+            <div class="flex items-center gap-3 min-w-0">
+              ${this.renderItemIconBadge(it, { size: 'lg' })}
               <div class="min-w-0">
-                <div class="font-semibold text-xs truncate">${it.name}</div>
-                <div class="text-[11px] opacity-65 truncate">${it.badge}</div>
+                <div class="font-semibold text-xs truncate">${this.escapeHtml(it.name)}</div>
+                <div class="text-[11px] opacity-65 truncate">${this.escapeHtml(it.badge || '')}</div>
               </div>
             </div>
             ${moreDotsBtn('data-item-menu', it.key)}
@@ -691,27 +1123,58 @@ export const CompendiumViewMethods = {
     } else {
       const allMaps = [...(state.customMaps || []), ...COMPENDIUM_MAPS];
       const list = allMaps.filter((m) => m.name.toLowerCase().includes(q) || (m.desc || '').toLowerCase().includes(q));
+      const activeSceneKey = Service.getActiveSceneKey();
+      const esc = (s) => this.escapeHtml(s);
       renderWithFolders(
         list,
-        (m) => `
+        (m) => {
+          const card = resolveMapCardDescriptor(m, activeSceneKey);
+          const thumbSrc =
+            card.kind === 'image'
+              ? card.src
+              : card.kind === 'preset'
+                ? this.getPresetMapThumbnail(card.presetId)
+                : '';
+          const previewHtml = thumbSrc
+            ? `<img src="${esc(thumbSrc)}" alt="${esc(card.name)}" loading="lazy" draggable="false" class="w-full h-full object-cover pointer-events-none select-none" />`
+            : `<div class="w-full h-full flex items-center justify-center opacity-35"><svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" /><line x1="9" y1="3" x2="9" y2="18" /><line x1="15" y1="6" x2="15" y2="21" /></svg></div>`;
+          const activePill = card.isActive
+            ? `<span class="portal-map-active-pill"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Activo</span>`
+            : '';
+          const modePill = card.sceneMode === 'narrative'
+            ? `<span class="portal-map-mode-pill">Narrativo</span>`
+            : '';
+          const badgesHtml = (activePill || modePill)
+            ? `<div class="portal-map-badges">${activePill}${modePill}</div>`
+            : '';
+          return `
           <div
             draggable="true"
-            data-drag-spec="map:${m.key}"
-            data-map-key="${m.key}"
-            class="group portal-list-row px-2 py-2 flex items-center justify-between gap-2 cursor-grab"
+            data-drag-spec="map:${esc(m.key)}"
+            data-map-key="${esc(m.key)}"
+            class="group portal-map-card cursor-grab${card.isActive ? ' is-active' : ''}"
           >
-            <div class="min-w-0">
-              <div class="font-semibold text-xs truncate">${m.name}</div>
-              <div class="text-[11px] opacity-65 truncate">${m.desc}</div>
+            <div class="portal-map-card-preview">
+              ${previewHtml}
+              <div class="portal-map-card-scrim"></div>
+              ${badgesHtml}
+              <button type="button" data-map-menu="${esc(m.key)}" class="portal-map-card-menu" title="Opciones">
+                <span class="text-xs leading-none">⋯</span>
+              </button>
             </div>
-            ${moreDotsBtn('data-map-menu', m.key)}
+            <div class="px-2.5 py-2 min-w-0">
+              <div class="font-semibold text-xs truncate">${esc(card.name)}</div>
+              <div class="text-[11px] opacity-65 truncate">${esc(card.desc || 'Escenario personalizado')}</div>
+            </div>
           </div>
-        `
+        `;
+        }
       );
 
       const openMapMenu = (key, cx, cy) => {
         const m = allMaps.find((x) => x.key === key);
         if (!m) return;
+        const isNarrative = m.sceneMode === 'narrative';
         const actions = [
           ...buildGmPinActions('map', m.key, m.name),
           {
@@ -721,47 +1184,51 @@ export const CompendiumViewMethods = {
               await Service.activateMapTemplate(m);
               this.showActionToast(`Escenario "${m.name}" activado.`);
             }
-          },
-          {
-            icon: '⚙️',
-            label: 'Opciones del escenario',
-            onClick: () => {
-              const isActive = Service.getActiveSceneKey() === m.key;
-              if (isActive) Service.flushExploredMask();
-              const curGrid = Service.state.mapGrids?.[m.key] || m.grid || (isActive ? Service.state.grid : {});
-              const curLighting = Service.getSceneLighting(m.key);
-              const walls = isActive
-                ? Service.state.walls
-                : (Service.state.sceneLayers?.[m.key]?.walls || (m.isCustom ? [] : buildPresetWallsForMap(m.key)));
-              this.openMapGridEditor?.({
-                title: m.name,
-                mapId: m.isCustom ? 'custom' : m.key,
-                sceneKey: m.key,
-                isActiveScene: isActive,
-                imageUrl: m.isCustom ? (m.imageUrl || '') : '',
-                initialGrid: curGrid,
-                initialLighting: curLighting,
-                walls,
-                onApply: ({ grid, lighting }) => {
-                  Service.updateMapGridForScene(m.key, grid);
-                  Service.updateSceneLighting(m.key, {
-                    dynamicLighting: lighting.dynamicLighting,
-                    rememberExplored: lighting.rememberExplored
-                  });
-                  this.showActionToast(`Escenario "${m.name}" actualizado.`);
-                }
-              });
-            }
-          },
-          {
-            icon: '↺',
-            label: 'Resetear área descubierta',
-            onClick: () => {
-              Service.resetSceneExploredFog(m.key);
-              this.showActionToast(`Área descubierta de "${m.name}" reseteada.`);
-            }
           }
         ];
+        if (!isNarrative) {
+          actions.push(
+            {
+              icon: '⚙️',
+              label: 'Opciones del escenario',
+              onClick: () => {
+                const isActive = Service.getActiveSceneKey() === m.key;
+                if (isActive) Service.flushExploredMask();
+                const curGrid = Service.state.mapGrids?.[m.key] || m.grid || (isActive ? Service.state.grid : {});
+                const curLighting = Service.getSceneLighting(m.key);
+                const walls = isActive
+                  ? Service.state.walls
+                  : (Service.state.sceneLayers?.[m.key]?.walls || (m.isCustom ? [] : buildPresetWallsForMap(m.key)));
+                this.openMapGridEditor?.({
+                  title: m.name,
+                  mapId: m.isCustom ? 'custom' : m.key,
+                  sceneKey: m.key,
+                  isActiveScene: isActive,
+                  imageUrl: m.isCustom ? (m.imageUrl || '') : '',
+                  initialGrid: curGrid,
+                  initialLighting: curLighting,
+                  walls,
+                  onApply: ({ grid, lighting }) => {
+                    Service.updateMapGridForScene(m.key, grid);
+                    Service.updateSceneLighting(m.key, {
+                      dynamicLighting: lighting.dynamicLighting,
+                      rememberExplored: lighting.rememberExplored
+                    });
+                    this.showActionToast(`Escenario "${m.name}" actualizado.`);
+                  }
+                });
+              }
+            },
+            {
+              icon: '↺',
+              label: 'Resetear área descubierta',
+              onClick: () => {
+                Service.resetSceneExploredFog(m.key);
+                this.showActionToast(`Área descubierta de "${m.name}" reseteada.`);
+              }
+            }
+          );
+        }
         if (m.isCustom) {
           actions.push(
             { icon: '✏️', label: 'Editar escenario', onClick: () => editCustomMap(m.key) },
@@ -780,6 +1247,13 @@ export const CompendiumViewMethods = {
       };
 
       this.els.tokenTemplatesGrid.querySelectorAll('[data-map-key]').forEach((row) => {
+        row.addEventListener('dblclick', async (e) => {
+          if (e.target.closest('[data-map-menu]')) return;
+          const m = allMaps.find((x) => x.key === row.dataset.mapKey);
+          if (!m) return;
+          await Service.activateMapTemplate(m);
+          this.showActionToast(`Escenario "${m.name}" activado.`);
+        });
         row.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -799,6 +1273,7 @@ export const CompendiumViewMethods = {
       card.addEventListener('dragstart', (e) => {
         if (e.dataTransfer) {
           e.dataTransfer.setData('text/plain', card.dataset.dragSpec);
+          e.dataTransfer.setData('application/x-portal-drag', card.dataset.dragSpec);
         }
       });
     });

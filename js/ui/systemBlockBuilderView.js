@@ -2,13 +2,13 @@
    SYSTEM BLOCK BUILDER VIEW: CONSTRUCTOR POR BLOQUES, PESTAÑAS Y VISTA PREVIA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 import {
   BLOCK_BADGES,
   BlockInspectorViewMethods,
   SVG_ICONS
-} from './blockInspectorView.js?v=20261121a6';
+} from './blockInspectorView.js?v=20261123a7';
 
 export { BLOCK_BADGES, SVG_ICONS };
 

@@ -26,11 +26,11 @@ const {
   normalizeGridConfig,
   resolveGridStrokeStyle,
   snapToGrid
-} = await import('../js/utils/gridGeometry.js?v=20261121a6');
-const { createInitialState } = await import('../js/core/model.js?v=20261121a6');
-const { Selector } = await import('../js/core/selector.js?v=20261121a6');
-const { Service } = await import('../js/core/service.js?v=20261121a6');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261121a6');
+} = await import('../js/utils/gridGeometry.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
+const { Selector } = await import('../js/core/selector.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
 
 test('normalizeGridConfig provides safe defaults and clamps invalid or out-of-range fields', () => {
   assert.deepEqual(normalizeGridConfig({}), {

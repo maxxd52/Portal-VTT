@@ -2,9 +2,9 @@
    JOURNAL SERVICE: DIARIO UNIFICADO (CARPETAS, NOTAS Y BLOQUES)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { collectPlayerAuthorizedMedia } from '../utils/worldRedaction.js?v=20261121a6';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { collectPlayerAuthorizedMedia } from '../utils/worldRedaction.js?v=20261123a7';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
 
 export const makeJId = (prefix) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;

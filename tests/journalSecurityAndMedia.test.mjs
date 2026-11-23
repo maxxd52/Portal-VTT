@@ -19,16 +19,16 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261121a6');
-const { Selector } = await import('../js/core/selector.js?v=20261121a6');
-const { Service } = await import('../js/core/service.js?v=20261121a6');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261121a6');
-const { CartridgePacker } = await import('../js/services/cartridgePacker.js?v=20261121a6');
-const { WebPConverter } = await import('../js/utils/webpConverter.js?v=20261121a6');
+const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
+const { Selector } = await import('../js/core/selector.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { CartridgePacker } = await import('../js/services/cartridgePacker.js?v=20261123a7');
+const { WebPConverter } = await import('../js/utils/webpConverter.js?v=20261123a7');
 const {
   collectPlayerAuthorizedMedia,
   redactTokenForNonOwner
-} = await import('../js/utils/worldRedaction.js?v=20261121a6');
+} = await import('../js/utils/worldRedaction.js?v=20261123a7');
 
 function resetGmForTest() {
   Service.cancelAllTokenGlides();

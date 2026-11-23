@@ -1,51 +1,102 @@
-import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { BrowserVault } from './browserVault.js?v=20261121a6';
-import { CartridgePacker } from './cartridgePacker.js?v=20261121a6';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261121a6';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { BrowserVault } from './browserVault.js?v=20261123a7';
+import { CartridgePacker } from './cartridgePacker.js?v=20261123a7';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261121a6';
-import { normalizeSceneLighting } from '../utils/lightingModel.js?v=20261121a6';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
+import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
+import { normalizeSceneLighting } from '../utils/lightingModel.js?v=20261123a7';
+import {
+  applyActorTemplateToLiveToken,
+  clampTokenSize,
+  normalizeTemplateStats,
+  reconcileInventoryWithStarterItems
+} from '../utils/tokenTemplateSync.js?v=20261123a7';
 
 /**
  * Custom compendium CRUD, folder management & .portal cartridge/shelf methods mixed into Service.
  */
 export const CompendiumServiceMethods = {
   saveCustomActor(tpl) {
+    const list = Array.isArray(this.state.customActors) ? this.state.customActors : [];
+    const existing = tpl.key ? list.find((a) => a && a.key === tpl.key) : null;
     const isAlly = tpl.isAlly !== false;
-    const folder = String(tpl.folder || '').trim();
-    const cleanImg = DriveUrlHelper.toDirectImageUrl(tpl.imageUrl || '') || String(tpl.imageUrl || '').trim();
-    const cleanName = String(tpl.name || 'Personaje').trim();
+    const folder = tpl.folder !== undefined ? String(tpl.folder || '').trim() : String(existing?.folder || '').trim();
+    const rawImg = tpl.imageUrl !== undefined ? tpl.imageUrl : existing?.imageUrl || '';
+    const cleanImg = DriveUrlHelper.toDirectImageUrl(rawImg || '') || String(rawImg || '').trim();
+    const cleanName = String(tpl.name || existing?.name || 'Personaje').trim();
     const mediaId = cleanImg ? (this.registerMediaAsset?.(cleanImg, { label: cleanName, kind: 'token' }) || '') : '';
+    const nextMaxHp = Math.max(1, Number(tpl.maxHp ?? tpl.hp ?? existing?.maxHp ?? existing?.hp) || 16);
+    let nextHp = nextMaxHp;
+    if (isAlly) {
+      if (tpl.hp !== undefined && tpl.maxHp !== undefined) {
+        nextHp = Math.max(0, Math.min(nextMaxHp, Number(tpl.hp) || 0));
+      } else if (existing && existing.isAlly !== false) {
+        const prevMax = Math.max(1, Number(existing.maxHp ?? existing.hp) || 16);
+        const prevCur = Number.isFinite(Number(existing.hp)) ? Number(existing.hp) : prevMax;
+        nextHp = prevCur >= prevMax ? nextMaxHp : Math.max(0, Math.min(nextMaxHp, prevCur));
+      } else {
+        nextHp = Math.max(0, Math.min(nextMaxHp, Number(tpl.hp ?? nextMaxHp) || nextMaxHp));
+      }
+    }
+    const rawVision = tpl.visionMeters !== undefined ? tpl.visionMeters : existing?.visionMeters;
+    const visionMeters =
+      rawVision !== null && rawVision !== undefined && rawVision !== '' && Number.isFinite(Number(rawVision))
+        ? Math.max(0, Math.min(60, Number(rawVision)))
+        : null;
+    const rawLight = tpl.lightMeters !== undefined ? tpl.lightMeters : existing?.lightMeters;
+    const lightMeters = Math.max(0, Math.min(60, Number(rawLight) || 0));
+    const hasStarterItems = Array.isArray(tpl.starterItems);
+    const starterItems = hasStarterItems
+      ? tpl.starterItems.filter(Boolean)
+      : Array.isArray(existing?.starterItems)
+        ? [...existing.starterItems]
+        : [];
+    const nextInventory = Array.isArray(tpl.inventory)
+      ? JSON.parse(JSON.stringify(tpl.inventory))
+      : hasStarterItems
+        ? reconcileInventoryWithStarterItems(
+            existing?.inventory,
+            existing?.starterItems,
+            starterItems,
+            this.state.customItems,
+            COMPENDIUM_ITEMS
+          )
+        : Array.isArray(existing?.inventory)
+          ? JSON.parse(JSON.stringify(existing.inventory))
+          : undefined;
+
     const entry = {
-      key: tpl.key || `custom-${Date.now().toString(36)}`,
+      ...(existing ? JSON.parse(JSON.stringify(existing)) : {}),
+      key: tpl.key || existing?.key || `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
       isCustom: true,
       folder,
       name: cleanName,
-      role: String(tpl.role || (isAlly ? 'Protagonista' : 'Secundario')).trim(),
-      color: tpl.color || (isAlly ? '#8b5cf6' : '#ef4444'),
+      role: String(tpl.role !== undefined ? tpl.role : existing?.role || (isAlly ? 'Protagonista' : 'Secundario')).trim(),
+      color: tpl.color || existing?.color || (isAlly ? '#8b5cf6' : '#ef4444'),
       isAlly,
-      visionMeters:
-        tpl.visionMeters !== null && tpl.visionMeters !== undefined && tpl.visionMeters !== '' && Number.isFinite(Number(tpl.visionMeters))
-          ? Math.max(0, Math.min(60, Number(tpl.visionMeters)))
-          : null,
+      visionMeters,
+      lightMeters,
       imageUrl: cleanImg,
       mediaId,
-      publicDescription: String(tpl.publicDescription || '').trim(),
-      size: Number(tpl.size) || 1,
-      hp: Math.max(1, Number(tpl.hp) || 16),
-      ac: Math.max(1, Number(tpl.ac) || 12),
-      stats: {
-        str: Number(tpl.stats?.str) || 0,
-        dex: Number(tpl.stats?.dex) || 0,
-        con: Number(tpl.stats?.con) || 0,
-        int: Number(tpl.stats?.int) || 0,
-        wis: Number(tpl.stats?.wis) || 0,
-        cha: Number(tpl.stats?.cha) || 0
-      },
-      starterItems: Array.isArray(tpl.starterItems) ? tpl.starterItems : []
+      publicDescription: String(tpl.publicDescription !== undefined ? tpl.publicDescription : existing?.publicDescription || '').trim(),
+      privateNotes: String(tpl.privateNotes !== undefined ? tpl.privateNotes : existing?.privateNotes || '').trim(),
+      size: clampTokenSize(tpl.size !== undefined ? tpl.size : existing?.size, 1),
+      hp: nextHp,
+      maxHp: nextMaxHp,
+      ac: Math.max(1, Number(tpl.ac !== undefined ? tpl.ac : existing?.ac) || 12),
+      level: Math.max(1, Math.min(20, Number(tpl.level !== undefined ? tpl.level : existing?.level) || 1)),
+      speed: String(tpl.speed !== undefined ? tpl.speed : existing?.speed || '30 ft'),
+      stats: normalizeTemplateStats(tpl.stats, existing?.stats),
+      starterItems
     };
-    const list = Array.isArray(this.state.customActors) ? this.state.customActors : [];
+    if (nextInventory !== undefined) {
+      entry.inventory = nextInventory;
+    } else {
+      delete entry.inventory;
+    }
+
     const idx = list.findIndex((a) => a.key === entry.key);
     if (idx >= 0) {
       list[idx] = entry;
@@ -53,9 +104,30 @@ export const CompendiumServiceMethods = {
       list.unshift(entry);
     }
     this.state.customActors = list;
+
+    // Linked Protagonist edits propagate to active/stored scene instances; Secondaries stay immutable molds
+    let liveUpdated = false;
+    if (entry.isAlly !== false) {
+      for (const tok of this.state.tokens || []) {
+        if (tok && tok.isAlly !== false && tok.actorKey === entry.key) {
+          applyActorTemplateToLiveToken(tok, entry);
+          liveUpdated = true;
+        }
+      }
+      if (this.state.sceneLayers && typeof this.state.sceneLayers === 'object') {
+        for (const layer of Object.values(this.state.sceneLayers)) {
+          for (const tok of Array.isArray(layer?.tokens) ? layer.tokens : []) {
+            if (tok && tok.isAlly !== false && tok.actorKey === entry.key) {
+              applyActorTemplateToLiveToken(tok, entry);
+            }
+          }
+        }
+      }
+    }
+
     if (folder) this.ensureCompendiumFolder('actors', folder, true);
     this.recordEvent('COMPENDIO', `Personaje guardado: ${entry.name}`);
-    this.notify();
+    this.notify({ redrawFog: liveUpdated });
     return entry;
   },
 
@@ -153,6 +225,14 @@ export const CompendiumServiceMethods = {
           rememberExplored: Selector.getSystemVisionConfig(this.state).rememberExplored
         })
       : null;
+    const sceneMode =
+      tpl.sceneMode === 'narrative'
+        ? 'narrative'
+        : tpl.sceneMode === 'tactical'
+          ? 'tactical'
+          : existing?.sceneMode === 'narrative'
+            ? 'narrative'
+            : 'tactical';
     const entry = {
       key: tpl.key || `cmap-${Date.now().toString(36)}`,
       isCustom: true,
@@ -160,6 +240,8 @@ export const CompendiumServiceMethods = {
       name: String(tpl.name || 'Escenario').trim(),
       desc: String(tpl.desc || 'Escenario personalizado').trim(),
       imageUrl: String(tpl.imageUrl || '').trim(),
+      sceneMode,
+      weather: normalizeWeatherType(tpl.weather ?? existing?.weather ?? 'none'),
       ...(rawGrid ? { grid: normalizeGridConfig(rawGrid) } : {}),
       ...(normLighting
         ? {
@@ -175,6 +257,15 @@ export const CompendiumServiceMethods = {
     else list.unshift(entry);
     this.state.customMaps = list;
     const isActive = this.getActiveSceneKey() === entry.key;
+    if (isActive) {
+      this.state.sceneMode = entry.sceneMode;
+      this.state.sceneWeather = entry.weather;
+      if (entry.sceneMode === 'narrative') {
+        this.state.tool = 'select';
+        this.state.ruler = null;
+        this.state.wallAnchor = null;
+      }
+    }
     if (entry.grid) {
       if (!this.state.mapGrids || typeof this.state.mapGrids !== 'object') {
         this.state.mapGrids = {};
@@ -293,8 +384,8 @@ export const CompendiumServiceMethods = {
   },
 
   ensurePlayerInvites() {
-    if (!Array.isArray(this.state.playerInvites) || this.state.playerInvites.length === 0) {
-      this.state.playerInvites = [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }];
+    if (!Array.isArray(this.state.playerInvites)) {
+      this.state.playerInvites = [];
     }
     return this.state.playerInvites;
   },
@@ -318,9 +409,9 @@ export const CompendiumServiceMethods = {
 
   removePlayerInvite(inviteId) {
     const list = this.ensurePlayerInvites().filter((i) => i.id !== inviteId);
-    this.state.playerInvites = list.length > 0 ? list : [{ id: 'inv-1', label: 'Enlace 1', tokenIds: [] }];
+    this.state.playerInvites = list;
     if (this.state.activeInviteId === inviteId) {
-      this.state.activeInviteId = this.state.playerInvites[0]?.id || 'inv-1';
+      this.state.activeInviteId = '';
     }
     this.syncInvitesChange();
   },
@@ -380,8 +471,8 @@ export const CompendiumServiceMethods = {
   syncPlayerRoleState() {
     this.state.gmScreenOpen = false;
     const list = this.ensurePlayerInvites();
-    if (!this.state.activeInviteId || !list.some((i) => i.id === this.state.activeInviteId)) {
-      this.state.activeInviteId = list[0]?.id || 'inv-1';
+    if (this.state.activeInviteId && !list.some((i) => i.id === this.state.activeInviteId)) {
+      this.state.activeInviteId = '';
     }
     const assigned = Selector.getPlayerAssignedTokenIds(this.state);
     if (assigned.length === 0) {

@@ -10,20 +10,20 @@ import {
   computePickupShadow,
   sampleDropBounce,
   computeHeavyLandingShake
-} from '../utils/tabletopPhysics.js?v=20261121a6';
+} from '../utils/tabletopPhysics.js?v=20261123a7';
 import {
   resolveSceneAtmosphere,
   stepCameraInertia,
   stepSmoothZoom
-} from '../utils/sceneAtmosphere.js?v=20261121a6';
+} from '../utils/sceneAtmosphere.js?v=20261123a7';
 import {
   buildShadowCacheKey,
   computeContactShadowModulation,
   computeTokenCastShadow,
   resolveDynamicShadowMode
-} from '../utils/tokenShadowModel.js?v=20261121a6';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+} from '../utils/tokenShadowModel.js?v=20261123a7';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 
 const SHADOW_MODE_STORAGE_KEY = 'portal_shadow_mode_v1';
 
@@ -108,7 +108,8 @@ export const TokenPhysicsViewMethods = {
     const store = this._ensureTokenPhysicsStore();
     store.camInertia = null;
     const baseZoom = store.camZoom ? store.camZoom.targetZoom : Service.state.camera.zoom;
-    const nextTarget = Math.min(2.2, Math.max(0.35, baseZoom * factor));
+    const maxZoom = typeof Service.getMaxCameraZoom === 'function' ? Service.getMaxCameraZoom() : 1.65;
+    const nextTarget = Math.min(maxZoom, Math.max(0.35, baseZoom * factor));
     store.camZoom = { targetZoom: nextTarget, anchorX, anchorY };
     this._scheduleTokenPhysicsLoop();
   },

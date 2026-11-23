@@ -2,7 +2,7 @@
    TOKEN INSPECT VIEW: TARJETA DE INSPECCIÓN PÚBLICA Y GUARDADO EN DIARIO
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261123a7';
 
 export const TokenInspectViewMethods = {
   bindTokenInspectEvents() {

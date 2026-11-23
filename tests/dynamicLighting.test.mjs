@@ -33,15 +33,15 @@ const {
   resolveTokenVisionMeters,
   resolveTokenLightMeters,
   hasExplicitTokenVision
-} = await import('../js/utils/lightingModel.js?v=20261121a6');
-const { normalizeGridConfig, snapToGrid, measureGridDistance } = await import('../js/utils/gridGeometry.js?v=20261121a6');
-const { generateFogMistPixels } = await import('../js/utils/fogShader.js?v=20261121a6');
-const { createInitialState } = await import('../js/core/model.js?v=20261121a6');
-const { Selector } = await import('../js/core/selector.js?v=20261121a6');
-const { Service } = await import('../js/core/service.js?v=20261121a6');
-const { BrowserVault } = await import('../js/services/browserVault.js?v=20261121a6');
-const { COMPENDIUM_ITEMS } = await import('../js/data/compendium.js?v=20261121a6');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261121a6');
+} = await import('../js/utils/lightingModel.js?v=20261123a7');
+const { normalizeGridConfig, snapToGrid, measureGridDistance } = await import('../js/utils/gridGeometry.js?v=20261123a7');
+const { generateFogMistPixels } = await import('../js/utils/fogShader.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
+const { Selector } = await import('../js/core/selector.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { BrowserVault } = await import('../js/services/browserVault.js?v=20261123a7');
+const { COMPENDIUM_ITEMS } = await import('../js/data/compendium.js?v=20261123a7');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
 
 function resetGmService() {
   Service.cancelAllTokenGlides();

@@ -19,13 +19,17 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="css/styles.css?v=20261121a6" />
+  <link rel="stylesheet" href="css/styles.css?v=20261123a7" />
 </head>
 <body>
   <!-- ========================================================================
        1. LIENZO TÁCTICO DE PANTALLA COMPLETA (PORTAL-VTT)
        ======================================================================== -->
   <main id="vttStage" aria-label="Mesa Virtual Táctica">
+    <div id="narrativeBackdropLayer" class="hidden" aria-hidden="true">
+      <img id="narrativeBackdropImg" alt="" draggable="false" />
+      <div class="portal-narrative-vignette"></div>
+    </div>
     <div id="worldTransformLayer">
       <canvas id="mapCanvas" width="2400" height="1600"></canvas>
       <img id="customMapImg" alt="" class="hidden" draggable="false" />
@@ -38,6 +42,7 @@
       <svg id="overlayVectorSvg" width="2400" height="1600" viewBox="0 0 2400 1600"></svg>
       <div id="mapNotesLayer" class="absolute inset-0 pointer-events-none"></div>
     </div>
+    <canvas id="weatherCanvas" class="hidden" aria-hidden="true"></canvas>
 
     <!-- Overlay Drag & Drop para Cartuchos .portal / .json / Imágenes -->
     <div
@@ -55,9 +60,9 @@
   <!-- ========================================================================
        2. BARRA SUPERIOR FLOTANTE (SALA, PRESENCIA/COMBATE, FICHA, SYNC)
        ======================================================================== -->
-  <header class="portal-ui-scaled fixed top-3 left-3 right-3 z-30 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
+  <header class="portal-ui-scaled fixed top-3 left-3 right-3 z-30 flex flex-wrap items-start justify-between md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 pointer-events-none">
     <!-- Bloque Izquierdo: Identidad, Sala Efímera, Selector de Mesas/SRD, Grilla y Rol -->
-    <div class="portal-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+    <div class="portal-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto justify-self-start w-max">
       <button
         type="button"
         id="btnBrandLobby"
@@ -87,7 +92,7 @@
     </div>
 
     <!-- Bloque Central: Espadas Combate (izq) + Avatares Presencia (centro) + Chat (der) + Relojes Públicos -->
-    <div class="flex flex-wrap items-center justify-center gap-1.5 mx-auto pointer-events-none max-w-full">
+    <div class="flex flex-wrap items-center justify-center gap-1.5 mx-auto md:mx-0 justify-self-center pointer-events-none max-w-full">
     <div id="tablePresenceBar" class="relative portal-panel rounded-full px-2.5 py-1 flex items-center gap-2 pointer-events-auto max-w-full">
       <button
         type="button"
@@ -229,7 +234,7 @@
     </div>
 
     <!-- Bloque Derecho: Drive, P2P, Tema y Opciones (sin paneles laterales) -->
-    <div class="portal-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto">
+    <div class="portal-panel rounded-2xl px-2 py-1.5 flex items-center gap-1.5 pointer-events-auto justify-self-end w-max">
       <button
         type="button"
         id="btnOpenDriveModal"
@@ -559,22 +564,6 @@
       </label>
     </div>
 
-    <!-- Alcance visual y Luz emitida de la ficha -->
-    <div id="sheetVisionLightRow" class="grid grid-cols-2 gap-1.5 text-[10px]">
-      <div id="sheetVisionBox" class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
-        <span class="opacity-65 font-medium shrink-0">Visión</span>
-        <div class="flex items-center gap-0.5 min-w-0">
-          <input type="number" id="inpSheetVision" min="0" max="200" step="0.5" placeholder="Base" class="portal-num-input w-11 text-right text-[11px] font-semibold bg-transparent outline-none" title="Alcance de visión propio (vacío = base del sistema)" />
-          <span id="lblSheetVisionUnit" class="text-[9.5px] opacity-55">m</span>
-          <button type="button" id="btnSheetVisionReset" class="hidden w-4 h-4 rounded-full portal-btn text-[10px] leading-none opacity-70 hover:opacity-100" title="Usar visión base del sistema">↺</button>
-        </div>
-      </div>
-      <div id="sheetLightBox" class="portal-subpanel rounded-lg px-2 py-1 flex items-center justify-between gap-1">
-        <span class="opacity-65 font-medium shrink-0">Luz</span>
-        <button type="button" id="btnSheetLightCycle" class="portal-btn px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold truncate" title="Alternar fuente de luz emitida">Apagada</button>
-      </div>
-    </div>
-
     <!-- Factores fijos de cabecera siempre visibles en Sistema Genérico -->
     <div id="sheetHeaderFixedRow" class="flex flex-col gap-1.5 empty:hidden shrink-0"></div>
 
@@ -752,55 +741,44 @@
 
     <!-- Creador de Personaje -->
     <form id="customTokenForm" class="hidden portal-subpanel rounded-xl p-2.5 flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between shrink-0">
         <span id="lblCustomFormTitle" class="text-[11px] font-semibold opacity-80">Nuevo personaje</span>
         <button type="button" id="btnCancelCustomToken" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
       </div>
-      <div class="grid grid-cols-2 gap-1.5">
+      <div class="grid grid-cols-2 gap-1.5 shrink-0">
         <input type="text" id="inpCustomTokenName" placeholder="Nombre..." required class="portal-input px-2.5 py-1 text-xs" />
         <input type="text" id="inpCustomTokenRole" placeholder="Rol / Clase" class="portal-input px-2.5 py-1 text-xs" />
       </div>
-      <div class="grid grid-cols-[1fr_1fr_1.3fr] gap-1.5 items-center">
+      <div class="grid grid-cols-2 gap-1.5 items-center shrink-0">
         <label class="portal-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
           <span class="opacity-60">HP</span>
-          <input type="number" id="inpCustomTokenHp" value="16" min="1" max="999" class="portal-num-input w-9 text-xs font-semibold" />
+          <input type="number" id="inpCustomTokenHp" value="16" min="1" max="999" class="portal-num-input w-12 text-xs font-semibold" />
         </label>
         <label class="portal-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
           <span class="opacity-60">CA</span>
-          <input type="number" id="inpCustomTokenAc" value="13" min="1" max="35" class="portal-num-input w-8 text-xs font-semibold" />
-        </label>
-        <select id="selCustomTokenAlly" class="portal-input px-2 py-1 text-[11px] font-medium cursor-pointer outline-none">
-          <option value="ally">Protagonista</option>
-          <option value="enemy">Secundario</option>
-        </select>
-      </div>
-      <div class="grid grid-cols-3 gap-1">
-        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
-          <span class="opacity-55">FUE</span>
-          <input type="number" id="inpCustomStr" value="1" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
-        </label>
-        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
-          <span class="opacity-55">DES</span>
-          <input type="number" id="inpCustomDex" value="1" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
-        </label>
-        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
-          <span class="opacity-55">CON</span>
-          <input type="number" id="inpCustomCon" value="1" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
-        </label>
-        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
-          <span class="opacity-55">INT</span>
-          <input type="number" id="inpCustomInt" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
-        </label>
-        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
-          <span class="opacity-55">SAB</span>
-          <input type="number" id="inpCustomWis" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
-        </label>
-        <label class="portal-input px-1.5 py-1 flex flex-col items-center text-[9px]">
-          <span class="opacity-55">CAR</span>
-          <input type="number" id="inpCustomCha" value="0" min="-5" max="10" class="portal-num-input w-full text-[11px] font-semibold" />
+          <input type="number" id="inpCustomTokenAc" value="13" min="1" max="35" class="portal-num-input w-10 text-xs font-semibold" />
         </label>
       </div>
-      <div class="portal-subpanel rounded-xl p-2 flex items-center gap-2.5">
+      <div class="flex flex-col gap-1 shrink-0">
+        <div id="customTokenAllySeg" class="portal-segmented p-0.5 text-[10.5px] w-full" role="group" aria-label="Categoría del personaje">
+          <button type="button" data-token-ally="ally" class="portal-seg-btn flex-1 py-1 is-active">Protagonista</button>
+          <button type="button" data-token-ally="enemy" class="portal-seg-btn flex-1 py-1">Secundario</button>
+        </div>
+        <div id="lblCustomTokenAllyHint" class="text-[9.5px] opacity-55 leading-tight px-0.5">
+          Protagonista: identidad única que conserva HP y equipo en partida.
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-2 shrink-0">
+        <span class="text-[10px] opacity-65 font-medium shrink-0">Tamaño</span>
+        <div id="customTokenSizeSeg" class="portal-segmented p-0.5 text-[10px] flex-1 max-w-[180px]" role="group" aria-label="Tamaño en casillas">
+          <button type="button" data-token-size="1" class="portal-seg-btn flex-1 py-0.5 is-active">1×1</button>
+          <button type="button" data-token-size="2" class="portal-seg-btn flex-1 py-0.5">2×2</button>
+          <button type="button" data-token-size="3" class="portal-seg-btn flex-1 py-0.5">3×3</button>
+          <button type="button" data-token-size="4" class="portal-seg-btn flex-1 py-0.5">4×4</button>
+        </div>
+      </div>
+      <div id="customTokenStatsGrid" class="grid grid-cols-3 gap-1 shrink-0"></div>
+      <div class="portal-subpanel rounded-xl p-2 flex items-center gap-2.5 shrink-0">
         <button
           type="button"
           id="btnCustomTokenPreview"
@@ -822,14 +800,77 @@
           </div>
         </div>
       </div>
-      <textarea
-        id="inpCustomTokenPublicDesc"
-        rows="2"
-        placeholder="Descripción pública (apariencia visible a simple vista)..."
-        class="portal-input px-2.5 py-1.5 text-[11px] resize-y min-h-[38px] max-h-20"
-      ></textarea>
-      <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="portal-input px-2.5 py-1 text-[11px]" />
-      <div class="flex items-center justify-between gap-2">
+      <!-- Complementos iniciales (Loadout con buscador y carpetas estilo Apple) -->
+      <div class="portal-subpanel rounded-xl p-2 flex flex-col gap-1.5 shrink-0">
+        <div class="flex items-center justify-between gap-1.5">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="text-[10px] font-semibold opacity-75 shrink-0">Complementos</span>
+            <span id="lblCustomTokenItemsCount" class="hidden text-[9.5px] font-mono-tech px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300">0</span>
+          </div>
+          <button
+            type="button"
+            id="btnToggleCustomTokenItemsPicker"
+            class="portal-btn portal-subpanel px-2.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0"
+            aria-expanded="false"
+          >+ Añadir</button>
+        </div>
+        <div id="customTokenStarterItems" class="flex flex-wrap gap-1 max-h-24 overflow-y-auto portal-roll-scroll empty:hidden"></div>
+        <div id="customTokenItemsPicker" class="hidden portal-panel rounded-xl p-2 flex-col gap-1.5 mt-0.5">
+          <div class="relative flex items-center">
+            <svg class="w-3 h-3 opacity-50 absolute left-2 pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5L14 14" /></svg>
+            <input
+              type="text"
+              id="inpCustomTokenItemSearch"
+              placeholder="Buscar complemento o carpeta…"
+              class="portal-input pl-6 pr-2 py-1 text-[10.5px]"
+              autocomplete="off"
+            />
+          </div>
+          <div id="customTokenItemsPickerList" class="flex flex-col gap-0.5 max-h-[210px] overflow-y-auto portal-roll-scroll"></div>
+          <div class="flex items-center justify-between pt-1 border-t" style="border-color: var(--hairline);">
+            <span class="text-[9.5px] opacity-55">Clic para añadir varios</span>
+            <button type="button" id="btnCloseCustomTokenItemsPicker" class="portal-btn portal-subpanel px-2.5 py-0.5 rounded-full text-[10px] font-semibold">Listo</button>
+          </div>
+        </div>
+      </div>
+      <!-- Detalles plegables de mesa (Visión, Luz, Descripción y Carpeta) -->
+      <div class="portal-subpanel rounded-xl px-2 py-1.5 flex flex-col gap-1.5 shrink-0">
+        <button
+          type="button"
+          id="customTokenDetailsToggle"
+          class="flex items-center justify-between text-[10.5px] font-semibold opacity-75 hover:opacity-100 w-full text-left"
+          aria-expanded="false"
+        >
+          <span>Detalles de mesa (Visión, Luz, Notas)</span>
+          <span id="customTokenDetailsChevron" class="text-[10px] opacity-65 transition-transform">▸</span>
+        </button>
+        <div id="customTokenDetailsBody" class="hidden flex-col gap-1.5 pt-1 border-t" style="border-color: var(--hairline);">
+          <div class="grid grid-cols-2 gap-1.5">
+            <label class="portal-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
+              <span class="opacity-60 shrink-0">Visión</span>
+              <div class="flex items-center gap-0.5">
+                <input type="number" id="inpCustomTokenVision" min="0" max="200" step="0.5" placeholder="Base" class="portal-num-input w-10 text-right text-[11px] font-semibold" />
+                <span id="lblCustomTokenVisionUnit" class="text-[9px] opacity-55">m</span>
+              </div>
+            </label>
+            <label class="portal-input px-2 py-1 flex items-center justify-between gap-1 text-[10px]">
+              <span class="opacity-60 shrink-0">Luz</span>
+              <div class="flex items-center gap-0.5">
+                <input type="number" id="inpCustomTokenLight" min="0" max="200" step="0.5" placeholder="0" class="portal-num-input w-10 text-right text-[11px] font-semibold" />
+                <span id="lblCustomTokenLightUnit" class="text-[9px] opacity-55">m</span>
+              </div>
+            </label>
+          </div>
+          <textarea
+            id="inpCustomTokenPublicDesc"
+            rows="2"
+            placeholder="Descripción pública (apariencia visible a simple vista)..."
+            class="portal-input px-2.5 py-1.5 text-[11px] resize-y min-h-[38px] max-h-20"
+          ></textarea>
+          <input type="text" id="inpCustomTokenFolder" list="compendiumFolderList" placeholder="Carpeta (opcional)" class="portal-input px-2.5 py-1 text-[11px]" />
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-2 shrink-0">
         <div id="customTokenColorGrid" class="grid grid-cols-6 gap-1.5"></div>
         <button type="submit" id="btnCustomFormSubmit" class="portal-btn portal-btn-accent px-3 py-1 rounded-full text-[11px] font-semibold shrink-0">Guardar</button>
       </div>
@@ -889,6 +930,10 @@
         <button type="button" id="btnCancelCustomMap" class="text-[11px] opacity-65 hover:opacity-100">Cancelar</button>
       </div>
       <input type="text" id="inpCustomMapName" placeholder="Nombre del escenario..." required class="portal-input px-2.5 py-1 text-xs" />
+      <div id="customMapModeSeg" class="portal-seg grid grid-cols-2 gap-0.5 text-[10.5px]">
+        <button type="button" data-map-mode="tactical" class="portal-seg-btn py-1 font-semibold is-active">Táctico</button>
+        <button type="button" data-map-mode="narrative" class="portal-seg-btn py-1 font-semibold">Narrativo</button>
+      </div>
       <div class="flex items-center gap-1.5">
         <input type="text" id="inpCustomMapImg" placeholder="URL imagen o sube archivo local..." required class="portal-input px-2.5 py-1 text-[11px] min-w-0 flex-1" />
         <label for="fileCustomMapImg" class="portal-btn portal-subpanel w-7 h-7 p-0 rounded-lg flex items-center justify-center cursor-pointer shrink-0" title="Subir mapa local">
@@ -896,12 +941,22 @@
         </label>
         <input type="file" id="fileCustomMapImg" accept="image/*" class="hidden" />
       </div>
-      <div class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2">
+      <div id="customMapGridSection" class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2">
         <div class="min-w-0">
           <span class="text-[10px] opacity-60 block">Grilla e iluminación</span>
           <span id="lblCustomMapGridSummary" class="text-[11px] font-semibold truncate block">Cuadrada · 80px · Luz dinámica</span>
         </div>
         <button type="button" id="btnCustomMapGridConfig" class="portal-btn portal-panel px-2.5 py-1 rounded-lg text-[10.5px] font-semibold shrink-0">Configurar</button>
+      </div>
+      <div class="portal-subpanel rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2">
+        <span class="text-[10.5px] opacity-75 shrink-0">Clima ambiental</span>
+        <select id="selCustomMapWeather" class="portal-input px-2 py-0.5 text-[10.5px] font-semibold cursor-pointer">
+          <option value="none">Sin clima</option>
+          <option value="rain">🌧 Lluvia</option>
+          <option value="snow">❄️ Nieve</option>
+          <option value="embers">🔥 Brasas</option>
+          <option value="mist">🌫 Bruma</option>
+        </select>
       </div>
       <div class="flex items-center gap-1.5">
         <input type="text" id="inpCustomMapDesc" placeholder="Descripción breve..." class="portal-input px-2.5 py-1 text-[11px] flex-1 min-w-0" />
@@ -1000,22 +1055,22 @@
        5. BANDEJA INFERIOR DE DADOS 3D & VISOR THREE.JS
        ======================================================================== -->
   <div id="diceDockContainer" class="portal-ui-scaled fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-none w-max max-w-[calc(100vw-24px)]">
-    <!-- Visor Numérico Flotante de Tirada (Dynamic HUD) -->
+    <!-- Visor Numérico Flotante de Tirada (Dynamic HUD de tamaño estándar) -->
     <div
       id="dice3dOverlay"
-      class="portal-panel portal-pop portal-roll-card overflow-hidden rounded-2xl px-5 pt-3 pb-3 flex flex-col items-center text-center gap-1.5 pointer-events-auto max-w-[min(92vw,340px)]"
+      class="portal-panel portal-pop portal-roll-card overflow-hidden rounded-2xl px-4 pt-3 pb-3 flex flex-col items-center justify-center text-center gap-1.5 pointer-events-auto"
     >
       <div id="sequenceWatermark" class="hidden absolute inset-0 items-center justify-center pointer-events-none select-none z-0" aria-hidden="true"></div>
       <button type="button" id="btnCloseDice3d" class="portal-roll-close" title="Cerrar">✕</button>
       <div id="sequenceHeaderBar" class="hidden items-center justify-center gap-1.5 px-6 max-w-full"></div>
-      <div class="flex items-center justify-center gap-1.5 px-6 max-w-full">
-        <span id="lblDiceFormula" class="portal-roll-pill font-mono-tech truncate max-w-[230px]">1d20 + 0</span>
+      <div class="flex items-center justify-center gap-1.5 px-5 w-full">
+        <span id="lblDiceFormula" class="portal-roll-pill font-mono-tech truncate max-w-[180px]">1d20 + 0</span>
         <span id="lblDiceBadge" class="portal-roll-pill hidden shrink-0"></span>
       </div>
       <div id="lblDiceTotal" class="text-4xl font-bold leading-none tracking-tight tabular-nums py-0.5" style="color: var(--accent-primary);">20</div>
-      <div id="diceRollChips" class="hidden flex-wrap items-center justify-center gap-1.5 py-0.5"></div>
-      <p id="lblDiceMessage" class="hidden text-[11px] leading-snug opacity-85 max-w-full max-h-24 overflow-y-auto px-1 text-center" style="overflow-wrap: anywhere;"></p>
-      <div id="lblDiceDetail" class="text-[11px] font-medium opacity-70 tabular-nums">Natural: 20</div>
+      <div id="diceRollChips" class="portal-roll-scroll hidden flex-wrap items-center justify-center gap-1.5 py-0.5 px-1 w-full max-h-[72px] overflow-y-auto"></div>
+      <p id="lblDiceMessage" class="portal-roll-scroll hidden text-[11px] leading-snug opacity-85 w-full max-h-[64px] overflow-y-auto px-1.5 text-center" style="overflow-wrap: anywhere;"></p>
+      <div id="lblDiceDetail" class="text-[11px] font-medium opacity-70 tabular-nums truncate max-w-full px-2">Natural: 20</div>
       <div id="diceDeckActions" class="hidden items-center justify-center gap-1.5 pt-1">
         <button type="button" id="btnDiceShuffleDeck" class="portal-btn portal-subpanel px-3 py-1 rounded-full text-[10.5px] font-semibold hover:opacity-100" title="Mezclar todas las cartas de la baraja">🔀 Barajar (54/54)</button>
       </div>
@@ -1272,7 +1327,7 @@
     <div id="contextTokenHeader" class="hidden items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]" style="background: var(--bg-subpanel);"></div>
 
     <!-- Fila 1: Herramientas del mapa con iconos SVG (solo visible en clic derecho sobre el mapa) -->
-    <div id="contextToolsRow" class="grid grid-cols-5 gap-1">
+    <div id="contextToolsRow" class="grid grid-cols-4 gap-1">
       <button type="button" data-ctx-tool="select" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Mover / Seleccionar [V]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 2-3 7z"/></svg>
       </button>
@@ -1284,9 +1339,6 @@
       </button>
       <button type="button" data-ctx-tool="wall" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Muros y Puertas (Luz Dinámica) [W]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v6M15 10v5M9 15v5"/></svg>
-      </button>
-      <button type="button" data-ctx-tool="ping" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Ping Radar [G]">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg>
       </button>
     </div>
 
@@ -1300,14 +1352,78 @@
   <!-- Selector de plantilla de área para Regla (solo visible cuando tool === 'ruler') -->
   <div
     id="rulerShapePill"
-    class="portal-ui-scaled hidden portal-panel rounded-full p-1 fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto"
+    class="portal-ui-scaled hidden portal-panel rounded-full p-1 items-center gap-1 fixed top-[72px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100vw-24px)]"
   >
-    <div id="rulerShapeSeg" class="portal-seg grid-cols-4 min-w-[240px]">
+    <div id="rulerShapeSeg" class="portal-seg grid-cols-4 min-w-[232px]">
       <button type="button" data-ruler-shape="line" class="portal-seg-btn is-active">Línea</button>
       <button type="button" data-ruler-shape="circle" class="portal-seg-btn">Esfera</button>
       <button type="button" data-ruler-shape="cone" class="portal-seg-btn">Cono</button>
       <button type="button" data-ruler-shape="cube" class="portal-seg-btn">Cubo</button>
     </div>
+  </div>
+
+  <!-- Píldora contextual para Marcador Táctico (solo visible cuando tool === 'draw' para DJ) -->
+  <div
+    id="drawToolPill"
+    class="portal-ui-scaled hidden portal-panel rounded-full px-2 py-1 items-center gap-1.5 fixed top-[72px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100vw-24px)]"
+  >
+    <div id="drawColorRow" class="flex items-center gap-1.5 px-1">
+      <button type="button" data-draw-color="#ef4444" class="w-5 h-5 rounded-full border-2 border-white scale-110 transition-transform" style="background:#ef4444;" title="Rojo"></button>
+      <button type="button" data-draw-color="#3b82f6" class="w-5 h-5 rounded-full border-2 border-transparent transition-transform" style="background:#3b82f6;" title="Azul"></button>
+      <button type="button" data-draw-color="#10b981" class="w-5 h-5 rounded-full border-2 border-transparent transition-transform" style="background:#10b981;" title="Verde"></button>
+      <button type="button" data-draw-color="#f59e0b" class="w-5 h-5 rounded-full border-2 border-transparent transition-transform" style="background:#f59e0b;" title="Ámbar"></button>
+      <button type="button" data-draw-color="#8b5cf6" class="w-5 h-5 rounded-full border-2 border-transparent transition-transform" style="background:#8b5cf6;" title="Violeta"></button>
+    </div>
+    <span class="portal-dock-sep"></span>
+    <button
+      type="button"
+      id="btnClearDrawStrokes"
+      class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold text-rose-400 hover:opacity-100 disabled:opacity-35 disabled:pointer-events-none"
+      title="Borrar todos los trazos del marcador"
+    >
+      🗑 Limpiar
+    </button>
+  </div>
+
+  <!-- Píldora unificada para herramienta Muros (Modo + Tipo de muro + Eliminar) -->
+  <div
+    id="wallModePill"
+    class="portal-ui-scaled hidden portal-panel rounded-full p-1 items-center gap-1.5 fixed top-[72px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100vw-24px)] flex-wrap justify-center"
+  >
+    <div id="wallModeSeg" class="portal-seg grid-cols-2 min-w-[176px]">
+      <button type="button" data-wall-mode="draw" class="portal-seg-btn is-active" title="Trazar segmentos del tipo elegido (Alt: trazo libre)">✏️ Trazar</button>
+      <button type="button" data-wall-mode="select" class="portal-seg-btn" title="Clic o arrastrar caja para seleccionar muros y transformarlos o eliminarlos">↖ Seleccionar</button>
+    </div>
+
+    <span class="portal-dock-sep"></span>
+
+    <div id="wallKindSeg" class="portal-seg grid-cols-5 min-w-[330px]" title="Tipo de muro al trazar o transformar selección">
+      <button type="button" data-wall-kind="wall" class="portal-seg-btn is-active" title="Muro sólido (bloquea luz y paso)">🧱 Muro</button>
+      <button type="button" data-wall-kind="terrain" class="portal-seg-btn" title="Pilar / Terreno (muestra el interior y proyecta sombra detrás)">🏛 Pilar</button>
+      <button type="button" data-wall-kind="invisible" class="portal-seg-btn" title="Invisible / Reja (deja ver a través, bloquea el paso de jugadores)">🪟 Reja</button>
+      <button type="button" data-wall-kind="door" class="portal-seg-btn" title="Puerta interactiva (jugadores pueden abrir/cerrar)">🚪 Puerta</button>
+      <button type="button" data-wall-kind="secret" class="portal-seg-btn" title="Puerta secreta (oculta como muro sólido para jugadores)">🔮 Secreta</button>
+    </div>
+
+    <button
+      type="button"
+      id="btnWallToggleDoorOpen"
+      class="hidden portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold"
+      title="Abrir o cerrar puerta(s) seleccionada(s)"
+    >
+      🔓 Abrir
+    </button>
+
+    <button
+      type="button"
+      id="btnWallDeleteSelected"
+      class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold text-rose-400 hover:opacity-100 disabled:opacity-35 disabled:pointer-events-none"
+      title="Eliminar muros seleccionados [Supr]"
+      disabled
+    >
+      <span>🗑</span>
+      <span id="lblWallSelectCount">Eliminar</span>
+    </button>
   </div>
 
   <!-- Editor compacto de Nota / Pin en el mapa -->
@@ -1335,10 +1451,10 @@
     </form>
   </div>
 
-  <!-- Toast flotante de feedback -->
+  <!-- Toast flotante de feedback (al costado derecho de la tarjeta de tirada, sobre la barra de dados) -->
   <div
     id="vttActionToast"
-    class="portal-ui-scaled portal-panel portal-toast fixed top-16 left-1/2 z-40 px-4 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(90vw,380px)] text-center"
+    class="portal-ui-scaled portal-panel portal-toast fixed bottom-16 z-40 px-3.5 py-2 rounded-2xl text-xs font-medium pointer-events-none max-w-[min(88vw,250px)] text-center"
     style="overflow-wrap: anywhere;"
   ></div>
 
@@ -1809,7 +1925,7 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261121a6"></script>
+  <script type="module" src="js/main.js?v=20261123a7"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">

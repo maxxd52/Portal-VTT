@@ -2,7 +2,7 @@
    JOURNAL PRESENTATION VIEW: TARJETA DESTACADA DE NOTA REVELADA EN MESA
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261121a6';
+import { Service } from '../core/service.js?v=20261123a7';
 
 export const JournalPresentationViewMethods = {
   bindJournalPresentationEvents() {

@@ -5,6 +5,101 @@
 export const BrowserVault = {
   dbName: 'PortalVaultDB',
   storeName: 'rooms',
+  onSaveError: null,
+  _saveQueue: new Map(),
+
+  async requestPersistentStorage() {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+        return await navigator.storage.persist();
+      }
+    } catch (_) {}
+    return false;
+  },
+
+  _notifySaveError(err, roomCode = '') {
+    if (typeof this.onSaveError === 'function') {
+      try {
+        this.onSaveError(err, roomCode);
+      } catch (_) {}
+    }
+  },
+
+  hasPendingSaves() {
+    for (const entry of this._saveQueue.values()) {
+      if (entry.timer || entry.inFlight || entry.pending) return true;
+    }
+    return false;
+  },
+
+  scheduleRoomSave(roomCode, getWorldFn, { immediate = false, delayMs = 240 } = {}) {
+    const code = String(roomCode || '').trim();
+    if (!code || typeof getWorldFn !== 'function') return Promise.resolve(false);
+
+    let entry = this._saveQueue.get(code);
+    if (!entry) {
+      entry = { timer: null, inFlight: false, pending: null, waiters: [] };
+      this._saveQueue.set(code, entry);
+    }
+
+    return new Promise((resolve) => {
+      entry.pending = getWorldFn;
+      entry.waiters.push(resolve);
+
+      const kick = () => {
+        if (entry.timer) {
+          clearTimeout(entry.timer);
+          entry.timer = null;
+        }
+        if (entry.inFlight) return;
+        this._drainRoomSave(code, entry);
+      };
+
+      if (immediate) {
+        kick();
+      } else {
+        if (entry.timer) clearTimeout(entry.timer);
+        entry.timer = setTimeout(kick, Math.max(0, Number(delayMs) || 0));
+      }
+    });
+  },
+
+  async _drainRoomSave(code, entry) {
+    entry.inFlight = true;
+    try {
+      while (entry.pending) {
+        const snapshotFn = entry.pending;
+        const batchWaiters = entry.waiters.splice(0, entry.waiters.length);
+        entry.pending = null;
+        let ok = false;
+        try {
+          const payload = snapshotFn();
+          ok = await this.saveRoom(code, payload);
+        } catch (err) {
+          this._notifySaveError(err, code);
+          ok = false;
+        }
+        for (const res of batchWaiters) res(ok);
+      }
+    } finally {
+      entry.inFlight = false;
+      if (!entry.timer && !entry.pending && entry.waiters.length === 0) {
+        this._saveQueue.delete(code);
+      }
+    }
+  },
+
+  flushPendingSaves() {
+    for (const [code, entry] of this._saveQueue.entries()) {
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+        entry.timer = null;
+      }
+      if (entry.pending && !entry.inFlight) {
+        this._drainRoomSave(code, entry);
+      }
+    }
+  },
 
   open() {
     return new Promise((resolve, reject) => {
@@ -28,9 +123,17 @@ export const BrowserVault = {
         const tx = db.transaction(this.storeName, 'readwrite');
         tx.objectStore(this.storeName).put(serializableWorld, roomCode);
         tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
+        tx.onerror = () => {
+          this._notifySaveError(tx.error || new Error('Error de transacción IndexedDB'), roomCode);
+          resolve(false);
+        };
+        tx.onabort = () => {
+          this._notifySaveError(tx.error || new Error('Transacción IndexedDB abortada'), roomCode);
+          resolve(false);
+        };
       });
-    } catch (_) {
+    } catch (err) {
+      this._notifySaveError(err, roomCode);
       return false;
     }
   },

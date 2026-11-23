@@ -10,7 +10,7 @@ const {
   computePickupShadow,
   sampleDropBounce,
   computeHeavyLandingShake
-} = await import('../js/utils/tabletopPhysics.js?v=20261121a6');
+} = await import('../js/utils/tabletopPhysics.js?v=20261123a7');
 
 test('computeDragTilt leans opposite to horizontal drag velocity, clamps extreme speed, and recovers smoothly to 0', () => {
   const rightTilt = computeDragTilt(900, 0, 0, 1 / 60);

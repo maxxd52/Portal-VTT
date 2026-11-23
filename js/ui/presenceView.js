@@ -2,8 +2,8 @@
    PRESENCE VIEW: ASIENTOS SUPERIORES (GM/JUGADORES), SUB-TOKENS Y TURNOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
 import { WebPConverter } from '../utils/webpConverter.js';
 
 export const PresenceViewMethods = {
@@ -465,7 +465,9 @@ export const PresenceViewMethods = {
       ? (Array.isArray(activeEntry.tokenIds) && activeEntry.tokenIds.length ? activeEntry.tokenIds : [activeEntry.tokenId])
       : [];
 
-    const gmPeer = activePeers.find((p) => p.role === 'gm');
+    const isHostNet = Service.isHostNetwork();
+    const gmPeers = activePeers.filter((p) => p.role === 'gm');
+    const gmPeer = gmPeers.find((p) => p.self) || gmPeers[0];
     const gmHasTurn = activeIds.some((id) => !assignedToAnyInvite.has(id));
 
     const seats = [
@@ -473,7 +475,7 @@ export const PresenceViewMethods = {
         seatKey: 'gm',
         role: 'gm',
         clientId: gmPeer?.clientId || '',
-        isSelf: state.role === 'gm',
+        isSelf: isHostNet,
         online: Boolean(gmPeer),
         hasTurn: gmHasTurn,
         tokenCount: 0,
@@ -483,10 +485,10 @@ export const PresenceViewMethods = {
       }
     ];
 
-    const matchedPeerIds = new Set(gmPeer ? [gmPeer.clientId] : []);
+    const matchedPeerIds = new Set(gmPeers.map((p) => p.clientId));
 
     invites.forEach((inv) => {
-      const isSelf = state.role === 'player' && state.activeInviteId === inv.id;
+      const isSelf = !isHostNet && state.role === 'player' && state.activeInviteId === inv.id;
       const peer = isSelf
         ? activePeers.find((p) => p.self)
         : activePeers.find((p) => p.role === 'player' && p.inviteId === inv.id);

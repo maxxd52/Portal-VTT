@@ -2,11 +2,11 @@
    SYSTEM OPTIONS VIEW: PREFERENCIAS ESTILO APPLE (REGLAS, INICIATIVA Y ESTADOS)
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261121a6';
-import { Selector } from '../core/selector.js?v=20261121a6';
-import { Service } from '../core/service.js?v=20261121a6';
-import { displayValueToMeters, formatDistance, metersToDisplayValue } from '../utils/lightingModel.js?v=20261121a6';
-import { SVG_ICONS, SystemBlockBuilderViewMethods } from './systemBlockBuilderView.js?v=20261121a6';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261123a7';
+import { displayValueToMeters, formatDistance, metersToDisplayValue } from '../utils/lightingModel.js?v=20261123a7';
+import { SVG_ICONS, SystemBlockBuilderViewMethods } from './systemBlockBuilderView.js?v=20261123a7';
 
 export const SystemOptionsViewMethods = {
   ...SystemBlockBuilderViewMethods,
