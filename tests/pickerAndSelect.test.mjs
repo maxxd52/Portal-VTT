@@ -8,7 +8,7 @@ const {
   filterSelectOptionGroups,
   shouldShowSelectSearch,
   computeAnchoredDropdownPosition
-} = await import('../js/utils/pickerModel.js?v=20261123a7');
+} = await import('../js/utils/pickerModel.js?v=20261125a1');
 
 test('groupCompendiumItemsForPicker groups custom folders, Equipo base, and class folders with accent-insensitive search and selection counts', () => {
   const customItems = [

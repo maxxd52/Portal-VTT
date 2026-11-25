@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { createGmHostLock } = await import('../js/services/gmHostLock.js?v=20261123a7');
+const { createGmHostLock } = await import('../js/services/gmHostLock.js?v=20261125a1');
 
 function createMockLocksApi() {
   const active = new Map();

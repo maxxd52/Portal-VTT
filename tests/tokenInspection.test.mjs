@@ -21,10 +21,10 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
-const { resolveTokenDoubleClickAction } = await import('../js/utils/worldRedaction.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
+const { resolveTokenDoubleClickAction } = await import('../js/utils/worldRedaction.js?v=20261125a1');
 
 test('S4: saveCustomActor and spawnActorFromTemplate preserve publicDescription and dual-layer token notes enforce permissions', async () => {
   const origSend = RealtimeBridge.send;
@@ -35,6 +35,9 @@ test('S4: saveCustomActor and spawnActorFromTemplate preserve publicDescription 
     Service.state = createInitialState();
     Service.state.role = 'gm';
     Service.state.isHostGm = true;
+    Service.state.tokens = [
+      { id: 'tok-1', name: 'Kaelen', isAlly: true, x: 440, y: 440, hp: 24, maxHp: 24, ac: 16, size: 1 }
+    ];
     Service.state.playerInvites = [{ id: 'inv-1', label: 'P1', tokenIds: ['tok-1'] }];
 
     const savedTpl = Service.saveCustomActor({
@@ -91,6 +94,11 @@ test('S4: double-click routing opens full sheet for GM/owner, Inspection Card fo
     Service.state = createInitialState();
     Service.state.role = 'gm';
     Service.state.isHostGm = true;
+    Service.state.tokens = [
+      { id: 'tok-1', name: 'Kaelen', isAlly: true, x: 440, y: 440, hp: 24, maxHp: 24, ac: 16, size: 1 },
+      { id: 'tok-2', name: 'Lyra', isAlly: true, x: 360, y: 600, hp: 14, maxHp: 14, ac: 12, size: 1 },
+      { id: 'tok-4', name: 'Acechador Trasgo', isAlly: false, x: 1080, y: 480, hp: 10, maxHp: 10, ac: 13, size: 1 }
+    ];
     Service.state.playerInvites = [{ id: 'inv-1', label: 'P1', tokenIds: ['tok-1'] }];
 
     const hero = Service.state.tokens.find((t) => t.id === 'tok-1');

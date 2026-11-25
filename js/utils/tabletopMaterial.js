@@ -2,7 +2,8 @@
    TABLETOP MATERIAL: PROCEDURAL SURFACE GRAIN & INTEGRATED GRID INK (PURE)
    ========================================================================== */
 
-import { normalizeGridConfig } from './gridGeometry.js?v=20261123a7';
+import { normalizeGridConfig } from './gridGeometry.js?v=20261125a1';
+import { getWallDoorMode, isWallOpenDoor, normalizeWallKind } from './wallGeometry.js?v=20261125a1';
 
 let _cachedGrainUrl = '';
 let _cachedGrainSize = 0;
@@ -148,10 +149,10 @@ export function collectWallShadowSegments(walls = []) {
   if (!Array.isArray(walls) || walls.length === 0) return [];
   const out = [];
   for (const w of walls) {
-    if (!w || w.kind === 'invisible') continue;
-    if ((w.kind === 'door' || w.kind === 'secret') && w.open) continue;
+    if (!w || normalizeWallKind(w.kind) === 'invisible') continue;
+    if (isWallOpenDoor(w)) continue;
     // Closed secret doors cast full wall shadows so players cannot spot them by shadow width
-    const isDoor = w.kind === 'door';
+    const isDoor = getWallDoorMode(w) === 'normal';
     const x1 = Number(w.x1);
     const y1 = Number(w.y1);
     const x2 = Number(w.x2);
@@ -174,9 +175,9 @@ export function buildWallShadowCacheKey(walls = [], ambientDir = null, enabled =
   const bx = bounds ? `${Math.round(bounds.x)},${Math.round(bounds.y)},${Math.round(bounds.width)},${Math.round(bounds.height)}` : '0,0,2400,1600';
   const parts = [`on|${dx},${dy}|${bx}`];
   for (const w of Array.isArray(walls) ? walls : []) {
-    if (!w || w.kind === 'invisible') continue;
-    if ((w.kind === 'door' || w.kind === 'secret') && w.open) continue;
-    parts.push(`${Math.round(Number(w.x1) || 0)},${Math.round(Number(w.y1) || 0)},${Math.round(Number(w.x2) || 0)},${Math.round(Number(w.y2) || 0)},${w.kind === 'door' ? 1 : 0}`);
+    if (!w || normalizeWallKind(w.kind) === 'invisible') continue;
+    if (isWallOpenDoor(w)) continue;
+    parts.push(`${Math.round(Number(w.x1) || 0)},${Math.round(Number(w.y1) || 0)},${Math.round(Number(w.x2) || 0)},${Math.round(Number(w.y2) || 0)},${getWallDoorMode(w) === 'normal' ? 1 : 0}`);
   }
   return parts.join(';');
 }

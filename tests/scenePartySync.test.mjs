@@ -19,15 +19,15 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 const {
   findFreeSpawnPosition,
   getAssignedTokenIds,
   mergeAssignedTokensForScene
-} = await import('../js/utils/scenePartySync.js?v=20261123a7');
+} = await import('../js/utils/scenePartySync.js?v=20261125a1');
 
 function resetGmState() {
   Service.cancelAllTokenGlides();
@@ -37,6 +37,13 @@ function resetGmState() {
   Service.state = createInitialState();
   Service.state.role = 'gm';
   Service.state.isHostGm = true;
+  Service.state.mapId = 'bastion';
+  Service.state.activeMapKey = 'bastion';
+  Service.state.tokens = [
+    { id: 'tok-1', name: 'Kaelen', isAlly: true, x: 440, y: 440, hp: 24, maxHp: 24, ac: 16, size: 1, inventory: [] },
+    { id: 'tok-2', name: 'Lyra', isAlly: true, x: 360, y: 600, hp: 14, maxHp: 14, ac: 12, size: 1, inventory: [] },
+    { id: 'tok-4', name: 'Acechador Trasgo', isAlly: false, x: 1080, y: 480, hp: 10, maxHp: 10, ac: 13, size: 1, inventory: [] }
+  ];
   return Service.state;
 }
 
@@ -120,7 +127,7 @@ test('returning to a visited map preserves per-map coordinates while syncing liv
 test('connected player preserves token assignment, control, and selection across GM map switch', async () => {
   const gmState = resetGmState();
   gmState.playerInvites = [{ id: 'inv-1', label: 'Jugador 1', tokenIds: ['tok-1'] }];
-  await Service.changeMap('tavern');
+  await Service.activateMapTemplate({ key: 'custom-tavern', name: 'Taberna', isCustom: true, imageUrl: 'data:image/webp;base64,TAVERN' });
 
   const wireWorld = Selector.extractSerializableWorld(Service.state);
 
@@ -133,7 +140,7 @@ test('connected player preserves token assignment, control, and selection across
 
   Service.applyFullWorldState(wireWorld, true);
 
-  assert.equal(Service.state.mapId, 'tavern');
+  assert.equal(Service.state.activeMapKey, 'custom-tavern');
   assert.deepEqual(Selector.getPlayerAssignedTokenIds(Service.state), ['tok-1']);
   assert.equal(Selector.isSpectator(Service.state), false);
   assert.equal(Service.state.selectedTokenId, 'tok-1');
@@ -150,7 +157,7 @@ test('extractSerializableWorld keeps sceneLayers private from P2P, persists it i
     gmState.tokens.find((t) => t.id === 'tok-1').x = 600;
     gmState.tokens.find((t) => t.id === 'tok-1').y = 520;
 
-    await Service.changeMap('crypt');
+    await Service.activateMapTemplate({ key: 'custom-crypt', name: 'Cripta', isCustom: true, imageUrl: 'data:image/webp;base64,CRYPT' });
     assert.ok(Service.state.sceneLayers.bastion, 'Bastion saved in sceneLayers');
 
     // P2P WORLD_SYNC must omit sceneLayers
@@ -166,7 +173,7 @@ test('extractSerializableWorld keeps sceneLayers private from P2P, persists it i
     // Restore into fresh GM state (simulating reloading the portal)
     resetGmState();
     Service.applyFullWorldState(savedPortal, true);
-    assert.equal(Service.state.mapId, 'crypt');
+    assert.equal(Service.state.activeMapKey, 'custom-crypt');
     assert.ok(Service.state.sceneLayers.bastion, 'Restored portal keeps inactive scenes');
     assert.deepEqual(Service.state.playerInvites, [{ id: 'inv-1', label: 'Jugador 1', tokenIds: ['tok-1'] }]);
 
@@ -189,8 +196,8 @@ test('extractSerializableWorld keeps sceneLayers private from P2P, persists it i
 test('applyFullWorldState self-heals an assigned token residing only in sceneLayers', () => {
   resetGmState();
   const legacyWorld = {
-    mapId: 'arena',
-    activeMapKey: 'arena',
+    mapId: 'custom',
+    activeMapKey: 'custom-arena',
     playerInvites: [{ id: 'inv-1', label: 'P1', tokenIds: ['tok-1'] }],
     tokens: [{ id: 'arena-ogre', name: 'Ogro', isAlly: false, x: 920, y: 520 }],
     sceneLayers: {
@@ -204,7 +211,7 @@ test('applyFullWorldState self-heals an assigned token residing only in sceneLay
 
   Service.applyFullWorldState(legacyWorld, true);
 
-  assert.equal(Service.state.mapId, 'arena');
+  assert.equal(Service.state.activeMapKey, 'custom-arena');
   assert.ok(Service.state.tokens.some((t) => t.id === 'tok-1'), 'Self-healed assigned token onto active scene');
   assert.ok(Service.state.tokens.some((t) => t.id === 'arena-ogre'), 'Existing scene enemies kept');
 });

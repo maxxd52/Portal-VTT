@@ -2,8 +2,8 @@
    SHEET RESOURCES VIEW: RECURSOS Y CONTADORES FLEXIBLES EN LA FICHA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 export const SheetResourcesViewMethods = {
   bindSheetResourceEvents() {
@@ -55,7 +55,7 @@ export const SheetResourcesViewMethods = {
 
     const cfg = Service.state.systemConfig || {};
     const hasBlocks = Array.isArray(cfg.sheetBlocks);
-    const isGeneric = (cfg.preset || 'dnd55') === 'free';
+    const isGeneric = true;
     if (this.els.btnToggleResourceForm) {
       this.els.btnToggleResourceForm.classList.toggle('hidden', isGeneric || hasBlocks);
     }

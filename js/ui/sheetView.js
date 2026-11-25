@@ -2,16 +2,16 @@
    SHEET VIEW: FICHA DE PERSONAJE, ATRIBUTOS, HABILIDADES, RASGOS E INVENTARIO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 import {
   displayValueToMeters,
   formatDistance,
   hasExplicitTokenVision,
   metersToDisplayValue,
   resolveTokenLightMeters
-} from '../utils/lightingModel.js?v=20261123a7';
-import { clampTokenSize } from '../utils/tokenTemplateSync.js?v=20261123a7';
+} from '../utils/lightingModel.js?v=20261125a1';
+import { clampTokenSize } from '../utils/tokenTemplateSync.js?v=20261125a1';
 
 export const SheetViewMethods = {
   bindSheetEvents() {
@@ -143,14 +143,6 @@ export const SheetViewMethods = {
               : `"${saved.name}" vinculado al Baúl.`
           );
         }
-      });
-    }
-    if (this.els.btnLoadDnd55Skills) {
-      this.els.btnLoadDnd55Skills.addEventListener('click', () => {
-        const tok = Selector.getSelectedToken(Service.state);
-        if (!tok) return;
-        const added = Service.loadDnd55Skills(tok.id);
-        this.showActionToast(added > 0 ? `${added} habilidades D&D 5.5e cargadas.` : 'Las habilidades 5.5e ya estaban cargadas.');
       });
     }
     this.els.btnSheetHpMinus.addEventListener('click', () => {

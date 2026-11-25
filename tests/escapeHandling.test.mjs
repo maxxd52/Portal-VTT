@@ -8,10 +8,10 @@ globalThis.window = globalThis.window || {
 };
 globalThis.document = globalThis.document || { activeElement: null };
 
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { View } = await import('../js/core/view.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { View } = await import('../js/core/view.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 function makeClassList(initial = []) {
   const set = new Set(initial);

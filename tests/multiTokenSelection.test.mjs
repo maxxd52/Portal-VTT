@@ -19,9 +19,9 @@ globalThis.localStorage = {
   }
 };
 
-const { findTokensInRect, buildMultiTokenMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { findTokensInRect, buildMultiTokenMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
 
 const flattenIds = (spec) => [
   ...(spec.quickActions || []).map((q) => q.id),

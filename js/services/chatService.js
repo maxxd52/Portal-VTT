@@ -2,7 +2,7 @@
    CHAT SERVICE: MENSAJES DE MESA, SUSURROS POR AVATAR Y BURBUJAS EFÍMERAS
    ========================================================================== */
 
-import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261125a1';
 
 export const ChatServiceMethods = {
   getSelfSeatKey() {

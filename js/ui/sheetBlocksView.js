@@ -2,8 +2,8 @@
    SHEET BLOCKS VIEW: RENDERIZADO POLIMÓRFICO DE 3 BLOQUES (NÚMERO, RECURSO, TEXTO)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 export const SheetBlocksViewMethods = {
   renderSheetBlocksInto(containerEl, rawBlocks, tok, sysCfg, { sumTotal = false } = {}) {

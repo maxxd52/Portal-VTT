@@ -257,6 +257,29 @@ html[data-ui-scale="large"] #diceDockContainer {
   -webkit-backdrop-filter: blur(10px) saturate(135%);
 }
 
+html[data-graphics-quality="balanced"] .portal-panel,
+html[data-graphics-quality="balanced"] .seat-chat-bubble,
+html[data-graphics-quality="balanced"] .seat-roll-card,
+html[data-graphics-quality="balanced"] .portal-map-active-pill,
+html[data-graphics-quality="balanced"] .portal-map-mode-pill {
+  backdrop-filter: blur(5px) saturate(115%);
+  -webkit-backdrop-filter: blur(5px) saturate(115%);
+}
+
+html[data-graphics-quality="low"] .portal-panel,
+html[data-graphics-quality="low"] .seat-chat-bubble,
+html[data-graphics-quality="low"] .seat-roll-card,
+html[data-graphics-quality="low"] .portal-map-active-pill,
+html[data-graphics-quality="low"] .portal-map-mode-pill,
+html[data-graphics-quality="low"] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-graphics-quality="low"] .portal-panel {
+  background-color: var(--bg-surface-solid, var(--bg-surface));
+}
+
 .portal-subpanel {
   background-color: var(--bg-subpanel);
   border: 1px solid var(--border-subtle);
@@ -542,6 +565,25 @@ html[data-ui-scale="large"] #diceDockContainer {
   pointer-events: none;
 }
 
+#narrativeBackdropLayer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: transparent;
+  transition: background 320ms ease;
+}
+
+#narrativeBackdropLayer[data-ambient="night"]::after {
+  background:
+    radial-gradient(ellipse at center, rgba(15, 23, 66, 0.32) 15%, rgba(6, 11, 32, 0.62) 100%);
+}
+
+#narrativeBackdropLayer[data-ambient="darkness"]::after {
+  background:
+    radial-gradient(ellipse at center, rgba(3, 6, 14, 0.56) 10%, rgba(2, 4, 10, 0.84) 100%);
+}
+
 #narrativeBackdropImg {
   width: 100%;
   height: 100%;
@@ -602,6 +644,11 @@ html[data-ui-scale="large"] #diceDockContainer {
   opacity: 1;
   pointer-events: none;
   transition: opacity 460ms ease-in-out;
+}
+
+.portal-scene-curtain.is-backdrop-instant .portal-scene-curtain-backdrop {
+  transition: none !important;
+  opacity: 1;
 }
 
 .portal-scene-curtain-inner {
@@ -1473,7 +1520,8 @@ select.portal-input optgroup {
 #worldTransformLayer > canvas,
 #worldTransformLayer > svg,
 #tokensLayer,
-#mapNotesLayer {
+#mapNotesLayer,
+#mapLightsLayer {
   position: absolute;
   inset: 0;
   width: 2400px;
@@ -1515,6 +1563,7 @@ select.portal-input optgroup {
 #fogCanvas { z-index: 7; pointer-events: none; }
 #overlayVectorSvg { z-index: 9; pointer-events: none; }
 #mapNotesLayer { z-index: 10; pointer-events: none; }
+#mapLightsLayer { z-index: 10; pointer-events: none; }
 
 [data-tabletop-fx="basic"] #boardGrainLayer {
   display: none;
@@ -1534,7 +1583,6 @@ select.portal-input optgroup {
   justify-content: center;
   cursor: grab;
   transform: translate3d(var(--tx, 0px), var(--ty, 0px), 0);
-  will-change: transform;
   transition: opacity 180ms var(--ease-mac);
   background: transparent;
   box-shadow: none;
@@ -1559,7 +1607,6 @@ select.portal-input optgroup {
   transform: translate3d(var(--cast-x, -6px), var(--cast-y, 8px), 0)
     rotate(var(--cast-rot, 128deg))
     scale(var(--cast-sx, 1.06), var(--cast-sy, 0.86));
-  will-change: transform, opacity;
   transition: transform 220ms var(--ease-mac), opacity 220ms var(--ease-mac);
 }
 
@@ -1587,7 +1634,6 @@ select.portal-input optgroup {
   opacity: var(--shadow-op, 0.44);
   transform: translate3d(var(--shadow-x, 0px), var(--shadow-y, 3px), 0)
     scale(var(--shadow-sx, 0.94), var(--shadow-sy, 0.88));
-  will-change: transform, opacity;
   transition: transform 150ms var(--ease-mac), opacity 150ms var(--ease-mac);
 }
 
@@ -1600,11 +1646,28 @@ select.portal-input optgroup {
   transform: translate3d(0, calc(var(--lift-y, 0px) * -1), 0)
     rotate(var(--drag-tilt, 0deg))
     scale(var(--phys-scale, 1));
-  will-change: transform;
   transition:
     transform 180ms var(--ease-mac),
     box-shadow 180ms var(--ease-mac);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.34);
+}
+
+.vtt-token.is-dragging,
+.vtt-token.is-gliding,
+.vtt-token.is-dropping,
+.vtt-token.is-dragging > .vtt-token-piece,
+.vtt-token.is-gliding > .vtt-token-piece,
+.vtt-token.is-dropping > .vtt-token-piece {
+  will-change: transform;
+}
+
+.vtt-token.is-dragging > .vtt-token-shadow,
+.vtt-token.is-dragging > .vtt-token-cast-shadow,
+.vtt-token.is-gliding > .vtt-token-shadow,
+.vtt-token.is-gliding > .vtt-token-cast-shadow,
+.vtt-token.is-dropping > .vtt-token-shadow,
+.vtt-token.is-dropping > .vtt-token-cast-shadow {
+  will-change: transform, opacity;
 }
 
 .vtt-token.is-dragging {
@@ -2851,3 +2914,19 @@ html[data-rails-swapped="true"] .portal-drawer-right:not(.is-open) {
   font-size: 11px;
   font-weight: 600;
 }
+
+/* ==========================================================================
+   ESCENOGRAFÍA WALLS PILL (APPLE TRANSLUCENT PILL, THEME-ADAPTIVE)
+   ========================================================================== */
+
+#wallModePill .portal-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5px;
+  padding: 4px 7px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+

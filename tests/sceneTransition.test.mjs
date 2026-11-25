@@ -7,12 +7,12 @@ if (!globalThis.window) {
   globalThis.window = { location: { search: '' }, innerWidth: 1280, innerHeight: 720 };
 }
 
-const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
 const {
   buildSceneTransitionSignature,
   resolveSceneTransitionMeta,
   computeTransitionTimings
-} = await import('../js/utils/sceneTransitionModel.js?v=20261123a7');
+} = await import('../js/utils/sceneTransitionModel.js?v=20261125a1');
 
 test('buildSceneTransitionSignature changes only on scene identity or mode changes', () => {
   const base = {
@@ -174,4 +174,44 @@ test('S1-OPT: canvasView prewarmActiveScene caps token decode at 16, awaits expl
   assert.match(canvasSrc, /_prewarmMapDecodePromise/);
   assert.match(viewSrc, /const isSceneTransition\s*=/);
   assert.match(viewSrc, /if\s*\(isSceneTransition\)/);
+});
+
+test('S2-OPT-RED: initial reload snaps curtain opaque before drawMapCanvas without map->darken->lighten flash', () => {
+  const cssSrc = readFileSync(path.resolve('css/styles.css'), 'utf8');
+  const viewSrc = readFileSync(path.resolve('js/core/view.js'), 'utf8');
+  const canvasSrc = readFileSync(path.resolve('js/ui/canvasView.js'), 'utf8');
+
+  assert.match(cssSrc, /\.portal-scene-curtain\.is-backdrop-instant\s+\.portal-scene-curtain-backdrop[\s\S]*?transition:\s*none\s*!important/);
+  const instantIdx = viewSrc.indexOf('is-backdrop-instant');
+  const drawMapIdx = viewSrc.indexOf('this.drawMapCanvas(state)');
+  assert.ok(instantIdx > 0 && drawMapIdx > instantIdx, 'view.js must snap curtain instant BEFORE drawMapCanvas');
+  assert.match(canvasSrc, /if\s*\(isInitialLoad\)\s*\{[\s\S]*?is-backdrop-instant/);
+});
+
+test('S1-FIX-RED: index.html starts curtain opaque and initial load keeps is-backdrop-instant until fade-out', () => {
+  const htmlSrc = readFileSync(path.resolve('index.html'), 'utf8');
+  const canvasSrc = readFileSync(path.resolve('js/ui/canvasView.js'), 'utf8');
+  const viewSrc = readFileSync(path.resolve('js/core/view.js'), 'utf8');
+  const lobbySrc = readFileSync(path.resolve('js/ui/portalLobbyView.js'), 'utf8');
+  const serviceSrc = readFileSync(path.resolve('js/core/service.js'), 'utf8');
+
+  assert.match(
+    htmlSrc,
+    /<div\s+id="sceneTransitionCurtain"\s+class="[^"]*is-backdrop-instant[^"]*is-backdrop-visible[^"]*"/,
+    'index.html must start #sceneTransitionCurtain opaque to prevent pre-JS map flash'
+  );
+  assert.doesNotMatch(
+    canvasSrc,
+    /if\s*\(isInitialLoad\)\s*\{[\s\S]{0,160}curtain\.classList\.remove\(['"]is-backdrop-instant['"]\)/,
+    'triggerSceneTransition must NOT strip is-backdrop-instant before the hold completes'
+  );
+  assert.match(
+    canvasSrc,
+    /curtain\.classList\.contains\(['"]is-backdrop-instant['"]\)[\s\S]{0,200}curtain\.classList\.remove\(['"]is-backdrop-instant['"]\)[\s\S]{0,200}curtain\.classList\.remove\(['"]is-backdrop-visible['"]\)/,
+    'triggerSceneTransition must strip is-backdrop-instant right before fade-out'
+  );
+  assert.match(viewSrc, /armInitialSceneCurtain\s*\(/);
+  assert.match(viewSrc, /opts\.skipSceneTransition/);
+  assert.match(lobbySrc, /armInitialSceneCurtain\?\.\(\)/);
+  assert.match(serviceSrc, /refreshExternalMapFromSource[\s\S]*?skipSceneTransition:\s*true/);
 });

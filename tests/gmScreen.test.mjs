@@ -53,7 +53,7 @@ test('S1: getGmScreenState falls back gracefully for legacy portals without gmSc
   const derived = Selector.getGmScreenState(legacyState);
   assert.equal(legacyState.gmScreen, null, 'Selector must stay pure and not mutate state');
   assert.equal(derived.activeTabId, 'table');
-  assert.ok(derived.tabs.some((t) => t.id === 'rules' && t.label === 'Movimientos'));
+  assert.ok(derived.tabs.some((t) => t.id === 'prep'));
 });
 
 test('S1: extractSerializableWorld strips private gmScreen by default and keeps it only when includePrivateGm=true', () => {
@@ -298,9 +298,9 @@ test('UX Audit (Items 1, 2, 6, 7): GM Screen removes redundant settings gear & h
 });
 
 test('UX Audit (Items 3 & 4): GM Screen clocks, notes, and tables follow Law 1 (+/Editar toggle purple + local draft + Guardar)', async () => {
-  const { Service: TaggedService } = await import('../js/core/service.js?v=20261123a7');
-  const { GmScreenViewMethods } = await import('../js/ui/gmScreenView.js?v=20261123a7');
-  const { GmScreenWidgetsViewMethods } = await import('../js/ui/gmScreenWidgetsView.js?v=20261123a7');
+  const { Service: TaggedService } = await import('../js/core/service.js?v=20261125a1');
+  const { GmScreenViewMethods } = await import('../js/ui/gmScreenView.js?v=20261125a1');
+  const { GmScreenWidgetsViewMethods } = await import('../js/ui/gmScreenWidgetsView.js?v=20261125a1');
 
   TaggedService.state = createInitialState();
   TaggedService.state.role = 'gm';

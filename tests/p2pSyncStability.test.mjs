@@ -21,11 +21,11 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
-const { PresenceViewMethods } = await import('../js/ui/presenceView.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
+const { PresenceViewMethods } = await import('../js/ui/presenceView.js?v=20261125a1');
 
 function resetService(role = 'gm', isHostGm = role === 'gm') {
   Service.cancelAllTokenGlides();

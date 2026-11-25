@@ -21,9 +21,9 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 function setupGmState() {
   Service.listeners = [];
@@ -49,6 +49,13 @@ test('S1: saveCustomActor & spawnActorFromTemplate support size 1..4, vision/lig
       icon: 'sword',
       color: '#ef4444'
     });
+    const customShield = Service.saveCustomItem({
+      name: 'Escudo Reforzado',
+      kind: 'equipment',
+      acBonus: 2,
+      icon: 'shield',
+      color: '#06b6d4'
+    });
 
     const tpl = Service.saveCustomActor({
       name: 'Ogro Chamán',
@@ -60,23 +67,23 @@ test('S1: saveCustomActor & spawnActorFromTemplate support size 1..4, vision/lig
       visionMeters: 18,
       lightMeters: 6,
       stats: { str: 4, dex: -1, con: 3, vig: 5 },
-      starterItems: [customAxe.key, 'longsword']
+      starterItems: [customAxe.key, customShield.key]
     });
 
     assert.equal(tpl.size, 3);
     assert.equal(tpl.visionMeters, 18);
     assert.equal(tpl.lightMeters, 6);
     assert.equal(tpl.stats.vig, 5);
-    assert.deepEqual(tpl.starterItems, [customAxe.key, 'longsword']);
+    assert.deepEqual(tpl.starterItems, [customAxe.key, customShield.key]);
 
     const tok = await Service.spawnActorFromTemplate(tpl, 400, 400);
     assert.equal(tok.size, 3);
     assert.equal(tok.visionMeters, 18);
     assert.equal(tok.lightMeters, 6);
-    assert.equal(tok.inventory.length, 2, 'Both custom and built-in starter items must spawn into inventory');
+    assert.equal(tok.inventory.length, 2, 'Custom starter items must spawn into inventory');
     assert.equal(tok.inventory[0].name, 'Hacha Rúnica');
     assert.equal(tok.inventory[0].formula, '1d12+@str');
-    assert.equal(tok.inventory[1].key, 'longsword');
+    assert.equal(tok.inventory[1].key, customShield.key);
 
     // Direct setTokenSize clamped to 1..4
     assert.equal(Service.setTokenSize(tok.id, 4), 4);
@@ -196,6 +203,13 @@ test('S1: Secondary (isAlly=false) stays an immutable mold and spawns independen
   try {
     const state = setupGmState();
 
+    const scimitar = Service.saveCustomItem({
+      name: 'Cimitarra Curva',
+      kind: 'equipment',
+      formula: '1d6+@agi',
+      icon: 'sword',
+      color: '#ef4444'
+    });
     const goblinTpl = Service.saveCustomActor({
       name: 'Goblin',
       role: 'Hostigador',
@@ -203,7 +217,7 @@ test('S1: Secondary (isAlly=false) stays an immutable mold and spawns independen
       size: 1,
       hp: 12,
       ac: 13,
-      starterItems: ['scimitar']
+      starterItems: [scimitar.key]
     });
 
     const g1 = await Service.spawnActorFromTemplate(goblinTpl, 240, 240);

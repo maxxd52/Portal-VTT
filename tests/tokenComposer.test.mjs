@@ -32,10 +32,10 @@ const {
   getHexagonVertices,
   shouldApplyRuntimeCoinRim,
   shouldRenderTokenRim
-} = await import('../js/utils/tokenComposer.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+} = await import('../js/utils/tokenComposer.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 function makeRgba(width, height, alphaFn) {
   const buf = new Uint8ClampedArray(width * height * 4);
@@ -302,5 +302,5 @@ test('Cache-busting ?v= tags are synchronized uniformly across HTML, JS, and tes
       versions.add(m[1]);
     }
   }
-  assert.deepEqual([...versions], ['20261123a7']);
+  assert.deepEqual([...versions], ['20261125a1']);
 });

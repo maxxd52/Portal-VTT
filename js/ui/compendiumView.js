@@ -1,17 +1,17 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261125a1';
 import {
   displayValueToMeters,
   metersToDisplayValue,
   normalizeSceneLighting
-} from '../utils/lightingModel.js?v=20261123a7';
-import { clampTokenSize } from '../utils/tokenTemplateSync.js?v=20261123a7';
-import { groupCompendiumItemsForPicker } from '../utils/pickerModel.js?v=20261123a7';
-import { resolveMapCardDescriptor } from '../utils/compendiumCardModel.js?v=20261123a7';
-import { parseDragSpec, resolveEntryFolder } from '../utils/compendiumDragModel.js?v=20261123a7';
-import { drawPresetMapBackground } from './canvasView.js?v=20261123a7';
+} from '../utils/lightingModel.js?v=20261125a1';
+import { clampTokenSize, normalizeItemUsage } from '../utils/tokenTemplateSync.js?v=20261125a1';
+import { groupCompendiumItemsForPicker } from '../utils/pickerModel.js?v=20261125a1';
+import { resolveMapCardDescriptor } from '../utils/compendiumCardModel.js?v=20261125a1';
+import { parseDragSpec, resolveEntryFolder } from '../utils/compendiumDragModel.js?v=20261125a1';
+import { drawPresetMapBackground } from './canvasView.js?v=20261125a1';
 
 export const CompendiumViewMethods = {
   getPresetMapThumbnail(mapId) {
@@ -89,6 +89,28 @@ export const CompendiumViewMethods = {
         : 'Secundario: molde fijo que crea instancias independientes en cada despliegue.';
   },
 
+  syncCustomItemUsageSeg(applyDefaultCount = false) {
+    const mode = ['consumable', 'charges'].includes(this.selectedItemUsageMode)
+      ? this.selectedItemUsageMode
+      : 'permanent';
+    this.selectedItemUsageMode = mode;
+    this.els.customItemUsageSeg?.querySelectorAll('[data-item-usage]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.itemUsage === mode);
+    });
+    const showCount = mode !== 'permanent';
+    this.els.customItemUsageCountRow?.classList.toggle('hidden', !showCount);
+    this.els.customItemUsageCountRow?.classList.toggle('flex', showCount);
+    if (this.els.lblCustomItemUsageHint) {
+      this.els.lblCustomItemUsageHint.textContent =
+        mode === 'charges'
+          ? 'Cargas máximas (recargable al llegar a 0)'
+          : 'Usos disponibles (se elimina al llegar a 0)';
+    }
+    if (applyDefaultCount && this.els.inpCustomItemMaxUses) {
+      this.els.inpCustomItemMaxUses.value = mode === 'charges' ? '3' : '1';
+    }
+  },
+
   renderCustomTokenStatsGrid(state, presetStats = null) {
     const grid = this.els.customTokenStatsGrid;
     if (!grid) return;
@@ -128,16 +150,9 @@ export const CompendiumViewMethods = {
   },
 
   getAvailableCompendiumItems(state) {
-    const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
-    const baseItems =
-      preset === 'vieja_escuela'
-        ? COMPENDIUM_ITEMS.filter((i) => i.system === 'vieja_escuela')
-        : state.ruleset === 'free'
-          ? COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela' && !String(i.key || '').startsWith('55_'))
-          : COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela');
     return {
       custom: Array.isArray(state.customItems) ? state.customItems : [],
-      base: baseItems
+      base: COMPENDIUM_ITEMS
     };
   },
 
@@ -363,6 +378,8 @@ export const CompendiumViewMethods = {
       this.pendingCustomMapLighting = normalizeSceneLighting({});
       this.selectedCustomMapMode = 'tactical';
       this.syncCustomMapModeSeg();
+      this.selectedItemUsageMode = 'permanent';
+      this.syncCustomItemUsageSeg(true);
       if (this.els.selCustomMapWeather) this.els.selCustomMapWeather.value = 'none';
       this.renderCustomMapGridSummary();
       if (this.els.btnToggleCustomToken) this.els.btnToggleCustomToken.classList.remove('portal-btn-accent');
@@ -603,6 +620,8 @@ export const CompendiumViewMethods = {
         const tab = Service.state.compendiumTab || 'actors';
         if (tab === 'items') {
           this.resetItemCreatorBlocks();
+          this.selectedItemUsageMode = 'permanent';
+          this.syncCustomItemUsageSeg(true);
           openCompendiumForm(this.els.customItemForm, this.els.btnToggleCustomToken, this.els.inpCustomItemName);
         }
         else if (tab === 'maps') {
@@ -626,6 +645,15 @@ export const CompendiumViewMethods = {
       if (!btn) return;
       this.selectedTokenSize = clampTokenSize(btn.dataset.tokenSize, 1);
       this.syncCustomTokenSizeSeg();
+    });
+
+    this.els.customItemUsageSeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-item-usage]');
+      if (!btn) return;
+      const nextMode = btn.dataset.itemUsage;
+      const changed = nextMode !== this.selectedItemUsageMode;
+      this.selectedItemUsageMode = nextMode;
+      this.syncCustomItemUsageSeg(changed);
     });
     this.els.customTokenAllySeg?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-token-ally]');
@@ -741,12 +769,16 @@ export const CompendiumViewMethods = {
       const name = this.els.inpCustomItemName.value.trim();
       if (!name) return;
       const kind = this.els.selCustomItemKind.value;
+      const usageMode = this.selectedItemUsageMode || 'permanent';
+      const maxUses = usageMode === 'permanent' ? 0 : Math.max(1, Math.min(999, Math.trunc(Number(this.els.inpCustomItemMaxUses?.value) || 1)));
       const { passives, steps } = this.getCreatorPayload();
       const firstRoll = steps.find((s) => s.type === 'roll' && s.rollKind !== 'request');
       const saved = Service.saveCustomItem({
         key: this.editingCompendiumKey || undefined,
         name,
         kind,
+        usageMode,
+        maxUses,
         folder: this.els.inpCustomItemFolder.value.trim(),
         formula: firstRoll ? firstRoll.formula : '',
         message: this.els.inpCustomItemMsg ? this.els.inpCustomItemMsg.value.trim() : '',
@@ -982,6 +1014,12 @@ export const CompendiumViewMethods = {
       if (this.els.lblCustomItemFormTitle) this.els.lblCustomItemFormTitle.textContent = 'Editar complemento';
       this.els.inpCustomItemName.value = it.name || '';
       this.els.selCustomItemKind.value = this.getItemCategory(it.kind);
+      const normUsage = normalizeItemUsage(it);
+      this.selectedItemUsageMode = normUsage.usageMode;
+      if (this.els.inpCustomItemMaxUses) {
+        this.els.inpCustomItemMaxUses.value = String(normUsage.maxUses || (normUsage.usageMode === 'charges' ? 3 : 1));
+      }
+      this.syncCustomItemUsageSeg(false);
       this.loadItemIntoCreatorBlocks(it);
       this.els.inpCustomItemFolder.value = it.folder || '';
       this.selectedItemColor = it.color || '#8b5cf6';
@@ -1038,12 +1076,7 @@ export const CompendiumViewMethods = {
     };
 
     if (tab === 'actors') {
-      const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
-      const baseActors =
-        preset === 'vieja_escuela'
-          ? COMPENDIUM_ACTORS.filter((a) => a.system === 'vieja_escuela')
-          : COMPENDIUM_ACTORS.filter((a) => a.system !== 'vieja_escuela');
-      const allActors = [...(state.customActors || []), ...baseActors];
+      const allActors = [...(state.customActors || []), ...COMPENDIUM_ACTORS];
       const list = allActors.filter((a) => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q));
       renderWithFolders(
         list,
@@ -1144,14 +1177,7 @@ export const CompendiumViewMethods = {
         });
       });
     } else if (tab === 'items') {
-      const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
-      const baseItems =
-        preset === 'vieja_escuela'
-          ? COMPENDIUM_ITEMS.filter((i) => i.system === 'vieja_escuela')
-          : state.ruleset === 'free'
-            ? COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela' && !String(i.key || '').startsWith('55_'))
-            : COMPENDIUM_ITEMS.filter((i) => i.system !== 'vieja_escuela');
-      const allItems = [...(state.customItems || []), ...baseItems];
+      const allItems = [...(state.customItems || []), ...COMPENDIUM_ITEMS];
       const list = allItems.filter((i) => i.name.toLowerCase().includes(q) || i.badge.toLowerCase().includes(q));
       renderWithFolders(
         list,
@@ -1191,6 +1217,16 @@ export const CompendiumViewMethods = {
         }
         if (it.isCustom) {
           actions.push(
+            {
+              icon: 'copy',
+              label: 'Duplicar para editar',
+              onClick: () => {
+                const copy = Service.duplicateCustomItem(it.key);
+                if (!copy) return;
+                editCustomItem(copy.key);
+                this.showActionToast(`Copia "${copy.name}" lista para editar.`);
+              }
+            },
             { icon: 'edit', label: 'Editar complemento', onClick: () => editCustomItem(it.key) },
             {
               icon: 'trash',
@@ -1338,6 +1374,16 @@ export const CompendiumViewMethods = {
         }
         if (m.isCustom) {
           actions.push(
+            {
+              icon: 'copy',
+              label: 'Duplicar para editar',
+              onClick: () => {
+                const copy = Service.duplicateCustomMap(m.key);
+                if (!copy) return;
+                editCustomMap(copy.key);
+                this.showActionToast(`Copia "${copy.name}" lista para editar.`);
+              }
+            },
             { icon: 'edit', label: 'Editar escenario', onClick: () => editCustomMap(m.key) },
             {
               icon: 'trash',

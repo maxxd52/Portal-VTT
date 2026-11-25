@@ -10,7 +10,7 @@ const {
   buildWallShadowCacheKey,
   getLightingTemperaturePalette,
   computeActiveMapBounds
-} = await import('../js/utils/tabletopMaterial.js?v=20261123a7');
+} = await import('../js/utils/tabletopMaterial.js?v=20261125a1');
 
 test('S1: generateSurfaceGrainPixels produces deterministic, neutral-mean, seamless periodic grain', () => {
   const size = 64;

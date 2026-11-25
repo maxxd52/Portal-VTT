@@ -2,16 +2,16 @@
    SYSTEM SERVICE: PRESETS, REGLAS DEL PORTAL Y CONSTRUCTOR DE PESTAÑAS/ATRIBUTOS
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261123a7';
-import { DEFAULT_VISION_CONFIG, normalizeVisionConfig } from '../utils/lightingModel.js?v=20261123a7';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261125a1';
+import { DEFAULT_VISION_CONFIG, normalizeVisionConfig } from '../utils/lightingModel.js?v=20261125a1';
 
 export const SystemServiceMethods = {
-  applySystemPreset(presetKey, targetState = this.state) {
-    const key = presetKey in SYSTEM_PRESETS ? presetKey : 'dnd55';
-    const preset = SYSTEM_PRESETS[key];
-    targetState.ruleset = key === 'dnd55' ? 'dnd55' : 'free';
+  applySystemPreset(_presetKey = 'free', targetState = this.state) {
+    const key = 'free';
+    const preset = SYSTEM_PRESETS.free;
+    targetState.ruleset = 'free';
     targetState.systemConfig = {
       preset: key,
       rollFormula: preset.rollFormula,
@@ -728,7 +728,7 @@ export const SystemServiceMethods = {
   },
 
   rollSheetCheck(tok, label, statBonus = 0, customFormula = '', rollOpts = {}) {
-    const cfg = this.state.systemConfig || SYSTEM_PRESETS.dnd55;
+    const cfg = this.state.systemConfig || SYSTEM_PRESETS.free;
     const val = Math.trunc(Number(statBonus) || 0);
     const dieSides = Number(rollOpts?.dieSides) || 0;
     const raw = customFormula

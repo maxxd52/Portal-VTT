@@ -2,6 +2,8 @@
    TOKEN TEMPLATE SYNC: PURE LINKED-PROTAGONIST & SECONDARY-MOLD HELPERS
    ========================================================================== */
 
+import { resolveTokenDarkvisionMeters } from './lightingModel.js?v=20261125a1';
+
 export function clampTokenSize(size, fallback = 1) {
   if (size === null || size === undefined || size === '') {
     return Math.max(1, Math.min(4, Math.round(Number(fallback) || 1)));
@@ -9,6 +11,31 @@ export function clampTokenSize(size, fallback = 1) {
   const n = Math.round(Number(size));
   if (!Number.isFinite(n)) return Math.max(1, Math.min(4, Math.round(Number(fallback) || 1)));
   return Math.max(1, Math.min(4, n));
+}
+
+/**
+ * Normalizes item consumption mode (`permanent` | `consumable` | `charges`) and `maxUses`
+ * with backward compatibility for legacy `kind === 'consumable'` items.
+ * @param {object} [item]
+ * @returns {{ usageMode: 'permanent'|'consumable'|'charges', maxUses: number }}
+ */
+export function normalizeItemUsage(item = {}) {
+  const rawMode = String(item?.usageMode || '').trim();
+  const clampCount = (val, def) => {
+    const n = Math.trunc(Number(val));
+    if (!Number.isFinite(n) || n < 1) return def;
+    return Math.min(999, n);
+  };
+  if (rawMode === 'consumable') {
+    return { usageMode: 'consumable', maxUses: clampCount(item.maxUses, 1) };
+  }
+  if (rawMode === 'charges') {
+    return { usageMode: 'charges', maxUses: clampCount(item.maxUses, 3) };
+  }
+  if (!rawMode && item?.kind === 'consumable') {
+    return { usageMode: 'consumable', maxUses: clampCount(item.maxUses, 1) };
+  }
+  return { usageMode: 'permanent', maxUses: 0 };
 }
 
 export function normalizeTemplateStats(rawStats = null, existingStats = null) {
@@ -61,8 +88,12 @@ export function resolveStarterItemsInventory(starterKeys = [], customItems = [],
     const found = byKey.get(key);
     if (!found) return;
     const cloned = JSON.parse(JSON.stringify(found));
+    const { usageMode, maxUses } = normalizeItemUsage(cloned);
     out.push({
       ...cloned,
+      usageMode,
+      maxUses,
+      ...(usageMode !== 'permanent' && cloned.uses === undefined ? { uses: maxUses } : {}),
       uid: makeInventoryUid(idx)
     });
   });
@@ -169,6 +200,8 @@ export function buildActorTemplateFromToken(
     lightMeters: keepPresence
       ? Math.max(0, Math.min(60, Number(existingTpl.lightMeters) || 0))
       : Math.max(0, Math.min(60, Number(tok.lightMeters) || 0)),
+    darkvision: keepPresence ? resolveTokenDarkvisionMeters(existingTpl) > 0 : resolveTokenDarkvisionMeters(tok) > 0,
+    darkvisionMeters: keepPresence ? resolveTokenDarkvisionMeters(existingTpl) : resolveTokenDarkvisionMeters(tok),
     imageUrl: String(tok.imageUrl || '').trim(),
     mediaId: String(tok.mediaId || '').trim(),
     publicDescription: String(tok.publicDescription || '').trim(),
@@ -215,6 +248,8 @@ export function applyActorTemplateToLiveToken(tok, entry) {
       ? Math.max(0, Math.min(60, Number(entry.visionMeters)))
       : null;
   tok.lightMeters = Math.max(0, Math.min(60, Number(entry.lightMeters) || 0));
+  tok.darkvisionMeters = resolveTokenDarkvisionMeters(entry);
+  tok.darkvision = tok.darkvisionMeters > 0;
   tok.imageUrl = String(entry.imageUrl || '');
   tok.mediaId = String(entry.mediaId || '');
   tok.publicDescription = String(entry.publicDescription || '');

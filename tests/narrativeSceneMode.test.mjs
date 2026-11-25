@@ -5,10 +5,10 @@ globalThis.window = globalThis.window || {
   location: { search: '', origin: 'http://localhost', pathname: '/' }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { resolveMapCardDescriptor } = await import('../js/utils/compendiumCardModel.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { resolveMapCardDescriptor } = await import('../js/utils/compendiumCardModel.js?v=20261125a1');
 
 test('Selector.isNarrativeScene returns true only when sceneMode === "narrative"', () => {
   assert.equal(Selector.isNarrativeScene(null), false);

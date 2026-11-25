@@ -5,16 +5,16 @@ globalThis.window = globalThis.window || {
   location: { search: '', origin: 'http://localhost', pathname: '/' }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { buildMapMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { buildMapMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261125a1');
 const {
   WEATHER_PRESETS,
   normalizeWeatherType,
   createWeatherSimulation,
   stepWeatherSimulation
-} = await import('../js/utils/weatherEngine.js?v=20261123a7');
+} = await import('../js/utils/weatherEngine.js?v=20261125a1');
 
 test('normalizeWeatherType accepts valid presets and falls back to none', () => {
   for (const w of WEATHER_PRESETS) {
@@ -74,6 +74,8 @@ test('Service.setSceneWeather persists per-scene weather and syncs via extractWo
     Service.state = createInitialState();
     Service.state.role = 'gm';
     Service.state.isHostGm = true;
+    Service.state.mapId = 'bastion';
+    Service.state.activeMapKey = 'bastion';
 
     Service.setSceneWeather('rain');
     assert.equal(Service.state.sceneWeather, 'rain');

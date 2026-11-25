@@ -19,14 +19,14 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { BrowserVault } = await import('../js/services/browserVault.js?v=20261123a7');
-const { CartridgePacker } = await import('../js/services/cartridgePacker.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
-const { WebPConverter } = await import('../js/utils/webpConverter.js?v=20261123a7');
-const TabletopMaterial = await import('../js/utils/tabletopMaterial.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { BrowserVault } = await import('../js/services/browserVault.js?v=20261125a1');
+const { CartridgePacker } = await import('../js/services/cartridgePacker.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
+const { WebPConverter } = await import('../js/utils/webpConverter.js?v=20261125a1');
+const TabletopMaterial = await import('../js/utils/tabletopMaterial.js?v=20261125a1');
 
 function resetGmService() {
   Service.cancelAllTokenGlides();

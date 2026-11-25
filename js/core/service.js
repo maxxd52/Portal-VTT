@@ -2,46 +2,57 @@
    SERVICE: LÓGICA DE NEGOCIO, MUTACIONES Y SINCRONIZACIÓN
    ========================================================================== */
 
-import { buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
-import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
-import { ChatServiceMethods } from '../services/chatService.js?v=20261123a7';
-import { CombatServiceMethods } from '../services/combatService.js?v=20261123a7';
-import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261123a7';
-import { DiceServiceMethods } from '../services/diceService.js?v=20261123a7';
-import { GmScreenServiceMethods } from '../services/gmScreenService.js?v=20261123a7';
-import { JournalRevealServiceMethods } from '../services/journalRevealService.js?v=20261123a7';
-import { JournalServiceMethods } from '../services/journalService.js?v=20261123a7';
-import { MediaRegistryServiceMethods } from '../services/mediaRegistryService.js?v=20261123a7';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
-import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261123a7';
-import { SystemServiceMethods } from '../services/systemService.js?v=20261123a7';
-import { TokenServiceMethods } from '../services/tokenService.js?v=20261123a7';
+import { buildPresetWallsForMap } from '../data/compendium.js?v=20261125a1';
+import { BrowserVault } from '../services/browserVault.js?v=20261125a1';
+import { ChatServiceMethods } from '../services/chatService.js?v=20261125a1';
+import { CombatServiceMethods } from '../services/combatService.js?v=20261125a1';
+import { CompendiumServiceMethods } from '../services/compendiumService.js?v=20261125a1';
+import { DiceServiceMethods } from '../services/diceService.js?v=20261125a1';
+import { GmScreenServiceMethods } from '../services/gmScreenService.js?v=20261125a1';
+import { JournalRevealServiceMethods } from '../services/journalRevealService.js?v=20261125a1';
+import { JournalServiceMethods } from '../services/journalService.js?v=20261125a1';
+import { MediaRegistryServiceMethods } from '../services/mediaRegistryService.js?v=20261125a1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261125a1';
+import { SequenceServiceMethods } from '../services/sequenceService.js?v=20261125a1';
+import { SystemServiceMethods } from '../services/systemService.js?v=20261125a1';
+import { TokenServiceMethods } from '../services/tokenService.js?v=20261125a1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { computeAdaptiveMaxZoom } from '../utils/tabletopMaterial.js?v=20261123a7';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261123a7';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
-import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
+import { computeAdaptiveMaxZoom } from '../utils/tabletopMaterial.js?v=20261125a1';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261125a1';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261125a1';
+import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261125a1';
 import {
+  DEFAULT_DARKVISION_METERS,
+  normalizeAmbientLight,
+  normalizeMapLight,
   normalizeSceneLighting,
   normalizeVisionConfig,
   resolveTokenLightMeters
-} from '../utils/lightingModel.js?v=20261123a7';
-import { mergeAssignedTokensForScene } from '../utils/scenePartySync.js?v=20261123a7';
+} from '../utils/lightingModel.js?v=20261125a1';
+import { mergeAssignedTokensForScene } from '../utils/scenePartySync.js?v=20261125a1';
 import {
   clampTokenSize,
   syncLinkedProtagonistsToActorsInState
-} from '../utils/tokenTemplateSync.js?v=20261123a7';
+} from '../utils/tokenTemplateSync.js?v=20261125a1';
 import {
   cloneWallsAtPoint,
-  normalizeWallKind
-} from '../utils/wallGeometry.js?v=20261123a7';
+  computeDoorPlacementOnWall,
+  getWallDoorMode,
+  isWallDoor,
+  isWallSecretDoor,
+  normalizeDoorMode,
+  normalizeWall,
+  normalizeWallKind,
+  normalizeWalls,
+  splitWallForDoor
+} from '../utils/wallGeometry.js?v=20261125a1';
 import {
   getSeatAllowedTokenIds,
   mergeRedactedTokensPreservingGmPrivate,
   normalizeMediaAssets
-} from '../utils/worldRedaction.js?v=20261123a7';
-import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261123a7';
-import { Selector } from './selector.js?v=20261123a7';
+} from '../utils/worldRedaction.js?v=20261125a1';
+import { createInitialState, generateRoomCode, SYSTEM_PRESETS } from './model.js?v=20261125a1';
+import { Selector } from './selector.js?v=20261125a1';
 
 const PROFILE_STORAGE_KEY = 'portal_vtt_user_profile_v1';
 const UI_SCALE_STORAGE_KEY = 'portal_vtt_ui_scale_v1';
@@ -174,7 +185,8 @@ export const Service = {
       tokens: this.state.tokens || [],
       strokes: this.state.strokes || [],
       walls: this.state.walls || [],
-      notes: this.state.notes || []
+      notes: this.state.notes || [],
+      mapLights: this.state.mapLights || []
     });
   },
 
@@ -190,8 +202,11 @@ export const Service = {
     const snap = JSON.parse(raw);
     this.state.tokens = snap.tokens || [];
     this.state.strokes = snap.strokes || [];
-    this.state.walls = snap.walls || [];
+    this.state.walls = normalizeWalls(snap.walls || []);
     this.state.notes = snap.notes || [];
+    if (Array.isArray(snap.mapLights)) {
+      this.state.mapLights = snap.mapLights;
+    }
     if (this.state.selectedTokenId && !this.state.tokens.some((t) => t.id === this.state.selectedTokenId)) {
       this.state.selectedTokenId = this.state.tokens[0] ? this.state.tokens[0].id : null;
     }
@@ -216,6 +231,16 @@ export const Service = {
     if (!tok) return false;
     if (this.state.role === 'gm') return true;
     return Selector.getPlayerAssignedTokenIds(this.state).includes(tok.id);
+  },
+
+  propagateTokenPatchToSceneLayers(tokenId, patch = {}) {
+    if (!tokenId || !patch || typeof patch !== 'object' || !this.state.sceneLayers) return;
+    for (const layer of Object.values(this.state.sceneLayers)) {
+      if (!layer || !Array.isArray(layer.tokens)) continue;
+      for (const t of layer.tokens) {
+        if (t && t.id === tokenId) Object.assign(t, patch);
+      }
+    }
   },
 
   getLocalProfile() {
@@ -495,7 +520,16 @@ export const Service = {
       if (incoming.auraRadius !== undefined) nextPatch.auraRadius = Number(incoming.auraRadius) || 0;
       if (incoming.size !== undefined) nextPatch.size = clampTokenSize(incoming.size, target.size || 1);
       if (incoming.visionMeters !== undefined) nextPatch.visionMeters = incoming.visionMeters;
-      if (incoming.lightMeters !== undefined) nextPatch.lightMeters = Math.max(0, Number(incoming.lightMeters) || 0);
+      if (incoming.lightMeters !== undefined) nextPatch.lightMeters = Math.max(0, Math.min(60, Number(incoming.lightMeters) || 0));
+      if (incoming.darkvisionMeters !== undefined) {
+        const n = Number(incoming.darkvisionMeters);
+        const dv = Number.isFinite(n) ? Math.round(Math.max(0, Math.min(60, n)) * 100) / 100 : 0;
+        nextPatch.darkvisionMeters = dv;
+        nextPatch.darkvision = dv > 0;
+      } else if (incoming.darkvision !== undefined) {
+        nextPatch.darkvision = Boolean(incoming.darkvision);
+        nextPatch.darkvisionMeters = nextPatch.darkvision ? DEFAULT_DARKVISION_METERS : 0;
+      }
       if (Array.isArray(incoming.hpPips)) nextPatch.hpPips = incoming.hpPips;
 
       let tokenChanged = false;
@@ -511,6 +545,15 @@ export const Service = {
       }
       if (!tokenChanged) continue;
       Object.assign(target, nextPatch);
+      const layerPatch = {};
+      if (nextPatch.lightMeters !== undefined) layerPatch.lightMeters = nextPatch.lightMeters;
+      if (nextPatch.darkvisionMeters !== undefined) {
+        layerPatch.darkvisionMeters = nextPatch.darkvisionMeters;
+        layerPatch.darkvision = nextPatch.darkvision;
+      }
+      if (Object.keys(layerPatch).length > 0) {
+        this.propagateTokenPatchToSceneLayers(target.id, layerPatch);
+      }
       changed = true;
     }
 
@@ -607,15 +650,14 @@ export const Service = {
     }
   },
 
-  async createPortal({ title = '', ruleset = 'dnd55', mapId = 'bastion', dynamicLighting = true, showGrid = true } = {}) {
+  async createPortal({ title = '', ruleset = 'free', mapId = 'empty', dynamicLighting = true, showGrid = true } = {}) {
     this.cancelAllTokenGlides();
     const code = generateRoomCode();
     const next = createInitialState();
     next.role = 'gm';
     next.isHostGm = true;
-    const presetKey = SYSTEM_PRESETS[ruleset] ? ruleset : 'dnd55';
-    next.ruleset = presetKey === 'dnd55' ? 'dnd55' : 'free';
-    this.applySystemPreset(presetKey, next);
+    next.ruleset = 'free';
+    this.applySystemPreset('free', next);
     next.room.code = code;
     next.room.moduleTitle = String(title || '').trim() || `Portal ${code}`;
     next.dynamicLighting = Boolean(dynamicLighting);
@@ -631,15 +673,9 @@ export const Service = {
     next.selectedTokenId = null;
     next.sheetOpen = false;
 
-    if (mapId === 'empty') {
-      next.mapId = 'empty';
-      next.activeMapKey = 'empty';
-      next.walls = [];
-    } else {
-      next.mapId = mapId;
-      next.activeMapKey = mapId;
-      next.walls = buildPresetWallsForMap(mapId);
-    }
+    next.mapId = 'empty';
+    next.activeMapKey = 'empty';
+    next.walls = [];
     next.sceneLighting = {
       [next.activeMapKey]: normalizeSceneLighting({
         dynamicLighting: Boolean(dynamicLighting),
@@ -698,14 +734,15 @@ export const Service = {
     if (world._redactedWorld && this.isHostNetwork()) return;
     this.cancelAllTokenGlides();
     if (world.moduleTitle) this.state.room.moduleTitle = world.moduleTitle;
-    if (world.ruleset) this.state.ruleset = world.ruleset;
+    this.state.ruleset = 'free';
     if (world.systemConfig && typeof world.systemConfig === 'object') {
       const curCfg = this.state.systemConfig || {};
       this.state.systemConfig = {
         ...curCfg,
         ...world.systemConfig,
+        preset: 'free',
         enabledTabs: {
-          ...(curCfg.enabledTabs || { skills: true, traits: true, inventory: true }),
+          ...(curCfg.enabledTabs || { skills: false, traits: false, inventory: true }),
           ...(world.systemConfig.enabledTabs || {})
         },
         customTabs: Array.isArray(world.systemConfig.customTabs) ? world.systemConfig.customTabs : [],
@@ -722,20 +759,36 @@ export const Service = {
       }
     } else {
       if (!this.state.systemConfig || typeof this.state.systemConfig !== 'object') this.state.systemConfig = {};
+      this.state.systemConfig.preset = 'free';
       this.state.systemConfig.vision = normalizeVisionConfig(this.state.systemConfig.vision || {});
     }
     if (Array.isArray(world.sheetSchema) && world.sheetSchema.length > 0) {
       this.state.sheetSchema = world.sheetSchema;
     }
-    if (this.state.systemConfig?.preset === 'free' && !Array.isArray(this.state.systemConfig.sheetBlocks)) {
+    if (!Array.isArray(this.state.systemConfig.sheetBlocks)) {
       this.ensureGenericBlocksInitialized(true);
     }
-    if (world.mapId) this.state.mapId = world.mapId;
-    if (world.activeMapKey) this.state.activeMapKey = world.activeMapKey;
+    if (world.mapId) {
+      const normalizedMapId = world.mapId === 'custom' || world.mapId === 'empty' ? world.mapId : 'empty';
+      this.state.mapId = normalizedMapId;
+      this.state.activeMapKey = normalizedMapId === 'custom'
+        ? (world.activeMapKey || 'custom')
+        : 'empty';
+    } else if (world.activeMapKey) {
+      this.state.activeMapKey = world.activeMapKey;
+    }
     this.state.sceneMode = world.sceneMode === 'narrative' ? 'narrative' : 'tactical';
     this.state.sceneWeather = normalizeWeatherType(world.sceneWeather);
     if (world.mapGrids && typeof world.mapGrids === 'object') this.state.mapGrids = world.mapGrids;
     if (typeof world.dynamicLighting === 'boolean') this.state.dynamicLighting = world.dynamicLighting;
+    if (world.sceneAmbientLight !== undefined) {
+      this.state.sceneAmbientLight = normalizeAmbientLight(world.sceneAmbientLight, 'day');
+    } else if (world.sceneLighting && typeof world.sceneLighting === 'object') {
+      const activeKey = this.state.activeMapKey || this.state.mapId || 'empty';
+      this.state.sceneAmbientLight = normalizeAmbientLight(world.sceneLighting[activeKey]?.ambient, 'day');
+    } else {
+      this.state.sceneAmbientLight = 'day';
+    }
     if (typeof world.rememberExplored === 'boolean') {
       this.state.rememberExplored = world.rememberExplored;
     } else {
@@ -743,7 +796,7 @@ export const Service = {
     }
     this.state.exploredMask = typeof world.exploredMask === 'string' ? world.exploredMask : '';
     this.state.exploredRev = Math.max(0, Math.trunc(Number(world.exploredRev) || 0));
-    if (Array.isArray(world.walls)) this.state.walls = world.walls;
+    if (Array.isArray(world.walls)) this.state.walls = normalizeWalls(world.walls);
     this.state.customMapUrl = world.customMapUrl || '';
     this.state.customMapSourceUrl = typeof world.customMapSourceUrl === 'string' ? world.customMapSourceUrl : '';
     if (this.state.customMapUrl) {
@@ -807,6 +860,22 @@ export const Service = {
     }
     if (Array.isArray(world.playerInvites)) this.state.playerInvites = world.playerInvites;
     if (Array.isArray(world.strokes)) this.state.strokes = world.strokes;
+    if (Array.isArray(world.mapLights)) {
+      const activeKey = this.getActiveSceneKey();
+      const incoming = world.mapLights
+        .filter((l) => l && l.id)
+        .map((l) => normalizeMapLight(l, activeKey));
+      if (this.state.role === 'gm' && world._redactedWorld && Array.isArray(this.state.mapLights)) {
+        const preserved = this.state.mapLights.filter(
+          (l) => l && (l.sceneKey !== activeKey || l.enabled === false) && !incoming.some((il) => il.id === l.id)
+        );
+        this.state.mapLights = [...incoming, ...preserved];
+      } else {
+        this.state.mapLights = incoming;
+      }
+    } else if (!silent) {
+      this.state.mapLights = [];
+    }
     if (Array.isArray(world.notes)) {
       if (this.state.role === 'gm' && Array.isArray(this.state.notes)) {
         const gmOnlyExisting = this.state.notes.filter((n) => n?.gmOnly && !world.notes.some((wn) => wn?.id === n.id));
@@ -885,7 +954,8 @@ export const Service = {
         dynamicLighting: this.state.dynamicLighting,
         rememberExplored: this.state.rememberExplored,
         exploredMask: this.state.exploredMask,
-        exploredRev: this.state.exploredRev
+        exploredRev: this.state.exploredRev,
+        ambient: this.state.sceneAmbientLight
       });
       if (world.gmScreen && typeof world.gmScreen === 'object') {
         this.state.gmScreen = JSON.parse(JSON.stringify(world.gmScreen));
@@ -998,7 +1068,7 @@ export const Service = {
       }
       this.state.customMapUrl = freshWebp;
       this.loadExternalMapImage(freshWebp);
-      this.notify({ redrawMap: true, flushVault: true });
+      this.notify({ redrawMap: true, flushVault: true, skipSceneTransition: true });
       return { updated: true, preservedCache: false };
     } catch (_) {
       return { updated: false, preservedCache: hadCache };
@@ -1090,7 +1160,8 @@ export const Service = {
             dynamicLighting: this.state.dynamicLighting,
             rememberExplored: this.state.rememberExplored,
             exploredMask: this.state.exploredMask,
-            exploredRev: this.state.exploredRev
+            exploredRev: this.state.exploredRev,
+            ambient: this.state.sceneAmbientLight
           }
         : customMap?.lighting) ||
       {};
@@ -1098,7 +1169,8 @@ export const Service = {
       dynamicLighting: Boolean(this.state.dynamicLighting),
       rememberExplored: visCfg.rememberExplored,
       exploredMask: '',
-      exploredRev: 0
+      exploredRev: 0,
+      ambient: isActive ? this.state.sceneAmbientLight : 'day'
     });
   },
 
@@ -1115,19 +1187,21 @@ export const Service = {
     if (customMap) {
       customMap.lighting = {
         dynamicLighting: next.dynamicLighting,
-        rememberExplored: next.rememberExplored
+        rememberExplored: next.rememberExplored,
+        ambient: next.ambient
       };
     }
 
     if (key === this.getActiveSceneKey()) {
       this.state.dynamicLighting = next.dynamicLighting;
+      this.state.sceneAmbientLight = next.ambient;
       this.state.rememberExplored = next.rememberExplored;
       this.state.exploredMask = next.exploredMask;
       this.state.exploredRev = next.exploredRev;
       if (broadcast && this.state.role === 'gm') {
         this.syncWorldToPeers();
       }
-      this.notify({ syncExplored: true, redrawFog: true });
+      this.notify({ syncExplored: true, redrawFog: true, redrawMap: Selector.isNarrativeScene(this.state) });
     } else {
       this.notify();
     }
@@ -1216,8 +1290,186 @@ export const Service = {
       dynamicLighting: this.state.dynamicLighting,
       rememberExplored: this.state.rememberExplored,
       exploredMask: this.state.exploredMask,
-      exploredRev: this.state.exploredRev
+      exploredRev: this.state.exploredRev,
+      ambient: this.state.sceneAmbientLight
     });
+  },
+
+  setSceneAmbientLight(ambient, sceneKey = '') {
+    if (this.state.role !== 'gm') return null;
+    const key = String(sceneKey || '').trim() || this.getActiveSceneKey();
+    const next = normalizeAmbientLight(ambient, 'day');
+    this.updateSceneLighting(key, { ambient: next }, { broadcast: true });
+    return next;
+  },
+
+  addMapLight(x, y, opts = {}) {
+    if (this.state.role !== 'gm') return null;
+    const key = String(opts.sceneKey || '').trim() || this.getActiveSceneKey();
+    if (!Array.isArray(this.state.mapLights)) this.state.mapLights = [];
+    const light = normalizeMapLight(
+      {
+        id: opts.id || `ml-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        sceneKey: key,
+        x,
+        y,
+        radiusMeters: opts.radiusMeters ?? 9,
+        tone: opts.tone || 'warm',
+        enabled: opts.enabled === true,
+        flicker: opts.flicker !== false
+      },
+      key
+    );
+    this.state.mapLights.push(light);
+    this.syncWorldToPeers();
+    this.notify({ redrawFog: true });
+    return light;
+  },
+
+  updateMapLight(lightId, patch = {}) {
+    if (this.state.role !== 'gm') return null;
+    const list = Array.isArray(this.state.mapLights) ? this.state.mapLights : [];
+    const idx = list.findIndex((l) => l && l.id === lightId);
+    if (idx < 0) return null;
+    const prev = list[idx];
+    const next = normalizeMapLight({ ...prev, ...patch, id: prev.id, sceneKey: prev.sceneKey }, prev.sceneKey);
+    list[idx] = next;
+    this.syncWorldToPeers();
+    this.notify({ redrawFog: true });
+    return next;
+  },
+
+  deleteMapLight(lightId) {
+    if (this.state.role !== 'gm') return false;
+    const list = Array.isArray(this.state.mapLights) ? this.state.mapLights : [];
+    const idx = list.findIndex((l) => l && l.id === lightId);
+    if (idx < 0) return false;
+    list.splice(idx, 1);
+    this.syncWorldToPeers();
+    this.notify({ redrawFog: true });
+    return true;
+  },
+
+  setStageLayer(layer) {
+    const next = layer === 'lights' ? 'lights' : layer === 'select' ? 'select' : 'walls';
+    this.state.stageLayer = next;
+    this.state.wallAnchor = null;
+    this.state.wallSelectBox = null;
+    if (next === 'select') {
+      this.state.wallMode = 'select';
+    } else {
+      this.state.selectedWallIds = [];
+      this.state.selectedMapLightIds = [];
+      if (next === 'walls' && this.state.wallMode === 'select') {
+        this.state.wallMode = 'draw';
+      }
+    }
+    this.notify({ redrawFog: true, skipVaultSave: true, skipPeerSync: true });
+    return next;
+  },
+
+  setStageSelectFilter(filter = 'all') {
+    const clean = filter === 'walls' ? 'walls' : filter === 'lights' ? 'lights' : 'all';
+    this.state.stageSelectFilter = clean;
+    if (clean === 'lights') {
+      this.state.selectedWallIds = [];
+    } else if (clean === 'walls') {
+      this.state.selectedMapLightIds = [];
+    }
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return clean;
+  },
+
+  setSelectedMapLightIds(ids = []) {
+    const validSet = new Set(Selector.getActiveMapLights(this.state, { includeDisabled: true }).map((l) => l.id));
+    this.state.selectedMapLightIds = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => validSet.has(id)))];
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+  },
+
+  setSelectedMapLightsEnabled(enabled, ids = null) {
+    if (this.state.role !== 'gm') return 0;
+    const rawIds = Array.isArray(ids) ? ids : this.state.selectedMapLightIds;
+    const idSet = new Set(Array.isArray(rawIds) ? rawIds : []);
+    if (idSet.size === 0) return 0;
+    const list = Array.isArray(this.state.mapLights) ? this.state.mapLights : [];
+    const targets = list.filter((l) => l && idSet.has(l.id));
+    if (targets.length === 0) return 0;
+    this.pushUndoSnapshot();
+    const nextEnabled = Boolean(enabled);
+    for (const l of targets) {
+      l.enabled = nextEnabled;
+    }
+    this.syncWorldToPeers();
+    this.notify({ redrawFog: true });
+    return targets.length;
+  },
+
+  removeMapLightsByIds(ids = []) {
+    if (this.state.role !== 'gm') return 0;
+    const idSet = new Set(Array.isArray(ids) ? ids : []);
+    if (idSet.size === 0 || !Array.isArray(this.state.mapLights)) return 0;
+    const before = this.state.mapLights.length;
+    const remaining = this.state.mapLights.filter((l) => !l || !idSet.has(l.id));
+    const removed = before - remaining.length;
+    if (removed === 0) return 0;
+    this.pushUndoSnapshot();
+    this.state.mapLights = remaining;
+    if (Array.isArray(this.state.selectedMapLightIds)) {
+      this.state.selectedMapLightIds = this.state.selectedMapLightIds.filter((id) => !idSet.has(id));
+    }
+    this.syncWorldToPeers();
+    this.notify({ redrawFog: true });
+    return removed;
+  },
+
+  deleteSelectedScenery() {
+    const wallIds = Array.isArray(this.state.selectedWallIds) ? [...this.state.selectedWallIds] : [];
+    const lightIds = Array.isArray(this.state.selectedMapLightIds) ? [...this.state.selectedMapLightIds] : [];
+    if (wallIds.length === 0 && lightIds.length === 0) {
+      return { walls: 0, lights: 0, total: 0 };
+    }
+    this.pushUndoSnapshot();
+    let walls = 0;
+    if (wallIds.length > 0 && Array.isArray(this.state.walls)) {
+      const wSet = new Set(wallIds);
+      const beforeW = this.state.walls.length;
+      this.state.walls = this.state.walls.filter((w) => !w || !wSet.has(w.id));
+      walls = beforeW - this.state.walls.length;
+      this.state.selectedWallIds = [];
+    }
+    let lights = 0;
+    if (lightIds.length > 0 && Array.isArray(this.state.mapLights)) {
+      const lSet = new Set(lightIds);
+      const beforeL = this.state.mapLights.length;
+      this.state.mapLights = this.state.mapLights.filter((l) => !l || !lSet.has(l.id));
+      lights = beforeL - this.state.mapLights.length;
+      this.state.selectedMapLightIds = [];
+    }
+    const total = walls + lights;
+    if (total > 0) {
+      this.recordEvent('ESCENOGRAFIA', `${total} elemento${total > 1 ? 's' : ''} eliminado${total > 1 ? 's' : ''}`);
+      this.syncWorldToPeers();
+      this.notify({ redrawFog: true });
+    }
+    return { walls, lights, total };
+  },
+
+  setAllSceneMapLightsEnabled(enabled) {
+    if (this.state.role !== 'gm') return 0;
+    const key = this.getActiveSceneKey();
+    const list = Array.isArray(this.state.mapLights) ? this.state.mapLights : [];
+    const nextEnabled = Boolean(enabled);
+    let count = 0;
+    for (const l of list) {
+      if (!l || (l.sceneKey && l.sceneKey !== key)) continue;
+      l.enabled = nextEnabled;
+      count += 1;
+    }
+    if (count > 0) {
+      this.syncWorldToPeers();
+      this.notify({ redrawFog: true });
+    }
+    return count;
   },
 
   setSceneWeather(weather, sceneKey = '') {
@@ -1268,7 +1520,7 @@ export const Service = {
     if (mapId === 'custom' && customUrl) {
       this.state.customMapUrl = customUrl;
       this.state.walls = savedLayers && Array.isArray(savedLayers.walls)
-        ? savedLayers.walls.map((w) => ({ ...w }))
+        ? normalizeWalls(savedLayers.walls)
         : [];
       this.loadExternalMapImage(customUrl);
     } else {
@@ -1276,8 +1528,8 @@ export const Service = {
       this.state.customMapSourceUrl = '';
       this.loadedMapImage = null;
       this.state.walls = savedLayers && Array.isArray(savedLayers.walls)
-        ? savedLayers.walls.map((w) => ({ ...w }))
-        : buildPresetWallsForMap(mapId);
+        ? normalizeWalls(savedLayers.walls)
+        : [];
     }
     this.state.strokes = savedLayers && Array.isArray(savedLayers.strokes)
       ? savedLayers.strokes.map((s) => ({
@@ -1305,13 +1557,16 @@ export const Service = {
         dynamicLighting: Boolean(this.state.dynamicLighting),
         rememberExplored: visCfg.rememberExplored,
         exploredMask: '',
-        exploredRev: 0
+        exploredRev: 0,
+        ambient: 'day'
       };
     const nextLighting = normalizeSceneLighting(savedLighting, {
       dynamicLighting: Boolean(this.state.dynamicLighting),
-      rememberExplored: visCfg.rememberExplored
+      rememberExplored: visCfg.rememberExplored,
+      ambient: 'day'
     });
     this.state.dynamicLighting = nextLighting.dynamicLighting;
+    this.state.sceneAmbientLight = nextLighting.ambient;
     this.state.rememberExplored = nextLighting.rememberExplored;
     this.state.exploredMask = nextLighting.exploredMask;
     this.state.exploredRev = nextLighting.exploredRev;
@@ -1500,20 +1755,59 @@ export const Service = {
     this.state.wallAnchor = null;
     if (tool !== 'wall') {
       this.state.selectedWallIds = [];
+      this.state.selectedMapLightIds = [];
       this.state.wallSelectBox = null;
     }
     this.notify({ redrawFog: prevTool === 'wall' || tool === 'wall' });
   },
 
   setWallMode(mode) {
-    const clean = mode === 'select' ? 'select' : 'draw';
+    const clean = mode === 'select' ? 'select' : mode === 'door' ? 'door' : 'draw';
     this.state.wallMode = clean;
     this.state.wallAnchor = null;
     this.state.wallSelectBox = null;
-    if (clean !== 'select') {
+    if (clean === 'select') {
+      this.state.stageLayer = 'select';
+    } else {
       this.state.selectedWallIds = [];
+      this.state.selectedMapLightIds = [];
+      if (this.state.stageLayer === 'select') {
+        this.state.stageLayer = 'walls';
+      }
     }
     this.notify({ skipVaultSave: true, skipPeerSync: true });
+  },
+
+  setWallDoorStampMode(door = 'normal') {
+    const clean = door === 'secret' ? 'secret' : 'normal';
+    this.state.wallDoorStampMode = clean;
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return clean;
+  },
+
+  insertDoorOnWall(wallId, anchorPt, currentPt = null, { doorMode = null, freehand = false } = {}) {
+    if (!this.isHostNetwork() || !Array.isArray(this.state.walls)) return null;
+    const idx = this.state.walls.findIndex((w) => w && w.id === wallId);
+    if (idx < 0) return null;
+    const wall = this.state.walls[idx];
+    const grid = normalizeGridConfig(this.state.grid);
+    const placement = computeDoorPlacementOnWall(wall, anchorPt, currentPt, {
+      cellSize: grid.cellSize,
+      snap: grid.snap && grid.type !== 'none',
+      freehand
+    });
+    if (!placement) return null;
+    const targetDoor = doorMode || this.state.wallDoorStampMode || 'normal';
+    const { segments, doorId } = splitWallForDoor(wall, placement, { doorMode: targetDoor });
+    if (segments.length === 0) return null;
+
+    this.pushUndoSnapshot();
+    this.state.walls.splice(idx, 1, ...segments);
+    const doorSeg = segments.find((s) => s.id === doorId) || null;
+    const isSecret = doorSeg && isWallSecretDoor(doorSeg);
+    this.recordEvent(isSecret ? 'PUERTA SECRETA' : 'PUERTA', isSecret ? 'Puerta secreta insertada' : 'Puerta insertada');
+    this.notify({ redrawFog: true });
+    return { door: doorSeg, segments };
   },
 
   setWallDrawKind(kind = 'wall') {
@@ -1533,6 +1827,25 @@ export const Service = {
     }
     this.notify({ skipVaultSave: true, skipPeerSync: true });
     return { mode: 'draw', kind: cleanKind, count: 0 };
+  },
+
+  setWallDrawDoor(door = 'none') {
+    const cleanDoor = normalizeDoorMode(door);
+    this.state.wallDrawDoor = cleanDoor;
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return cleanDoor;
+  },
+
+  applyWallDoor(door = 'none') {
+    const cleanDoor = normalizeDoorMode(door);
+    this.state.wallDrawDoor = cleanDoor;
+    const selIds = Array.isArray(this.state.selectedWallIds) ? this.state.selectedWallIds : [];
+    if (this.state.wallMode === 'select' && selIds.length > 0) {
+      const count = this.setWallsDoor(selIds, cleanDoor);
+      return { mode: 'transform', door: cleanDoor, count };
+    }
+    this.notify({ skipVaultSave: true, skipPeerSync: true });
+    return { mode: 'draw', door: cleanDoor, count: 0 };
   },
 
   deleteSelectedWalls() {
@@ -1605,7 +1918,7 @@ export const Service = {
     return targets.length;
   },
 
-  moveWallEndpoint(wallId, endKey, wx, wy, { commit = true, skipUndo = false } = {}) {
+  moveWallEndpoint(wallId, endKey, wx, wy, { commit = true, skipUndo = false, linkedEndpoints = null } = {}) {
     if (!this.isHostNetwork() || !Array.isArray(this.state.walls)) return null;
     const w = this.state.walls.find((x) => x && x.id === wallId);
     if (!w) return null;
@@ -1618,6 +1931,20 @@ export const Service = {
     } else {
       w.x2 = nx;
       w.y2 = ny;
+    }
+    if (Array.isArray(linkedEndpoints) && linkedEndpoints.length > 0) {
+      for (const link of linkedEndpoints) {
+        if (!link || !link.wallId) continue;
+        const lw = this.state.walls.find((x) => x && x.id === link.wallId);
+        if (!lw) continue;
+        if (link.endKey === 'start') {
+          lw.x1 = nx;
+          lw.y1 = ny;
+        } else {
+          lw.x2 = nx;
+          lw.y2 = ny;
+        }
+      }
     }
     if (commit) {
       this.recordEvent('MURO', 'Vértice ajustado');
@@ -1656,22 +1983,48 @@ export const Service = {
     const targets = this.state.walls.filter((w) => w && idSet.has(w.id));
     if (targets.length === 0) return 0;
     this.pushUndoSnapshot();
-    const isDoor = cleanKind === 'door' || cleanKind === 'secret';
     for (const w of targets) {
+      const norm = normalizeWall(w);
       w.kind = cleanKind;
-      if (!isDoor) {
-        w.open = false;
-        w.locked = false;
-      }
+      w.door = norm.door;
+      w.open = norm.open;
+      w.locked = norm.locked;
     }
     const labels = {
       wall: 'Muro sólido',
-      terrain: 'Pilar / terreno',
-      door: 'Puerta',
-      secret: 'Puerta secreta',
-      invisible: 'Invisible / Reja'
+      terrain: 'Relieve',
+      invisible: 'Translúcido'
     };
     this.recordEvent('MURO', `${targets.length} → ${labels[cleanKind] || 'Muro'}`);
+    this.notify({ redrawFog: true });
+    return targets.length;
+  },
+
+  setWallsDoor(wallIds = [], door = 'none') {
+    if (!Array.isArray(this.state.walls) || !Array.isArray(wallIds) || wallIds.length === 0) return 0;
+    const cleanDoor = normalizeDoorMode(door);
+    const idSet = new Set(wallIds);
+    const targets = this.state.walls.filter((w) => w && idSet.has(w.id));
+    if (targets.length === 0) return 0;
+    this.pushUndoSnapshot();
+    const isDoor = cleanDoor !== 'none';
+    for (const w of targets) {
+      w.kind = normalizeWallKind(w.kind);
+      w.door = cleanDoor;
+      if (!isDoor) {
+        w.open = false;
+        w.locked = false;
+      } else {
+        w.open = Boolean(w.open);
+        w.locked = Boolean(w.locked);
+      }
+    }
+    const labels = {
+      none: 'Sin puerta',
+      normal: 'Puerta',
+      secret: 'Puerta secreta'
+    };
+    this.recordEvent('MURO', `${targets.length} → ${labels[cleanDoor] || 'Sin puerta'}`);
     this.notify({ redrawFog: true });
     return targets.length;
   },
@@ -1699,10 +2052,13 @@ export const Service = {
     this.updateSceneLighting(this.getActiveSceneKey(), { dynamicLighting: nextDyn }, { broadcast: true });
   },
 
-  addWallSegment(x1, y1, x2, y2, kind = null) {
+  addWallSegment(x1, y1, x2, y2, kind = null, door = null) {
     if (Math.hypot(x2 - x1, y2 - y1) < 10) return;
     const rawKind = kind || this.state.wallDrawKind || 'wall';
     const cleanKind = normalizeWallKind(rawKind);
+    const inferredLegacyDoor = !door && (rawKind === 'door' ? 'normal' : rawKind === 'secret' ? 'secret' : null);
+    const rawDoor = door ?? inferredLegacyDoor ?? this.state.wallDrawDoor ?? 'none';
+    const cleanDoor = normalizeDoorMode(rawDoor);
     this.pushUndoSnapshot();
     this.state.walls.push({
       id: `wall-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
@@ -1711,34 +2067,39 @@ export const Service = {
       x2,
       y2,
       kind: cleanKind,
-      open: false
+      door: cleanDoor,
+      open: false,
+      locked: false
     });
     const labels = {
-      wall: 'Muro añadido',
-      terrain: 'Pilar / terreno añadido',
-      door: 'Puerta añadida',
-      secret: 'Puerta secreta añadida',
-      invisible: 'Invisible / reja añadido'
+      wall: 'Muro sólido añadido',
+      terrain: 'Relieve añadido',
+      invisible: 'Translúcido añadido'
     };
-    this.recordEvent('MURO', labels[cleanKind] || 'Muro añadido');
+    const doorSuffix = cleanDoor === 'secret' ? ' con puerta secreta' : cleanDoor === 'normal' ? ' con puerta' : '';
+    this.recordEvent('MURO', `${labels[cleanKind] || 'Muro añadido'}${doorSuffix}`);
     this.notify({ redrawFog: true });
   },
 
   toggleDoor(wallId) {
     const isGm = this.state.role === 'gm';
     const door = (this.state.walls || []).find(
-      (w) => w.id === wallId && (w.kind === 'door' || (isGm && w.kind === 'secret'))
+      (w) => w && w.id === wallId && isWallDoor(w) && (isGm || getWallDoorMode(w) === 'normal')
     );
     if (!door) return null;
     if (door.locked && !isGm) return null;
+    if (!isGm && !Selector.canPlayerReachDoor(this.state, door)) return null;
     this.pushUndoSnapshot();
+    const norm = normalizeWall(door);
+    door.kind = norm.kind;
+    door.door = norm.door;
     if (door.locked && isGm) {
       door.locked = false;
       door.open = true;
     } else {
       door.open = !door.open;
     }
-    const prefix = door.kind === 'secret' ? 'PUERTA SECRETA' : 'PUERTA';
+    const prefix = isWallSecretDoor(door) ? 'PUERTA SECRETA' : 'PUERTA';
     this.recordEvent(prefix, door.open ? 'Abierta' : 'Cerrada');
     this.notify({ redrawFog: true });
     return door;
@@ -1746,14 +2107,15 @@ export const Service = {
 
   toggleDoorLocked(wallId) {
     if (this.state.role !== 'gm') return null;
-    const door = (this.state.walls || []).find(
-      (w) => w.id === wallId && (w.kind === 'door' || w.kind === 'secret')
-    );
+    const door = (this.state.walls || []).find((w) => w && w.id === wallId && isWallDoor(w));
     if (!door) return null;
     this.pushUndoSnapshot();
+    const norm = normalizeWall(door);
+    door.kind = norm.kind;
+    door.door = norm.door;
     door.locked = !door.locked;
     if (door.locked) door.open = false;
-    const prefix = door.kind === 'secret' ? 'PUERTA SECRETA' : 'PUERTA';
+    const prefix = isWallSecretDoor(door) ? 'PUERTA SECRETA' : 'PUERTA';
     this.recordEvent(prefix, door.locked ? 'Bloqueada' : 'Desbloqueada');
     this.notify({ redrawFog: true });
     return door;
@@ -1763,14 +2125,15 @@ export const Service = {
     if (this.state.role !== 'gm') return 0;
     const rawIds = Array.isArray(wallIds) ? wallIds : this.state.selectedWallIds;
     const idSet = new Set(Array.isArray(rawIds) ? rawIds : []);
-    const doors = (this.state.walls || []).filter(
-      (w) => w && idSet.has(w.id) && (w.kind === 'door' || w.kind === 'secret')
-    );
+    const doors = (this.state.walls || []).filter((w) => w && idSet.has(w.id) && isWallDoor(w));
     if (doors.length === 0) return 0;
     this.pushUndoSnapshot();
     const allLocked = doors.every((d) => Boolean(d.locked));
     const nextLocked = !allLocked;
     for (const d of doors) {
+      const norm = normalizeWall(d);
+      d.kind = norm.kind;
+      d.door = norm.door;
       d.locked = nextLocked;
       if (nextLocked) d.open = false;
     }

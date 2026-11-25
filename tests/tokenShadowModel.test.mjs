@@ -8,7 +8,7 @@ const {
   computeContactShadowModulation,
   buildShadowCacheKey,
   resolveDynamicShadowMode
-} = await import('../js/utils/tokenShadowModel.js?v=20261123a7');
+} = await import('../js/utils/tokenShadowModel.js?v=20261125a1');
 
 test('hasWallOcclusion blocks solid walls and closed doors, while letting light pass open doors', () => {
   const solidWall = [{ id: 'w1', kind: 'wall', x1: 200, y1: 0, x2: 200, y2: 400 }];

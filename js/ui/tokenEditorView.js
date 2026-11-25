@@ -7,7 +7,7 @@ import {
   TokenComposer,
   computeDrawTransform,
   getDefaultFitMode
-} from '../utils/tokenComposer.js?v=20261123a7';
+} from '../utils/tokenComposer.js?v=20261125a1';
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 3.5;

@@ -2,16 +2,16 @@
    GM SCREEN CONFIG VIEW: OPCIONES DE PANTALLA EN SISTEMA Y REGLAS
    ========================================================================== */
 
-import { GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 export const GmScreenConfigViewMethods = {
   renderGmScreenConfigPane(state) {
     const esc = (v) => this.escapeHtml(v ?? '');
     const gm = Selector.getGmScreenState(state);
-    const presetKey = state.systemConfig?.preset || (state.ruleset === 'free' ? 'free' : 'dnd55');
-    const isGeneric = presetKey === 'free';
+    const presetKey = 'free';
+    const isGeneric = true;
 
     const renderSwitch = (attrsHtml, checked) => `
       <span class="portal-switch">

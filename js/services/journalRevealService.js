@@ -2,15 +2,15 @@
    JOURNAL REVEAL SERVICE: REVELACIÓN PROGRESIVA, APUNTES Y SYNC DIRIGIDO
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
 import {
   canSeatSeeJournalBlock,
   collectPlayerAuthorizedMedia,
   hashMediaSource,
   validatePlayerSnapshotAsset
-} from '../utils/worldRedaction.js?v=20261123a7';
-import { makeJId } from './journalService.js?v=20261123a7';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+} from '../utils/worldRedaction.js?v=20261125a1';
+import { makeJId } from './journalService.js?v=20261125a1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261125a1';
 
 export const JournalRevealServiceMethods = {
   buildRevealedNoteForSeat(gmNote, seatKey) {

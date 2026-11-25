@@ -2,24 +2,27 @@
    TOKEN SERVICE: FICHAS, INVENTARIO, STATS, HABILIDADES Y VISIBILIDAD
    ========================================================================== */
 
-import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261123a7';
+import { COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261125a1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261125a1';
 import {
+  DEFAULT_DARKVISION_METERS,
   formatDistance,
-  legacyLightPxToMeters
-} from '../utils/lightingModel.js?v=20261123a7';
+  legacyLightPxToMeters,
+  resolveTokenDarkvisionMeters
+} from '../utils/lightingModel.js?v=20261125a1';
 import {
   buildActorTemplateFromToken,
   clampTokenSize,
   cloneInventoryForSpawn,
   makeUniqueTokenId,
+  normalizeItemUsage,
   normalizeTemplateStats,
   resolveNextInstanceName,
   resolveStarterItemsInventory
-} from '../utils/tokenTemplateSync.js?v=20261123a7';
-import { resolveMovementAgainstWalls } from '../utils/wallGeometry.js?v=20261123a7';
+} from '../utils/tokenTemplateSync.js?v=20261125a1';
+import { resolveMovementAgainstWalls } from '../utils/wallGeometry.js?v=20261125a1';
 
 export const TokenServiceMethods = {
   selectToken(tokenId, openSheet = true) {
@@ -321,15 +324,12 @@ export const TokenServiceMethods = {
       ? cloneInventoryForSpawn(sourceTpl.inventory, { freshUids: !isAlly })
       : resolveStarterItemsInventory(sourceTpl.starterItems, this.state.customItems, COMPENDIUM_ITEMS);
 
-    const preset = this.state.systemConfig?.preset || this.state.ruleset || 'dnd55';
     const initialStats = normalizeTemplateStats(sourceTpl.stats);
-    if (preset !== 'dnd55') {
-      Selector.getSheetStatsDef(this.state).forEach((def) => {
-        if (initialStats[def.key] === undefined) {
-          initialStats[def.key] = Number(sourceTpl.stats?.[def.key]) || 0;
-        }
-      });
-    }
+    Selector.getSheetStatsDef(this.state).forEach((def) => {
+      if (initialStats[def.key] === undefined) {
+        initialStats[def.key] = Number(sourceTpl.stats?.[def.key]) || 0;
+      }
+    });
 
     const sysBlocks = Array.isArray(this.state.systemConfig?.sheetBlocks)
       ? Selector.getSystemSheetBlocks(this.state)
@@ -398,6 +398,8 @@ export const TokenServiceMethods = {
           ? Math.max(0, Math.min(60, Number(sourceTpl.visionMeters)))
           : null,
       lightMeters: Math.max(0, Math.min(60, Number(sourceTpl.lightMeters) || 0)),
+      darkvisionMeters: resolveTokenDarkvisionMeters(sourceTpl),
+      darkvision: resolveTokenDarkvisionMeters(sourceTpl) > 0,
       imageUrl: directImg,
       mediaId,
       publicDescription: String(sourceTpl.publicDescription || ''),
@@ -468,11 +470,15 @@ export const TokenServiceMethods = {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok || !itemTpl) return null;
     if (!Array.isArray(tok.inventory)) tok.inventory = [];
+    const { usageMode, maxUses } = normalizeItemUsage(itemTpl);
     const invEntry = {
       uid: `inv-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 99)}`,
       key: itemTpl.key || 'custom_item',
       name: itemTpl.name,
       kind: itemTpl.kind || 'weapon',
+      usageMode,
+      maxUses,
+      ...(usageMode !== 'permanent' ? { uses: maxUses } : {}),
       badge: itemTpl.badge || itemTpl.formula || 'ATQ +2',
       message: String(itemTpl.message || '').trim(),
       formula: String(itemTpl.formula || '').trim(),
@@ -499,60 +505,138 @@ export const TokenServiceMethods = {
     return { token: tok, item: invEntry };
   },
 
+  _consumeInventoryItemUse(tok, inv) {
+    if (!tok || !inv) return { consumed: false, removed: false, uses: 0 };
+    const { usageMode, maxUses } = normalizeItemUsage(inv);
+    if (usageMode === 'permanent') return { consumed: false, removed: false, uses: 0 };
+    const curUses = inv.uses !== undefined ? Math.max(0, Math.trunc(Number(inv.uses) || 0)) : maxUses;
+    const nextUses = Math.max(0, curUses - 1);
+    inv.usageMode = usageMode;
+    inv.maxUses = maxUses;
+    if (usageMode === 'consumable' && nextUses <= 0) {
+      tok.inventory = (tok.inventory || []).filter((i) => i.uid !== inv.uid);
+      this.applyTokenPassiveBonus(tok, inv, -1);
+      return { consumed: true, removed: true, uses: 0 };
+    }
+    inv.uses = nextUses;
+    return { consumed: true, removed: false, uses: nextUses };
+  },
+
+  adjustTokenItemUses(tokenId, invUid, delta) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok || !Array.isArray(tok.inventory)) return null;
+    const inv = tok.inventory.find((i) => i.uid === invUid);
+    if (!inv) return null;
+    const { usageMode, maxUses } = normalizeItemUsage(inv);
+    if (usageMode === 'permanent') return null;
+    const curUses = inv.uses !== undefined ? Math.max(0, Math.trunc(Number(inv.uses) || 0)) : maxUses;
+    const nextUses = Math.max(0, Math.min(maxUses, curUses + Math.trunc(Number(delta) || 0)));
+    inv.usageMode = usageMode;
+    inv.maxUses = maxUses;
+    if (usageMode === 'consumable' && nextUses <= 0) {
+      tok.inventory = tok.inventory.filter((i) => i.uid !== invUid);
+      this.applyTokenPassiveBonus(tok, inv, -1);
+      this.notify({ redrawFog: Boolean(inv.lightMeters) });
+      return { removed: true, uses: 0 };
+    }
+    inv.uses = nextUses;
+    this.notify();
+    return { removed: false, uses: nextUses };
+  },
+
+  rechargeTokenItem(tokenId, invUid) {
+    const tok = this.state.tokens.find((t) => t.id === tokenId);
+    if (!tok || !Array.isArray(tok.inventory)) return null;
+    const inv = tok.inventory.find((i) => i.uid === invUid);
+    if (!inv) return null;
+    const { usageMode, maxUses } = normalizeItemUsage(inv);
+    if (usageMode === 'permanent') return null;
+    inv.usageMode = usageMode;
+    inv.maxUses = maxUses;
+    inv.uses = maxUses;
+    this.recordEvent('RECARGAR_OBJETO', `${tok.name} · ${inv.name} (${maxUses}/${maxUses})`);
+    this.notify();
+    return inv;
+  },
+
   useTokenInventoryItem(tokenId, invUid) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok || !Array.isArray(tok.inventory)) return '';
     const inv = tok.inventory.find((i) => i.uid === invUid);
     if (!inv) return '';
 
+    const { usageMode, maxUses } = normalizeItemUsage(inv);
+    const curUses = inv.uses !== undefined ? Math.max(0, Math.trunc(Number(inv.uses) || 0)) : maxUses;
+    if (usageMode === 'charges' && curUses <= 0) {
+      return `${inv.name} sin cargas (0/${maxUses}).`;
+    }
+
     const noteSuffix = inv.message ? ` — ${inv.message}` : '';
 
-    if ((Array.isArray(inv.steps) && inv.steps.length > 0) || (inv.message && inv.kind !== 'consumable' && !inv.formula && !(inv.die > 0))) {
+    if ((Array.isArray(inv.steps) && inv.steps.length > 0) || (inv.message && usageMode === 'permanent' && !inv.formula && !(inv.die > 0))) {
       this.startItemSequence(tokenId, inv);
-      if (inv.kind === 'consumable') {
-        tok.inventory = tok.inventory.filter((i) => i.uid !== invUid);
-        this.notify();
+      if (usageMode !== 'permanent') {
+        this._consumeInventoryItemUse(tok, inv);
+        this.notify({ redrawFog: Boolean(inv.lightMeters) });
       }
       return '';
     }
 
     if (inv.formula) {
       const roll = this.rollFormula(inv.formula, tok, `${tok.name} · ${inv.name}`, inv.message);
-      if (inv.kind === 'consumable') {
-        const healAmt = inv.heal > 0 ? inv.heal : Math.max(0, roll ? roll.total : 0);
-        if (healAmt > 0) {
-          const prevHp = tok.hp;
-          tok.hp = Math.min(tok.maxHp, tok.hp + healAmt);
-          tok.inventory = tok.inventory.filter((i) => i.uid !== invUid);
-          this.notify();
-          return `${tok.name} usa ${inv.name} (+${tok.hp - prevHp} HP).`;
+      if (usageMode !== 'permanent') {
+        if (inv.kind === 'consumable' || inv.heal > 0) {
+          const healAmt = inv.heal > 0 ? inv.heal : Math.max(0, roll ? roll.total : 0);
+          if (healAmt > 0) {
+            const prevHp = tok.hp;
+            tok.hp = Math.min(tok.maxHp, tok.hp + healAmt);
+            this._consumeInventoryItemUse(tok, inv);
+            this.notify({ redrawFog: Boolean(inv.lightMeters) });
+            return `${tok.name} usa ${inv.name} (+${tok.hp - prevHp} HP).`;
+          }
         }
+        this._consumeInventoryItemUse(tok, inv);
+        this.notify({ redrawFog: Boolean(inv.lightMeters) });
       }
       return '';
     }
 
-    if (inv.kind === 'consumable' && inv.heal > 0) {
+    if (inv.heal > 0) {
       const prevHp = tok.hp;
       tok.hp = Math.min(tok.maxHp, tok.hp + inv.heal);
-      tok.inventory = tok.inventory.filter((i) => i.uid !== invUid);
+      this._consumeInventoryItemUse(tok, inv);
       const healed = tok.hp - prevHp;
       if (inv.die > 0) {
         this.rollDice(inv.die, `${tok.name} · ${inv.name}`, inv.message, inv.bonusMod || 0);
       }
       this.recordEvent('USAR_OBJETO', `${tok.name} usa ${inv.name}${noteSuffix} (+${healed} HP)`);
-      this.notify();
+      this.notify({ redrawFog: Boolean(inv.lightMeters) });
       return `${tok.name} usa ${inv.name}${noteSuffix} (+${healed} HP).`;
     }
 
     if (inv.die > 0) {
       this.rollDice(inv.die, `${tok.name} · ${inv.name}`, inv.message, inv.bonusMod || 0);
+      if (usageMode !== 'permanent') {
+        this._consumeInventoryItemUse(tok, inv);
+        this.notify({ redrawFog: Boolean(inv.lightMeters) });
+      }
       return '';
     }
 
     if (inv.message) {
       this.recordEvent('USAR_OBJETO', `${tok.name} · ${inv.name}: ${inv.message}`);
-      this.notify();
+      if (usageMode !== 'permanent') {
+        this._consumeInventoryItemUse(tok, inv);
+      }
+      this.notify({ redrawFog: Boolean(inv.lightMeters) });
       return `${tok.name} usa ${inv.name}: ${inv.message}`;
+    }
+
+    if (usageMode !== 'permanent') {
+      const res = this._consumeInventoryItemUse(tok, inv);
+      this.recordEvent('USAR_OBJETO', `${tok.name} usa ${inv.name}`);
+      this.notify({ redrawFog: Boolean(inv.lightMeters) });
+      return res.removed ? `${tok.name} consume ${inv.name}.` : `${tok.name} usa ${inv.name}.`;
     }
 
     return `${inv.name} equipado en ${tok.name}.`;
@@ -725,47 +809,6 @@ export const TokenServiceMethods = {
     this.notify();
   },
 
-  loadDnd55Skills(tokenId) {
-    const tok = this.state.tokens.find((t) => t.id === tokenId);
-    if (!tok) return 0;
-    if (!Array.isArray(tok.skills)) tok.skills = [];
-    const existing = new Set(tok.skills.map((s) => String(s.name || '').toLowerCase()));
-    const dnd55 = [
-      ['Acrobacias', 'dex'],
-      ['Atletismo', 'str'],
-      ['C. Arcano', 'int'],
-      ['Engaño', 'cha'],
-      ['Historia', 'int'],
-      ['Interpretación', 'cha'],
-      ['Intimidación', 'cha'],
-      ['Investigación', 'int'],
-      ['Juego de Manos', 'dex'],
-      ['Medicina', 'wis'],
-      ['Naturaleza', 'int'],
-      ['Percepción', 'wis'],
-      ['Perspicacia', 'wis'],
-      ['Persuasión', 'cha'],
-      ['Religión', 'int'],
-      ['Sigilo', 'dex'],
-      ['Supervivencia', 'wis'],
-      ['Trato con Animales', 'wis']
-    ];
-    let added = 0;
-    for (const [name, attr] of dnd55) {
-      if (existing.has(name.toLowerCase())) continue;
-      tok.skills.push({
-        id: `sk-${attr}-${Date.now().toString(36).slice(-3)}-${added}`,
-        name,
-        attr,
-        prof: 0,
-        mod: 0
-      });
-      added += 1;
-    }
-    this.notify();
-    return added;
-  },
-
   toggleTokenHidden(tokenId) {
     const tok = this.state.tokens.find((t) => t.id === tokenId);
     if (!tok) return;
@@ -869,13 +912,37 @@ export const TokenServiceMethods = {
     const clamped = Number.isFinite(n) ? Math.round(Math.max(0, Math.min(60, n)) * 100) / 100 : 0;
     tok.lightMeters = clamped;
     tok.lightRadius = 0;
+    this.propagateTokenPatchToSceneLayers?.(tok.id, { lightMeters: clamped, lightRadius: 0 });
     const visionCfg = Selector.getSystemVisionConfig(this.state);
     this.recordEvent(
       'LUZ_FICHA',
       `${tok.name}: ${clamped > 0 ? formatDistance(clamped, visionCfg.distanceUnit) : 'Apagada'}`
     );
-    this.notify({ redrawFog: true });
+    this.notify({ redrawFog: true, flushVault: true });
     return clamped;
+  },
+
+  setTokenDarkvisionMeters(tokenId, meters) {
+    const tok = (this.state.tokens || []).find((t) => t.id === tokenId);
+    if (!tok || !this.canControlToken(tok)) return 0;
+    const n = Number(meters);
+    const clamped = Number.isFinite(n) ? Math.round(Math.max(0, Math.min(60, n)) * 100) / 100 : 0;
+    tok.darkvisionMeters = clamped;
+    tok.darkvision = clamped > 0;
+    this.propagateTokenPatchToSceneLayers?.(tok.id, { darkvisionMeters: clamped, darkvision: clamped > 0 });
+    const visionCfg = Selector.getSystemVisionConfig(this.state);
+    this.recordEvent(
+      'VISION_OSCURA_FICHA',
+      `${tok.name}: ${clamped > 0 ? formatDistance(clamped, visionCfg.distanceUnit) : 'Apagada'}`
+    );
+    this.notify({ redrawFog: true, flushVault: true });
+    return clamped;
+  },
+
+  setTokenDarkvision(tokenId, enabled) {
+    const next = Boolean(enabled);
+    const res = this.setTokenDarkvisionMeters(tokenId, next ? DEFAULT_DARKVISION_METERS : 0);
+    return res > 0;
   },
 
   cycleTokenAura(tokenId) {
@@ -931,6 +998,8 @@ export const TokenServiceMethods = {
       tpl && tpl.visionMeters !== null && tpl.visionMeters !== undefined && tpl.visionMeters !== '' && Number.isFinite(Number(tpl.visionMeters))
         ? Math.max(0, Math.min(60, Number(tpl.visionMeters)))
         : null;
+    tok.darkvisionMeters = resolveTokenDarkvisionMeters(tpl);
+    tok.darkvision = tok.darkvisionMeters > 0;
     this.recordEvent('FICHA_BASE', `${tok.name}: valores temporales restablecidos`);
     this.notify({ redrawFog: true });
     return true;

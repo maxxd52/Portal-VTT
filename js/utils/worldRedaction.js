@@ -2,8 +2,8 @@
    WORLD REDACTION & MEDIA AUTHORIZATION (PURE HELPERS)
    ========================================================================== */
 
-import { DriveUrlHelper } from './driveUrlHelper.js?v=20261123a7';
-import { resolveTokenLightMeters } from './lightingModel.js?v=20261123a7';
+import { DriveUrlHelper } from './driveUrlHelper.js?v=20261125a1';
+import { resolveTokenDarkvisionMeters, resolveTokenLightMeters } from './lightingModel.js?v=20261125a1';
 
 /**
  * Computes a deterministic short asset identifier for an image URL or Data URL.
@@ -118,6 +118,8 @@ export function redactTokenForNonOwner(tok) {
       tok.visionMeters !== null && tok.visionMeters !== undefined && tok.visionMeters !== ''
         ? Number(tok.visionMeters)
         : null,
+    darkvision: resolveTokenDarkvisionMeters(tok) > 0,
+    darkvisionMeters: resolveTokenDarkvisionMeters(tok),
     lightMeters,
     hpPct,
     defeated,
@@ -156,6 +158,25 @@ export function mergeRedactedTokensPreservingGmPrivate(existingTokens, incomingT
 export function filterVisibleMapNotes(notes, includeGmOnly = false) {
   if (!Array.isArray(notes)) return [];
   const filtered = includeGmOnly ? notes : notes.filter((n) => !n?.gmOnly);
+  return JSON.parse(JSON.stringify(filtered));
+}
+
+/**
+ * Filters fixed map lights by scene and enabled state for P2P redaction.
+ * @param {Array<object>} mapLights
+ * @param {string} sceneKey
+ * @param {{ includeDisabled?: boolean }} [opts]
+ * @returns {Array<object>}
+ */
+export function filterVisibleMapLights(mapLights, sceneKey = '', { includeDisabled = false } = {}) {
+  if (!Array.isArray(mapLights)) return [];
+  const key = String(sceneKey || '').trim();
+  const filtered = mapLights.filter((l) => {
+    if (!l) return false;
+    if (key && l.sceneKey && l.sceneKey !== key) return false;
+    if (!includeDisabled && l.enabled === false) return false;
+    return true;
+  });
   return JSON.parse(JSON.stringify(filtered));
 }
 

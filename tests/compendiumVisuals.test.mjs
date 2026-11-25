@@ -6,7 +6,7 @@ import path from 'node:path';
 import {
   resolveItemBadgeStyle,
   resolveMapCardDescriptor
-} from '../js/utils/compendiumCardModel.js?v=20261123a7';
+} from '../js/utils/compendiumCardModel.js?v=20261125a1';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');

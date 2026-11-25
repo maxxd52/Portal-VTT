@@ -2,23 +2,33 @@
    CONTEXT MENU VIEW: APPLE-STYLE UNIFIED CONTEXTUAL MENU ENGINE
    ========================================================================== */
 
-import { COMPENDIUM_ACTORS } from '../data/compendium.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
-import { formatDistance, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
+import {
+  AMBIENT_LIGHT_META,
+  MAP_LIGHT_ANIMATION_META,
+  MAP_LIGHT_ANIMATIONS,
+  MAP_LIGHT_TONE_META,
+  MAP_LIGHT_TONES,
+  formatDistance,
+  resolveTokenDarkvisionMeters,
+  resolveTokenLightMeters,
+  stepDistanceMeters
+} from '../utils/lightingModel.js?v=20261125a1';
 import {
   computeContextMenuPosition,
   buildDiceDieMenuSpec,
   buildDiceBarMenuSpec,
   buildMapMenuSpec,
+  buildMapLightMenuSpec,
   buildTokenMenuSpec,
   buildMultiTokenMenuSpec,
   buildWallMenuSpec,
   parseHpInputExpression,
   stepPresetValue
-} from '../utils/contextMenuModel.js?v=20261123a7';
-import { WEATHER_META, normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
-import { renderUiLineIcon, hasUiLineIcon } from '../utils/uiIcons.js?v=20261123a7';
+} from '../utils/contextMenuModel.js?v=20261125a1';
+import { WEATHER_META, normalizeWeatherType } from '../utils/weatherEngine.js?v=20261125a1';
+import { renderUiLineIcon, hasUiLineIcon } from '../utils/uiIcons.js?v=20261125a1';
 
 export const ContextMenuViewMethods = {
   positionContextMenu(clientX, clientY) {
@@ -95,6 +105,7 @@ export const ContextMenuViewMethods = {
   },
 
   openContextMenu(clientX, clientY) {
+    this._lastCtxClientPos = { x: clientX, y: clientY };
     const state = Service.state;
     const isTokenCtx = Boolean(this.ctxTargetTokenId);
     const tok = isTokenCtx ? state.tokens.find((t) => t.id === this.ctxTargetTokenId) : null;
@@ -159,45 +170,37 @@ export const ContextMenuViewMethods = {
     const curSize = Math.max(1, Math.min(4, Math.round(Number(tok.size) || 1)));
     const curAura = Number(tok.auraRadius) || 0;
     const unit = visionCfg.distanceUnit || 'm';
-    const curVis =
-      tok.visionMeters !== null && tok.visionMeters !== undefined && tok.visionMeters !== '' && Number.isFinite(Number(tok.visionMeters))
-        ? Number(tok.visionMeters)
-        : null;
+    const dvMeters = resolveTokenDarkvisionMeters(tok);
     const tpl = tok.actorKey
       ? (state.customActors || []).find((a) => a && a.key === tok.actorKey)
       : null;
     const baseSize = Math.max(1, Math.min(4, Math.round(Number(tpl?.size) || 1)));
     const baseLight = Math.max(0, Math.min(60, Number(tpl?.lightMeters) || 0));
-    const baseVis =
-      tpl && tpl.visionMeters !== null && tpl.visionMeters !== undefined && tpl.visionMeters !== '' && Number.isFinite(Number(tpl.visionMeters))
-        ? Number(tpl.visionMeters)
-        : null;
+    const baseDv = resolveTokenDarkvisionMeters(tpl);
     const hasTempOverride =
       (isGm && curSize !== baseSize) ||
       Math.abs(lightMeters - baseLight) > 0.05 ||
-      curVis !== baseVis;
+      Math.abs(dvMeters - baseDv) > 0.05;
 
-    const lightSteps = [0, 3, 6, 9, 12, 18, 24];
-    const visionSteps = [null, 0, 3, 6, 9, 12, 18, 24, 36];
     const sizeSteps = [1, 2, 3, 4];
     const auraSteps = [0, 90, 135];
 
     const lightValTxt = lightMeters > 0 ? formatDistance(lightMeters, unit) : 'Off';
-    const visValTxt = curVis === null ? 'Base' : curVis === 0 ? '0' : formatDistance(curVis, unit);
+    const dvValTxt = dvMeters > 0 ? formatDistance(dvMeters, unit) : 'Off';
     const auraValTxt = curAura === 135 ? '15 ft' : curAura === 90 ? '10 ft' : curAura > 0 ? `${curAura}px` : 'Off';
 
     const triLeft = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="10.5,3.5 4.5,8 10.5,12.5"/></svg>';
     const triRight = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="5.5,3.5 11.5,8 5.5,12.5"/></svg>';
-    const renderStepper = (propKey, iconKey, label, valTxt) => `
+    const renderStepper = (propKey, iconKey, label, valTxt, stepTitle = '') => `
       <div class="portal-subpanel rounded-xl px-2 py-1.5 flex flex-col gap-1">
         <span class="opacity-75 font-medium flex items-center gap-1.5 text-[10px] leading-none">
           ${renderUiLineIcon(iconKey, 'w-3 h-3 shrink-0')}
           <span class="truncate">${label}</span>
         </span>
         <div class="flex items-center justify-between gap-1">
-          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="-1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Reducir ${label}">${triLeft}</button>
+          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="-1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Reducir ${label}" ${stepTitle ? `title="${stepTitle}"` : ''}>${triLeft}</button>
           <span class="font-mono-tech text-[10px] font-semibold tabular-nums select-none truncate">${this.escapeHtml(valTxt)}</span>
-          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Aumentar ${label}">${triRight}</button>
+          <button type="button" data-ctx-step="${propKey}" data-ctx-dir="1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Aumentar ${label}" ${stepTitle ? `title="${stepTitle}"` : ''}>${triRight}</button>
         </div>
       </div>
     `;
@@ -232,9 +235,9 @@ export const ContextMenuViewMethods = {
           .join('')}
       </div>
       <div class="grid grid-cols-2 gap-1.5 pt-1.5 border-t text-[10.5px]" style="border-color: var(--hairline);">
-        ${renderStepper('light', 'bulb', 'Luz', lightValTxt)}
+        ${renderStepper('light', 'bulb', 'Luz', lightValTxt, '±1 (Shift: ±5)')}
         ${isGm ? renderStepper('size', 'maximize', 'Tamaño', `${curSize}×${curSize}`) : ''}
-        ${isAlly ? renderStepper('vision', 'eye', 'Visión', visValTxt) : ''}
+        ${isAlly ? renderStepper('darkvision', 'moon', 'Visión oscura', dvValTxt, '±1 (Shift: ±5)') : ''}
         ${renderStepper('aura', 'circle-dot', 'Aura', auraValTxt)}
         ${hasTempOverride ? `
         <button type="button" data-ctx-reset-temp class="col-span-2 portal-btn portal-subpanel w-full py-1 rounded-lg text-[9.5px] opacity-85 hover:opacity-100 flex items-center justify-center gap-1" title="Restaurar tamaño, luz y visión fijos del personaje">${renderUiLineIcon('rotate-ccw', 'w-3 h-3')}<span>Restablecer a valores fijos</span></button>
@@ -346,18 +349,18 @@ export const ContextMenuViewMethods = {
     }
 
     this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-step]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
         const prop = btn.dataset.ctxStep;
         const dir = Number(btn.dataset.ctxDir) || 1;
         if (prop === 'light') {
-          const next = stepPresetValue(lightMeters, lightSteps, dir);
+          const next = stepDistanceMeters(lightMeters, dir, { unit, shiftKey: e.shiftKey, min: 0, max: 60 });
           Service.setTokenLight(tok.id, next);
         } else if (prop === 'size') {
           const next = stepPresetValue(curSize, sizeSteps, dir);
           Service.setTokenSize(tok.id, next);
-        } else if (prop === 'vision') {
-          const next = stepPresetValue(curVis, visionSteps, dir);
-          Service.setTokenVision(tok.id, next);
+        } else if (prop === 'darkvision') {
+          const next = stepDistanceMeters(dvMeters, dir, { unit, shiftKey: e.shiftKey, min: 0, max: 36 });
+          Service.setTokenDarkvisionMeters(tok.id, next);
         } else if (prop === 'aura') {
           const next = stepPresetValue(curAura, auraSteps, dir);
           Service.setTokenAura(tok.id, next);
@@ -537,8 +540,6 @@ export const ContextMenuViewMethods = {
         Service.setZoom(1);
       } else if (act === 'add-note') {
         this.openNoteModal(null, this.ctxWorldPos.x, this.ctxWorldPos.y);
-      } else if (act === 'spawn-here') {
-        await Service.spawnActorFromTemplate(COMPENDIUM_ACTORS[0], this.ctxWorldPos.x, this.ctxWorldPos.y);
       } else if (act === 'toggle-dynlight') {
         Service.toggleDynamicLighting();
         this.showActionToast(
@@ -557,21 +558,45 @@ export const ContextMenuViewMethods = {
     }
 
     if (state.role === 'gm' && this.els.contextSubOptionsRow) {
+      const curAmbient = Selector.getActiveAmbientLight(state);
+      const ambientIconMap = { day: 'sun', night: 'moon', darkness: 'eclipse' };
+      const ambientPills = AMBIENT_LIGHT_META.map(
+        (a) =>
+          `<button type="button" data-ctx-ambient="${a.id}" class="portal-seg-btn py-1 px-1.5 text-[10px] font-semibold flex items-center justify-center gap-0.5 ${curAmbient === a.id ? 'is-active' : ''}" title="Luz ambiental: ${a.label}">${renderUiLineIcon(ambientIconMap[a.id] || 'sun', 'w-3.5 h-3.5')}</button>`
+      ).join('');
       const curWeather = normalizeWeatherType(state.sceneWeather);
       const weatherIconMap = { none: 'ban', rain: 'cloud-rain', snow: 'snowflake', embers: 'flame', mist: 'wind' };
       const pills = WEATHER_META.map(
         (w) =>
           `<button type="button" data-ctx-weather="${w.id}" class="portal-seg-btn py-1 px-1.5 text-[10px] font-semibold flex items-center justify-center gap-0.5 ${curWeather === w.id ? 'is-active' : ''}" title="Clima: ${w.label}">${renderUiLineIcon(weatherIconMap[w.id] || 'ban', 'w-3.5 h-3.5')}</button>`
       ).join('');
-      this.els.contextSubOptionsRow.className = 'pt-1.5 border-t flex flex-col gap-1';
+      this.els.contextSubOptionsRow.className = 'pt-1.5 border-t flex flex-col gap-1.5';
       this.els.contextSubOptionsRow.style.borderColor = 'var(--hairline)';
       this.els.contextSubOptionsRow.innerHTML = `
-        <div class="flex items-center justify-between px-1 text-[10px] opacity-65">
-          <span>Clima · ${isNarrative ? 'Narrativo' : 'Táctico'}</span>
-          <span class="font-semibold opacity-90">${WEATHER_META.find((w) => w.id === curWeather)?.label || 'Sin'}</span>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between px-1 text-[10px] opacity-65">
+            <span>Luz ambiental</span>
+            <span class="font-semibold opacity-90">${AMBIENT_LIGHT_META.find((a) => a.id === curAmbient)?.label || 'Día'}</span>
+          </div>
+          <div class="portal-seg grid grid-cols-3 gap-0.5">${ambientPills}</div>
         </div>
-        <div class="portal-seg grid grid-cols-5 gap-0.5">${pills}</div>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between px-1 text-[10px] opacity-65">
+            <span>Clima · ${isNarrative ? 'Narrativo' : 'Táctico'}</span>
+            <span class="font-semibold opacity-90">${WEATHER_META.find((w) => w.id === curWeather)?.label || 'Sin'}</span>
+          </div>
+          <div class="portal-seg grid grid-cols-5 gap-0.5">${pills}</div>
+        </div>
       `;
+      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-ambient]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const next = Service.setSceneAmbientLight(btn.dataset.ctxAmbient);
+          this.hideContextMenu();
+          const label = AMBIENT_LIGHT_META.find((a) => a.id === next)?.label || 'Día';
+          this.showActionToast(`Luz ambiental: ${label}`);
+        });
+      });
       this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-weather]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -614,8 +639,9 @@ export const ContextMenuViewMethods = {
       if (act === 'kind-wall') Service.setWallsKind(ids, 'wall');
       else if (act === 'kind-terrain') Service.setWallsKind(ids, 'terrain');
       else if (act === 'kind-invisible') Service.setWallsKind(ids, 'invisible');
-      else if (act === 'kind-door') Service.setWallsKind(ids, 'door');
-      else if (act === 'kind-secret') Service.setWallsKind(ids, 'secret');
+      else if (act === 'door-none') Service.setWallsDoor(ids, 'none');
+      else if (act === 'door-normal') Service.setWallsDoor(ids, 'normal');
+      else if (act === 'door-secret') Service.setWallsDoor(ids, 'secret');
       else if (act === 'toggle-open') {
         ids.forEach((id) => Service.toggleDoor(id));
       } else if (act === 'toggle-lock') {
@@ -757,6 +783,107 @@ export const ContextMenuViewMethods = {
     if (dangerous.length > 0) sections.push(dangerous);
 
     this.renderContextMenuSections(this.els.contextDynamicRow, sections);
+    this.positionContextMenu(clientX, clientY);
+  },
+
+  openMapLightContextMenu(clientX, clientY, light) {
+    if (!light || !light.id) return;
+    const renderLightMenu = (curLight) => {
+      const spec = buildMapLightMenuSpec(curLight);
+      const visionCfg = Selector.getSystemVisionConfig(Service.state);
+      const unit = visionCfg.distanceUnit || 'm';
+      const radiusSteps = [3, 6, 9, 12, 18, 24, 30];
+      const radiusTxt = formatDistance(curLight.radiusMeters, unit);
+      const triLeft = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="10.5,3.5 4.5,8 10.5,12.5"/></svg>';
+      const triRight = '<svg class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor"><polygon points="5.5,3.5 11.5,8 5.5,12.5"/></svg>';
+
+      if (this.els.contextToolsRow) {
+        this.els.contextToolsRow.classList.add('hidden');
+        this.els.contextToolsRow.classList.remove('grid');
+      }
+      if (this.els.contextTokenHeader) {
+        this.els.contextTokenHeader.style.order = '0';
+        this.els.contextTokenHeader.className = 'flex items-center justify-between gap-2 px-2 py-1 rounded-xl text-[11px]';
+        this.els.contextTokenHeader.innerHTML = `
+          <span class="font-semibold truncate max-w-[165px]">${this.escapeHtml(spec.header.title)}</span>
+          <span class="opacity-65 text-[10px] font-mono-tech">${this.escapeHtml(spec.header.subtitle)}</span>
+        `;
+      }
+
+      const tonePills = MAP_LIGHT_TONES.map((tId) => {
+        const meta = MAP_LIGHT_TONE_META[tId];
+        const active = (curLight.tone || 'warm') === tId;
+        return `<button type="button" data-ctx-light-tone="${tId}" title="${this.escapeHtml(meta.label)}" aria-label="${this.escapeHtml(meta.label)}" class="portal-seg-btn py-1.5 px-1 flex items-center justify-center ${active ? 'is-active' : ''}">
+          <span class="w-3 h-3 rounded-full shrink-0 border border-black/20" style="background:${meta.color};"></span>
+        </button>`;
+      }).join('');
+
+      const activeAnim = curLight.animation || 'steady';
+      const animPills = MAP_LIGHT_ANIMATIONS.map((animId) => {
+        const meta = MAP_LIGHT_ANIMATION_META[animId];
+        const active = activeAnim === animId;
+        return `<button type="button" data-ctx-light-anim="${animId}" class="portal-seg-btn py-1 px-1 text-[10px] font-semibold flex items-center justify-center ${active ? 'is-active' : ''}">${this.escapeHtml(meta.label)}</button>`;
+      }).join('');
+
+      this.els.contextSubOptionsRow.className = 'flex flex-col gap-1.5 pt-1';
+      this.els.contextSubOptionsRow.style.order = '1';
+      this.els.contextDynamicRow.style.order = '2';
+      this.els.contextSubOptionsRow.innerHTML = `
+        <div class="portal-subpanel rounded-xl px-2 py-1.5 flex items-center justify-between gap-2">
+          <span class="opacity-75 font-medium flex items-center gap-1.5 text-[10.5px]">${renderUiLineIcon('bulb', 'w-3.5 h-3.5')}<span>Radio</span></span>
+          <div class="flex items-center gap-1.5">
+            <button type="button" data-ctx-light-radius="-1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Reducir radio" title="±1 (Shift: ±5)">${triLeft}</button>
+            <span class="font-mono-tech text-[10.5px] font-semibold tabular-nums min-w-[38px] text-center">${this.escapeHtml(radiusTxt)}</span>
+            <button type="button" data-ctx-light-radius="1" class="portal-btn w-5 h-5 p-0 rounded-full flex items-center justify-center opacity-70 hover:opacity-100" aria-label="Aumentar radio" title="±1 (Shift: ±5)">${triRight}</button>
+          </div>
+        </div>
+        <div class="portal-seg grid grid-cols-5 gap-0.5">${tonePills}</div>
+        <div class="portal-seg grid grid-cols-4 gap-0.5">${animPills}</div>
+      `;
+
+      const refresh = () => {
+        const latest = (Service.state.mapLights || []).find((l) => l && l.id === curLight.id);
+        if (latest) renderLightMenu(latest);
+      };
+
+      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-light-radius]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const dir = Number(btn.dataset.ctxLightRadius) || 1;
+          const nextR = stepDistanceMeters(curLight.radiusMeters, dir, { unit, shiftKey: e.shiftKey, min: 1, max: 40 });
+          Service.updateMapLight(curLight.id, { radiusMeters: nextR });
+          refresh();
+        });
+      });
+
+      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-light-tone]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          Service.updateMapLight(curLight.id, { tone: btn.dataset.ctxLightTone });
+          refresh();
+        });
+      });
+
+      this.els.contextSubOptionsRow.querySelectorAll('[data-ctx-light-anim]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const anim = btn.dataset.ctxLightAnim;
+          Service.updateMapLight(curLight.id, { animation: anim, flicker: anim === 'flame' });
+          refresh();
+        });
+      });
+
+      this.renderContextMenuSections(this.els.contextDynamicRow, spec.sections, (act) => {
+        if (act === 'toggle-enabled') {
+          Service.updateMapLight(curLight.id, { enabled: curLight.enabled === false });
+        } else if (act === 'delete-light') {
+          Service.deleteMapLight(curLight.id);
+          this.showActionToast?.('Luz eliminada');
+        }
+      });
+    };
+
+    renderLightMenu(light);
     this.positionContextMenu(clientX, clientY);
   }
 };

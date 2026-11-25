@@ -2,8 +2,8 @@
    COMBAT SERVICE: INICIATIVA INTERACTIVA, AGRUPACIÓN DE SECUNDARIOS Y TURNOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261125a1';
 
 const createSingleCombatEntry = (t) => ({
   id: t.id,

@@ -2,8 +2,8 @@
    GM SCREEN WIDGETS VIEW: ÁRBITRO DE TIRADAS, PULSO DEL GRUPO, NOTAS, TABLAS, CHULETA
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 export const GmScreenWidgetsViewMethods = {
   getGmRollDraft(state) {
@@ -179,7 +179,6 @@ export const GmScreenWidgetsViewMethods = {
     if (!allies.length) {
       return `<div class="text-[11px] opacity-60 text-center py-1.5">Sin protagonistas en escena.</div>`;
     }
-    const preset = state.systemConfig?.preset || state.ruleset || 'dnd55';
     const showDefense = state.systemConfig?.showDefense !== false;
 
     return `
@@ -198,10 +197,8 @@ export const GmScreenWidgetsViewMethods = {
                 return `<span title="${esc(def.label)}" style="color:${esc(def.color)};">${this.renderStatusSymbolSvg(def.icon, 'w-3 h-3', state)}</span>`;
               })
               .join('');
-            const ppVal = 10 + (Number(tok.stats?.wis) || 0);
             const metaParts = [];
             if (showDefense) metaParts.push(`CA ${tok.ac ?? 12}`);
-            if (preset === 'dnd55') metaParts.push(`PP ${ppVal}`);
             const hasImg = Boolean(tok.imageUrl);
             const avatar = hasImg
               ? `<img src="${esc(tok.imageUrl)}" alt="" class="w-full h-full object-contain" />`

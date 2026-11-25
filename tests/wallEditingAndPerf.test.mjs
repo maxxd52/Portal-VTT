@@ -28,13 +28,13 @@ const {
   redactWallsForPlayer,
   cloneWallsAtPoint,
   findWallEndpointNearPoint
-} = await import('../js/utils/wallGeometry.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { hasWallOcclusion } = await import('../js/utils/tokenShadowModel.js?v=20261123a7');
-const { collectWallShadowSegments } = await import('../js/utils/tabletopMaterial.js?v=20261123a7');
-const { buildWallMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261123a7');
+} = await import('../js/utils/wallGeometry.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { hasWallOcclusion } = await import('../js/utils/tokenShadowModel.js?v=20261125a1');
+const { collectWallShadowSegments } = await import('../js/utils/tabletopMaterial.js?v=20261125a1');
+const { buildWallMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261125a1');
 
 test('S8: invisible/grate wall lets light & shadows pass, blocks player movement, and appears in menu & pill', () => {
   assert.ok(WALL_KINDS.includes('invisible'), 'WALL_KINDS must include invisible');
@@ -80,7 +80,19 @@ test('S8: invisible/grate wall lets light & shadows pass, blocks player movement
   assert.ok(flat.some((i) => i.id === 'duplicate-walls'), 'Wall context menu must include duplicate-walls');
 
   const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
-  assert.match(html, /data-wall-kind="invisible"/, '#wallModePill must include Invisible / Reja button');
+  assert.match(html, /data-wall-kind="invisible"/, '#wallModePill must include Translúcido (invisible) button');
+  assert.match(html, /id="wallDrawToolSeg"/, '#wallModePill must include #wallDrawToolSeg');
+  assert.match(html, /data-wall-mode="door"/, '#wallDrawToolSeg must include Puerta mode');
+  assert.match(html, /id="stageSelectFilterSeg"/, '#wallModePill must include #stageSelectFilterSeg');
+  assert.doesNotMatch(html, /data-wall-kind="(door|secret)"/, 'Door must not be a data-wall-kind');
+
+  const stageBlockMatch = html.match(/id="stageWallsControls"[\s\S]*?<\/div>\s*<div id="stageLightsControls"/);
+  assert.ok(stageBlockMatch, 'stageWallsControls block must exist in index.html');
+  const stageBlock = stageBlockMatch[0];
+  assert.match(stageBlock, /<svg\b/, '#stageWallsControls must use inline monochrome SVG icons');
+  for (const emoji of ['🧱', '🏛', '🪟', '🚪', '🔮', '✏️']) {
+    assert.equal(stageBlock.includes(emoji), false, `#stageWallsControls must not contain raw emoji ${emoji}`);
+  }
 });
 
 test('S8: wall copy/paste, batch move, and endpoint vertex editing preserve geometry and support undo', () => {

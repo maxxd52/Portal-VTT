@@ -2,10 +2,10 @@
    DICE VIEW: DOCK, HISTORIAL, OVERLAY 3D Y PERSONALIZACIÓN DE DADOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
-import { resolveDiceBarContextAction } from '../utils/contextMenuModel.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261125a1';
+import { resolveDiceBarContextAction } from '../utils/contextMenuModel.js?v=20261125a1';
 
 export const DiceViewMethods = {
   bindDiceEvents() {

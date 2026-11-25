@@ -1,22 +1,27 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261123a7';
-import { CartridgePacker } from '../services/cartridgePacker.js?v=20261123a7';
-import { TabletopAudio } from '../services/tabletopAudio.js?v=20261123a7';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261123a7';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
-import { metersToPixels, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261123a7';
-import { computeTokenRimSpec, shouldApplyRuntimeCoinRim } from '../utils/tokenComposer.js?v=20261123a7';
-import { collectVisibleLightSources } from '../utils/tokenShadowModel.js?v=20261123a7';
-import { resolveTokenDoubleClickAction } from '../utils/worldRedaction.js?v=20261123a7';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261125a1';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261125a1';
+import { TabletopAudio } from '../services/tabletopAudio.js?v=20261125a1';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261125a1';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261125a1';
+import { metersToPixels, resolveAmbientShadowVector, resolveTokenLightMeters } from '../utils/lightingModel.js?v=20261125a1';
+import { computeTokenRimSpec, shouldApplyRuntimeCoinRim } from '../utils/tokenComposer.js?v=20261125a1';
+import { collectVisibleLightSources } from '../utils/tokenShadowModel.js?v=20261125a1';
+import { resolveTokenDoubleClickAction } from '../utils/worldRedaction.js?v=20261125a1';
 import {
+  computeDoorResizePoint,
+  computeDoorSlideOffset,
+  findConnectedWallEndpoints,
+  findMapLightsInRect,
   findWallEndpointNearPoint,
   findWallNearPoint,
   findWallsInRect,
+  isWallDoor,
   resolveWallDrawPoint
-} from '../utils/wallGeometry.js?v=20261123a7';
-import { findTokensInRect } from '../utils/contextMenuModel.js?v=20261123a7';
-import { resolveDropAction } from '../utils/compendiumDragModel.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+} from '../utils/wallGeometry.js?v=20261125a1';
+import { findTokensInRect } from '../utils/contextMenuModel.js?v=20261125a1';
+import { resolveDropAction } from '../utils/compendiumDragModel.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 /**
  * Board pointer interactions, global drag-and-drop, keyboard shortcuts, context menu & tokens layer.
@@ -38,6 +43,8 @@ export const BoardViewMethods = {
     let tokenSelectShift = false;
     let groupDragOrigins = null;
     let wallDragCtx = null;
+    let doorStampCtx = null;
+    let doorEditCtx = null;
 
     const refreshAreaPreview = (x1, y1, ang, cfg) => {
       const rPx = cfg.radiusPx || 160;
@@ -128,6 +135,10 @@ export const BoardViewMethods = {
             this.showActionToast('🔒 Puerta bloqueada');
             return;
           }
+          if (Service.state.role !== 'gm' && !Selector.canPlayerReachDoor(Service.state, nearDoor)) {
+            this.showActionToast('🚪 Acércate para abrir esta puerta');
+            return;
+          }
           const updated = Service.toggleDoor(nearDoor.id);
           if (updated) this.showActionToast(updated.open ? '🚪 Puerta abierta' : '🚪 Puerta cerrada');
           return;
@@ -159,6 +170,7 @@ export const BoardViewMethods = {
         activePointerMode = 'token';
         draggingTokenId = tokId;
         this.draggingTokenId = draggingTokenId;
+        this._dragFrozenVisibleIds = new Set(Selector.getVisibleTokensForSeat(Service.state).map((t) => t.id));
         Service.activeDragTokenId = draggingTokenId;
         dragPath = [{ x: Math.round(tok.x), y: Math.round(tok.y) }];
         const initCs = Math.max(20, Number(Service.state.grid?.cellSize) || 80);
@@ -180,17 +192,104 @@ export const BoardViewMethods = {
       }
 
       if (tool === 'wall') {
-        if (Service.state.wallMode === 'select') {
+        if (Service.state.stageLayer === 'lights') {
+          const created = Service.addMapLight(worldPt.x, worldPt.y);
+          if (created) {
+            this.showActionToast('Luz colocada (apagada) — ajusta y enciéndela');
+            requestAnimationFrame(() => this.openMapLightContextMenu(e.clientX, e.clientY, created));
+          }
+          return;
+        }
+        if (Service.state.wallMode === 'door') {
+          const allDoors = (Service.state.walls || []).filter((w) => w && isWallDoor(w));
+          const epHit = findWallEndpointNearPoint(allDoors, worldPt.x, worldPt.y, 14);
+          if (epHit) {
+            const linkedEndpoints = findConnectedWallEndpoints(Service.state.walls, epHit.x, epHit.y, {
+              excludeWallId: epHit.wall.id,
+              tol: 2
+            });
+            activePointerMode = 'doorResize';
+            movedDistance = 0;
+            doorEditCtx = {
+              kind: 'resize',
+              wallId: epHit.wall.id,
+              endKey: epHit.endKey,
+              origDoor: { ...epHit.wall },
+              origWallsSnapshot: (Service.state.walls || []).filter(Boolean).map((w) => ({ ...w })),
+              linkedEndpoints,
+              pushedUndo: false,
+              moved: false
+            };
+            this.doorEditPreview = { wallId: epHit.wall.id, mode: 'resize', endKey: epHit.endKey };
+            this.renderVectorOverlay(Service.state);
+            try {
+              if (this.els.stage.isConnected) this.els.stage.setPointerCapture(e.pointerId);
+            } catch (_) {}
+            return;
+          }
+          const hitWall = findWallNearPoint(Service.state.walls, worldPt.x, worldPt.y, 20);
+          if (!hitWall) return;
+          if (isWallDoor(hitWall)) {
+            const linkedStart = findConnectedWallEndpoints(Service.state.walls, hitWall.x1, hitWall.y1, {
+              excludeWallId: hitWall.id,
+              tol: 2
+            });
+            const linkedEnd = findConnectedWallEndpoints(Service.state.walls, hitWall.x2, hitWall.y2, {
+              excludeWallId: hitWall.id,
+              tol: 2
+            });
+            activePointerMode = 'doorSlide';
+            movedDistance = 0;
+            doorEditCtx = {
+              kind: 'slide',
+              wallId: hitWall.id,
+              origDoor: { ...hitWall },
+              origWallsSnapshot: (Service.state.walls || []).filter(Boolean).map((w) => ({ ...w })),
+              anchorWorld: { x: worldPt.x, y: worldPt.y },
+              linkedStart,
+              linkedEnd,
+              pushedUndo: false,
+              moved: false
+            };
+            this.doorEditPreview = { wallId: hitWall.id, mode: 'slide' };
+            this.renderVectorOverlay(Service.state);
+            try {
+              if (this.els.stage.isConnected) this.els.stage.setPointerCapture(e.pointerId);
+            } catch (_) {}
+            return;
+          }
+          activePointerMode = 'wallDoorStamp';
+          movedDistance = 0;
+          doorStampCtx = {
+            wallId: hitWall.id,
+            anchorWorld: { x: worldPt.x, y: worldPt.y },
+            currentWorld: { x: worldPt.x, y: worldPt.y },
+            dragged: false
+          };
+          this.doorStampPreview = doorStampCtx;
+          this.renderVectorOverlay(Service.state);
+          try {
+            if (this.els.stage.isConnected) this.els.stage.setPointerCapture(e.pointerId);
+          } catch (_) {}
+          return;
+        }
+        if (Service.state.wallMode === 'select' || Service.state.stageLayer === 'select') {
+          const filter = Service.state.stageSelectFilter || 'all';
           const curSelIds = Array.isArray(Service.state.selectedWallIds) ? [...Service.state.selectedWallIds] : [];
           const selWalls = (Service.state.walls || []).filter((w) => w && curSelIds.includes(w.id));
-          if (!e.shiftKey && selWalls.length > 0) {
+          if (filter !== 'lights' && !e.shiftKey && selWalls.length > 0) {
             const epHit = findWallEndpointNearPoint(selWalls, worldPt.x, worldPt.y, 14);
             if (epHit) {
+              const linkedEndpoints = findConnectedWallEndpoints(Service.state.walls, epHit.x, epHit.y, {
+                excludeWallId: epHit.wall.id,
+                tol: 2
+              });
               activePointerMode = 'wallVertex';
               movedDistance = 0;
               wallDragCtx = {
                 wallId: epHit.wall.id,
                 endKey: epHit.endKey,
+                linkedEndpoints,
                 pushedUndo: false,
                 moved: false
               };
@@ -200,7 +299,7 @@ export const BoardViewMethods = {
               return;
             }
           }
-          const hitWall = findWallNearPoint(Service.state.walls, worldPt.x, worldPt.y, 18);
+          const hitWall = filter !== 'lights' ? findWallNearPoint(Service.state.walls, worldPt.x, worldPt.y, 18) : null;
           if (hitWall) {
             if (e.shiftKey) {
               const idx = curSelIds.indexOf(hitWall.id);
@@ -212,16 +311,27 @@ export const BoardViewMethods = {
             const nextSelIds = curSelIds.includes(hitWall.id) ? curSelIds : [hitWall.id];
             if (!curSelIds.includes(hitWall.id)) {
               Service.setSelectedWallIds(nextSelIds);
+              if (Array.isArray(Service.state.selectedMapLightIds) && Service.state.selectedMapLightIds.length > 0) {
+                Service.setSelectedMapLightIds([]);
+              }
             }
             const dragSet = new Set(nextSelIds);
             const origWalls = (Service.state.walls || [])
               .filter((w) => w && dragSet.has(w.id))
               .map((w) => ({ id: w.id, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }));
+            const selLightIds = filter === 'all' && Array.isArray(Service.state.selectedMapLightIds)
+              ? Service.state.selectedMapLightIds
+              : [];
+            const lightDragSet = new Set(selLightIds);
+            const origLights = (Service.state.mapLights || [])
+              .filter((l) => l && lightDragSet.has(l.id))
+              .map((l) => ({ id: l.id, x: Number(l.x) || 0, y: Number(l.y) || 0 }));
             activePointerMode = 'wallMove';
             movedDistance = 0;
             wallDragCtx = {
               startWorld: { x: worldPt.x, y: worldPt.y },
               origWalls,
+              origLights,
               pushedUndo: false,
               moved: false
             };
@@ -251,7 +361,7 @@ export const BoardViewMethods = {
           Service.notify({ skipVaultSave: true, skipPeerSync: true });
         } else {
           const anchor = Service.state.wallAnchor;
-          Service.addWallSegment(anchor.x, anchor.y, pt.x, pt.y);
+          Service.addWallSegment(anchor.x, anchor.y, pt.x, pt.y, null, 'none');
           // Continue polyline chain unless closing onto an existing vertex
           Service.state.wallAnchor = pt.snappedTo !== 'vertex' ? { x: pt.x, y: pt.y } : null;
           Service.notify({ skipVaultSave: true, skipPeerSync: true });
@@ -378,7 +488,6 @@ export const BoardViewMethods = {
             dragPath.push({ x: Math.round(movedTok.x), y: Math.round(movedTok.y) });
           }
         }
-        this.scheduleFogRedraw(Service.state);
       } else if (activePointerMode === 'areaSelect' && Service.state.areaSelectConfig) {
         const cfg = Service.state.areaSelectConfig;
         const canAim = cfg.shape === 'cone' || cfg.shape === 'line';
@@ -411,10 +520,96 @@ export const BoardViewMethods = {
             walls: otherWalls,
             freehand: Boolean(e.altKey)
           });
-          Service.moveWallEndpoint(wallDragCtx.wallId, wallDragCtx.endKey, pt.x, pt.y, { commit: false });
+          Service.moveWallEndpoint(wallDragCtx.wallId, wallDragCtx.endKey, pt.x, pt.y, {
+            commit: false,
+            linkedEndpoints: wallDragCtx.linkedEndpoints
+          });
           this.scheduleFogRedraw(Service.state);
           this.renderVectorOverlay(Service.state);
         }
+      } else if (activePointerMode === 'doorResize' && doorEditCtx) {
+        if (movedDistance >= 3) {
+          if (!doorEditCtx.pushedUndo) {
+            Service.pushUndoSnapshot();
+            doorEditCtx.pushedUndo = true;
+          }
+          doorEditCtx.moved = true;
+          const grid = normalizeGridConfig(Service.state.grid);
+          const pt = computeDoorResizePoint(
+            doorEditCtx.origDoor,
+            doorEditCtx.endKey,
+            doorEditCtx.linkedEndpoints,
+            doorEditCtx.origWallsSnapshot,
+            worldPt.x,
+            worldPt.y,
+            {
+              cellSize: grid.cellSize,
+              snap: grid.snap && grid.type !== 'none',
+              freehand: Boolean(e.altKey)
+            }
+          );
+          if (pt) {
+            Service.moveWallEndpoint(doorEditCtx.wallId, doorEditCtx.endKey, pt.x, pt.y, {
+              commit: false,
+              linkedEndpoints: doorEditCtx.linkedEndpoints
+            });
+            this.scheduleFogRedraw(Service.state);
+            this.renderVectorOverlay(Service.state);
+          }
+        }
+      } else if (activePointerMode === 'doorSlide' && doorEditCtx) {
+        if (movedDistance >= 3) {
+          if (!doorEditCtx.pushedUndo) {
+            Service.pushUndoSnapshot();
+            doorEditCtx.pushedUndo = true;
+          }
+          doorEditCtx.moved = true;
+          const grid = normalizeGridConfig(Service.state.grid);
+          const { dx: sdx, dy: sdy } = computeDoorSlideOffset(
+            doorEditCtx.origDoor,
+            doorEditCtx.linkedStart,
+            doorEditCtx.linkedEnd,
+            doorEditCtx.origWallsSnapshot,
+            doorEditCtx.anchorWorld,
+            worldPt,
+            {
+              cellSize: grid.cellSize,
+              snap: grid.snap && grid.type !== 'none',
+              freehand: Boolean(e.altKey)
+            }
+          );
+          const nx1 = Math.max(0, Math.min(2400, Math.round(doorEditCtx.origDoor.x1 + sdx)));
+          const ny1 = Math.max(0, Math.min(1600, Math.round(doorEditCtx.origDoor.y1 + sdy)));
+          const nx2 = Math.max(0, Math.min(2400, Math.round(doorEditCtx.origDoor.x2 + sdx)));
+          const ny2 = Math.max(0, Math.min(1600, Math.round(doorEditCtx.origDoor.y2 + sdy)));
+          const byId = new Map((Service.state.walls || []).filter(Boolean).map((w) => [w.id, w]));
+          const liveDoor = byId.get(doorEditCtx.wallId);
+          if (liveDoor) {
+            liveDoor.x1 = nx1;
+            liveDoor.y1 = ny1;
+            liveDoor.x2 = nx2;
+            liveDoor.y2 = ny2;
+          }
+          for (const link of doorEditCtx.linkedStart || []) {
+            const lw = byId.get(link.wallId);
+            if (!lw) continue;
+            if (link.endKey === 'start') { lw.x1 = nx1; lw.y1 = ny1; }
+            else { lw.x2 = nx1; lw.y2 = ny1; }
+          }
+          for (const link of doorEditCtx.linkedEnd || []) {
+            const lw = byId.get(link.wallId);
+            if (!lw) continue;
+            if (link.endKey === 'start') { lw.x1 = nx2; lw.y1 = ny2; }
+            else { lw.x2 = nx2; lw.y2 = ny2; }
+          }
+          this.scheduleFogRedraw(Service.state);
+          this.renderVectorOverlay(Service.state);
+        }
+      } else if (activePointerMode === 'wallDoorStamp' && doorStampCtx) {
+        doorStampCtx.currentWorld = { x: worldPt.x, y: worldPt.y };
+        doorStampCtx.dragged = movedDistance >= 8;
+        this.doorStampPreview = doorStampCtx;
+        this.renderVectorOverlay(Service.state);
       } else if (activePointerMode === 'wallMove' && wallDragCtx) {
         if (movedDistance >= 3) {
           if (!wallDragCtx.pushedUndo) {
@@ -441,6 +636,16 @@ export const BoardViewMethods = {
             live.y1 = Math.max(0, Math.min(1600, Math.round(orig.y1 + ddy)));
             live.x2 = Math.max(0, Math.min(2400, Math.round(orig.x2 + ddx)));
             live.y2 = Math.max(0, Math.min(1600, Math.round(orig.y2 + ddy)));
+          }
+          if (Array.isArray(wallDragCtx.origLights) && wallDragCtx.origLights.length > 0) {
+            const lightById = new Map((Service.state.mapLights || []).filter(Boolean).map((l) => [l.id, l]));
+            for (const origL of wallDragCtx.origLights) {
+              const liveL = lightById.get(origL.id);
+              if (!liveL) continue;
+              liveL.x = Math.max(0, Math.min(2400, Math.round(origL.x + ddx)));
+              liveL.y = Math.max(0, Math.min(1600, Math.round(origL.y + ddy)));
+            }
+            this.renderMapLights(Service.state);
           }
           this.scheduleFogRedraw(Service.state);
           this.renderVectorOverlay(Service.state);
@@ -469,6 +674,7 @@ export const BoardViewMethods = {
         const worldPt = Selector.screenToWorld(Service.state, e.clientX, e.clientY);
         const wasDragged = movedDistance >= 4;
         this.draggingTokenId = null;
+        this._dragFrozenVisibleIds = null;
         Service.activeDragTokenId = null;
         if (groupDragOrigins && groupDragOrigins.length > 1) {
           Service.moveTokensGroup(
@@ -516,6 +722,29 @@ export const BoardViewMethods = {
         }
       } else if (activePointerMode === 'pan' || (activePointerMode === 'rightPan' && movedDistance > 6)) {
         this.releaseCameraPanInertia?.();
+      } else if (activePointerMode === 'doorResize' || activePointerMode === 'doorSlide') {
+        if (doorEditCtx?.moved) {
+          Service.recordEvent('PUERTA', activePointerMode === 'doorResize' ? 'Puerta redimensionada' : 'Puerta desplazada');
+          Service.notify({ redrawFog: true });
+        }
+        doorEditCtx = null;
+        this.doorEditPreview = null;
+        this.renderVectorOverlay(Service.state);
+      } else if (activePointerMode === 'wallDoorStamp' && doorStampCtx) {
+        const doorMode = Service.state.wallDoorStampMode === 'secret' ? 'secret' : 'normal';
+        const res = Service.insertDoorOnWall(
+          doorStampCtx.wallId,
+          doorStampCtx.anchorWorld,
+          doorStampCtx.dragged ? doorStampCtx.currentWorld : null,
+          { doorMode, freehand: Boolean(e.altKey) }
+        );
+        if (res?.door) {
+          this.showActionToast(doorMode === 'secret' ? '✨ Puerta secreta añadida' : '🚪 Puerta añadida');
+          requestAnimationFrame(() => this.openWallContextMenu?.(e.clientX, e.clientY, [res.door]));
+        }
+        doorStampCtx = null;
+        this.doorStampPreview = null;
+        this.renderVectorOverlay(Service.state);
       } else if (activePointerMode === 'wallVertex' || activePointerMode === 'wallMove') {
         if (wallDragCtx?.moved) {
           const label =
@@ -533,14 +762,23 @@ export const BoardViewMethods = {
         Service.state.wallSelectBox = null;
         this.renderVectorOverlay(Service.state);
         if (movedDistance < 6) {
-          if (!wallSelectShift) Service.setSelectedWallIds([]);
+          if (!wallSelectShift) {
+            Service.setSelectedWallIds([]);
+            Service.setSelectedMapLightIds([]);
+          }
         } else {
-          const hitIds = findWallsInRect(Service.state.walls, box).map((w) => w.id);
+          const filter = Service.state.stageSelectFilter || 'all';
+          const hitWallIds = filter !== 'lights' ? findWallsInRect(Service.state.walls, box).map((w) => w.id) : [];
+          const activeLights = Selector.getActiveMapLights(Service.state, { includeDisabled: true });
+          const hitLightIds = filter !== 'walls' ? findMapLightsInRect(activeLights, box).map((l) => l.id) : [];
           if (wallSelectShift) {
-            const cur = Array.isArray(Service.state.selectedWallIds) ? Service.state.selectedWallIds : [];
-            Service.setSelectedWallIds([...cur, ...hitIds]);
+            const curW = Array.isArray(Service.state.selectedWallIds) ? Service.state.selectedWallIds : [];
+            const curL = Array.isArray(Service.state.selectedMapLightIds) ? Service.state.selectedMapLightIds : [];
+            Service.setSelectedWallIds([...curW, ...hitWallIds]);
+            Service.setSelectedMapLightIds([...curL, ...hitLightIds]);
           } else {
-            Service.setSelectedWallIds(hitIds);
+            Service.setSelectedWallIds(hitWallIds);
+            Service.setSelectedMapLightIds(hitLightIds);
           }
         }
       } else if (activePointerMode === 'areaSelect' && Service.state.ruler && Service.state.areaSelectConfig) {
@@ -575,9 +813,15 @@ export const BoardViewMethods = {
       draggingTokenId = null;
       groupDragOrigins = null;
       wallDragCtx = null;
+      doorStampCtx = null;
+      doorEditCtx = null;
+      this.doorStampPreview = null;
+      this.doorEditPreview = null;
       dragPath = [];
       currentStroke = null;
       this.draggingTokenId = null;
+      this._dragFrozenVisibleIds = null;
+      Service.activeDragTokenId = null;
     };
     window.addEventListener('pointercancel', cancelTransientDrag);
     window.addEventListener('blur', cancelTransientDrag);
@@ -632,7 +876,7 @@ export const BoardViewMethods = {
           this.ctxWorldPos.x,
           this.ctxWorldPos.y,
           isWallTool ? 18 : 20,
-          isWallTool ? {} : { kinds: ['door', 'secret'] }
+          isWallTool ? {} : { doorModes: ['normal', 'secret'] }
         );
         if (hitWall) {
           const selIds = Array.isArray(Service.state.selectedWallIds) ? Service.state.selectedWallIds : [];
@@ -884,13 +1128,19 @@ export const BoardViewMethods = {
         !isPlayer &&
         (e.key === 'Delete' || e.key === 'Backspace') &&
         Service.state.tool === 'wall' &&
-        Array.isArray(Service.state.selectedWallIds) &&
-        Service.state.selectedWallIds.length > 0
+        ((Array.isArray(Service.state.selectedWallIds) && Service.state.selectedWallIds.length > 0) ||
+          (Array.isArray(Service.state.selectedMapLightIds) && Service.state.selectedMapLightIds.length > 0))
       ) {
         e.preventDefault();
-        const removed = Service.removeWallsByIds(Service.state.selectedWallIds);
-        if (removed > 0) {
-          this.showActionToast(removed > 1 ? `🗑 ${removed} muros eliminados` : '🗑 Muro eliminado');
+        const res = Service.deleteSelectedScenery();
+        if (res.total > 0) {
+          if (res.walls > 0 && res.lights === 0) {
+            this.showActionToast(res.walls > 1 ? `🗑 ${res.walls} muros eliminados` : '🗑 Muro eliminado');
+          } else if (res.lights > 0 && res.walls === 0) {
+            this.showActionToast(res.lights > 1 ? `🗑 ${res.lights} luces eliminadas` : '🗑 Luz eliminada');
+          } else {
+            this.showActionToast(`🗑 ${res.total} elementos eliminados`);
+          }
         }
         return;
       }
@@ -960,7 +1210,10 @@ export const BoardViewMethods = {
 
   renderTokensLayer(state) {
     const cs = state.grid.cellSize;
-    const visibleTokens = Selector.getVisibleTokensForSeat(state);
+    const visibleTokens =
+      this.draggingTokenId && this._dragFrozenVisibleIds instanceof Set
+        ? (state.tokens || []).filter((t) => t && this._dragFrozenVisibleIds.has(t.id))
+        : Selector.getVisibleTokensForSeat(state);
     const visibleLightSources = collectVisibleLightSources(visibleTokens, state.grid);
 
     const existingNodes = new Map();
@@ -1071,7 +1324,7 @@ export const BoardViewMethods = {
         diameterPx: diameter,
         lightSources: visibleLightSources,
         walls: state.walls,
-        ambientDir: this._currentAtmosphere?.boardShadowDir
+        ambientDir: resolveAmbientShadowVector(Selector.getActiveAmbientLight(state))
       });
 
       let condRow = el.querySelector('.vtt-token-conds');

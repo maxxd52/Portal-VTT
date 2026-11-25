@@ -2,44 +2,46 @@
    VIEW: RENDERIZADO DE LIENZOS, COMPENDIO, FICHA IZQUIERDA Y MENÚ CONTEXTUAL
    ========================================================================== */
 
-import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
-import { GmHostLock } from '../services/gmHostLock.js?v=20261123a7';
-import { TabletopAudio } from '../services/tabletopAudio.js?v=20261123a7';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
-import { Selector } from './selector.js?v=20261123a7';
-import { Service } from './service.js?v=20261123a7';
-import { BoardViewMethods } from '../ui/boardView.js?v=20261123a7';
-import { CanvasViewMethods } from '../ui/canvasView.js?v=20261123a7';
-import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261123a7';
-import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261123a7';
-import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261123a7';
-import { shouldAllowNativeContextMenu } from '../utils/contextMenuModel.js?v=20261123a7';
-import { resolveItemBadgeStyle } from '../utils/compendiumCardModel.js?v=20261123a7';
-import { DiceViewMethods } from '../ui/diceView.js?v=20261123a7';
-import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261123a7';
-import { GmScreenViewMethods } from '../ui/gmScreenView.js?v=20261123a7';
-import { GmScreenWidgetsViewMethods } from '../ui/gmScreenWidgetsView.js?v=20261123a7';
-import { GmScreenConfigViewMethods } from '../ui/gmScreenConfigView.js?v=20261123a7';
-import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261123a7';
-import { JournalPresentationViewMethods } from '../ui/journalPresentationView.js?v=20261123a7';
-import { JournalShareViewMethods } from '../ui/journalShareView.js?v=20261123a7';
-import { JournalViewMethods } from '../ui/journalView.js?v=20261123a7';
-import { MapGridEditorViewMethods } from '../ui/mapGridEditorView.js?v=20261123a7';
-import { ModalsViewMethods } from '../ui/modalsView.js?v=20261123a7';
-import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261123a7';
-import { PortalSelectViewMethods } from '../ui/portalSelectView.js?v=20261123a7';
-import { PresenceViewMethods } from '../ui/presenceView.js?v=20261123a7';
-import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261123a7';
-import { SheetViewMethods } from '../ui/sheetView.js?v=20261123a7';
-import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261123a7';
-import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261123a7';
-import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261123a7';
-import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261123a7';
-import { TokenEditorViewMethods } from '../ui/tokenEditorView.js?v=20261123a7';
-import { TokenInspectViewMethods } from '../ui/tokenInspectView.js?v=20261123a7';
-import { TokenPhysicsViewMethods } from '../ui/tokenPhysicsView.js?v=20261123a7';
-import { buildSceneTransitionSignature } from '../utils/sceneTransitionModel.js?v=20261123a7';
+import { BrowserVault } from '../services/browserVault.js?v=20261125a1';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261125a1';
+import { GmHostLock } from '../services/gmHostLock.js?v=20261125a1';
+import { TabletopAudio } from '../services/tabletopAudio.js?v=20261125a1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261125a1';
+import { Selector } from './selector.js?v=20261125a1';
+import { Service } from './service.js?v=20261125a1';
+import { BoardViewMethods } from '../ui/boardView.js?v=20261125a1';
+import { CanvasViewMethods } from '../ui/canvasView.js?v=20261125a1';
+import { CompendiumViewMethods } from '../ui/compendiumView.js?v=20261125a1';
+import { CompendiumFormsViewMethods } from '../ui/compendiumFormsView.js?v=20261125a1';
+import { ContextMenuViewMethods } from '../ui/contextMenuView.js?v=20261125a1';
+import { shouldAllowNativeContextMenu } from '../utils/contextMenuModel.js?v=20261125a1';
+import { resolveItemBadgeStyle } from '../utils/compendiumCardModel.js?v=20261125a1';
+import { DiceViewMethods } from '../ui/diceView.js?v=20261125a1';
+import { collectViewElements, ITEM_ICON_DEFS, TOKEN_STATUS_SYMBOLS } from '../ui/domCache.js?v=20261125a1';
+import { GmScreenViewMethods } from '../ui/gmScreenView.js?v=20261125a1';
+import { GmScreenWidgetsViewMethods } from '../ui/gmScreenWidgetsView.js?v=20261125a1';
+import { GmScreenConfigViewMethods } from '../ui/gmScreenConfigView.js?v=20261125a1';
+import { ItemCreatorViewMethods } from '../ui/itemCreatorView.js?v=20261125a1';
+import { JournalPresentationViewMethods } from '../ui/journalPresentationView.js?v=20261125a1';
+import { JournalShareViewMethods } from '../ui/journalShareView.js?v=20261125a1';
+import { JournalViewMethods } from '../ui/journalView.js?v=20261125a1';
+import { MapGridEditorViewMethods } from '../ui/mapGridEditorView.js?v=20261125a1';
+import { ModalsViewMethods } from '../ui/modalsView.js?v=20261125a1';
+import { PortalLobbyViewMethods } from '../ui/portalLobbyView.js?v=20261125a1';
+import { PortalSelectViewMethods } from '../ui/portalSelectView.js?v=20261125a1';
+import { PresenceViewMethods } from '../ui/presenceView.js?v=20261125a1';
+import { SequenceViewMethods } from '../ui/sequenceView.js?v=20261125a1';
+import { SheetViewMethods } from '../ui/sheetView.js?v=20261125a1';
+import { SheetBlocksViewMethods } from '../ui/sheetBlocksView.js?v=20261125a1';
+import { SheetInventoryViewMethods } from '../ui/sheetInventoryView.js?v=20261125a1';
+import { SheetResourcesViewMethods } from '../ui/sheetResourcesView.js?v=20261125a1';
+import { SystemOptionsViewMethods } from '../ui/systemOptionsView.js?v=20261125a1';
+import { TokenEditorViewMethods } from '../ui/tokenEditorView.js?v=20261125a1';
+import { TokenInspectViewMethods } from '../ui/tokenInspectView.js?v=20261125a1';
+import { TokenPhysicsViewMethods } from '../ui/tokenPhysicsView.js?v=20261125a1';
+import { buildSceneTransitionSignature } from '../utils/sceneTransitionModel.js?v=20261125a1';
+import { renderUiLineIcon } from '../utils/uiIcons.js?v=20261125a1';
+import { getWallDoorMode, isWallDoor, normalizeWallKind } from '../utils/wallGeometry.js?v=20261125a1';
 
 export const View = {
   els: {},
@@ -238,15 +240,20 @@ export const View = {
     }
   },
 
-  syncShadowModeUi() {
-    const mode = this.shadowMode || 'auto';
-    this.els.shadowModeSeg?.querySelectorAll('[data-shadow-mode]').forEach((btn) => {
-      btn.classList.toggle('is-active', btn.dataset.shadowMode === mode);
+  syncGraphicsQualityUi() {
+    const mode = this.graphicsQuality || 'auto';
+    const profile = this.getGraphicsProfile?.();
+    this.els.graphicsQualitySeg?.querySelectorAll('[data-graphics-quality]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.graphicsQuality === mode);
     });
-    if (typeof document !== 'undefined') {
-      const fx = this.isDynamicShadowsEnabled?.() === false ? 'basic' : 'rich';
-      document.documentElement.setAttribute('data-tabletop-fx', fx);
+    if (this.els.lblGraphicsQualityResolved && profile?.label) {
+      this.els.lblGraphicsQualityResolved.textContent = profile.label;
     }
+    this.applyGraphicsProfileToRuntime?.();
+  },
+
+  syncShadowModeUi() {
+    this.syncGraphicsQualityUi();
   },
 
   async init() {
@@ -258,7 +265,7 @@ export const View = {
     Service.loadRailsSwapped();
     this.applyRailsSwappedToDom();
     TabletopAudio.loadPrefs();
-    this.loadShadowMode?.();
+    this.loadGraphicsQuality?.();
     Dice3DEngine.init(this.els.dice3dCanvas, {
       overlayEl: this.els.dice3dOverlay,
       trayEl: this.els.diceTrayBar
@@ -290,7 +297,7 @@ export const View = {
       Service.loadRailsSwapped();
       const savedShelf = await BrowserVault.loadShelf();
       if (savedShelf) Service.state.shelfModules = savedShelf;
-      this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
+      this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true, skipSceneTransition: true });
       await this.showPortalLobby();
       return;
     }
@@ -301,7 +308,7 @@ export const View = {
       if (!acquired) {
         Service.state.isHostGm = false;
         Service.state.role = 'player';
-        this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true });
+        this.render(Service.state, { redrawMap: true, redrawGrid: true, redrawDraw: true, redrawFog: true, skipSceneTransition: true });
         await this.showPortalLobby();
         if (this.els.inpJoinPortalCode) this.els.inpJoinPortalCode.value = roomCode;
         if (this.els.selJoinPortalRole) this.els.selJoinPortalRole.value = 'player';
@@ -598,41 +605,62 @@ export const View = {
       }
     });
 
-    this.els.wallModeSeg?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-wall-mode]');
+    this.els.stageLayerSeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-stage-layer]');
       if (!btn) return;
-      Service.setWallMode(btn.dataset.wallMode);
+      Service.setStageLayer(btn.dataset.stageLayer);
     });
 
-    this.els.wallKindSeg?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-wall-kind]');
-      if (!btn) return;
-      const res = Service.applyWallKind(btn.dataset.wallKind);
-      if (res.mode === 'transform' && res.count > 0) {
-        const labels = {
-          wall: 'Muro sólido',
-          terrain: 'Pilar / Terreno',
-          door: 'Puerta',
-          secret: 'Puerta secreta'
-        };
-        this.showActionToast(
-          res.count > 1
-            ? `✨ ${res.count} segmentos → ${labels[res.kind] || 'Muro'}`
-            : `✨ Segmento → ${labels[res.kind] || 'Muro'}`
-        );
+    this.els.btnStageToggleAllLights?.addEventListener('click', () => {
+      const lights = Selector.getActiveMapLights(Service.state, { includeDisabled: true });
+      if (lights.length === 0) return;
+      const anyEnabled = lights.some((l) => l.enabled !== false);
+      const count = Service.setAllSceneMapLightsEnabled(!anyEnabled);
+      if (count > 0) {
+        this.showActionToast(!anyEnabled ? `💡 ${count} luces encendidas` : `🌙 ${count} luces apagadas`);
       }
     });
 
-    this.els.btnWallToggleDoorOpen?.addEventListener('click', () => {
-      const selIds = Array.isArray(Service.state.selectedWallIds) ? Service.state.selectedWallIds : [];
-      if (selIds.length === 0) return;
-      selIds.forEach((id) => Service.toggleDoor(id));
+    this.els.wallDrawToolSeg?.addEventListener('click', (e) => {
+      const doorBtn = e.target.closest('[data-wall-mode="door"]');
+      if (doorBtn) {
+        Service.setWallMode('door');
+        return;
+      }
+      const kindBtn = e.target.closest('[data-wall-kind]');
+      if (!kindBtn) return;
+      if (Service.state.wallMode !== 'draw') Service.setWallMode('draw');
+      Service.applyWallKind(kindBtn.dataset.wallKind);
+    });
+
+    this.els.stageSelectFilterSeg?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-select-filter]');
+      if (!btn) return;
+      Service.setStageSelectFilter(btn.dataset.selectFilter);
+    });
+
+    this.els.btnSelectToggleLights?.addEventListener('click', () => {
+      const selLightIds = Array.isArray(Service.state.selectedMapLightIds) ? Service.state.selectedMapLightIds : [];
+      if (selLightIds.length === 0) return;
+      const selSet = new Set(selLightIds);
+      const selectedLights = Selector.getActiveMapLights(Service.state, { includeDisabled: true }).filter((l) => selSet.has(l.id));
+      const anyEnabled = selectedLights.some((l) => l.enabled !== false);
+      const count = Service.setSelectedMapLightsEnabled(!anyEnabled, selLightIds);
+      if (count > 0) {
+        this.showActionToast(!anyEnabled ? `💡 ${count} luz${count > 1 ? 'ces' : ''} encendida${count > 1 ? 's' : ''}` : `🌙 ${count} luz${count > 1 ? 'ces' : ''} apagada${count > 1 ? 's' : ''}`);
+      }
     });
 
     this.els.btnWallDeleteSelected?.addEventListener('click', () => {
-      const removed = Service.deleteSelectedWalls();
-      if (removed > 0) {
-        this.showActionToast(removed > 1 ? `🗑 ${removed} muros eliminados` : '🗑 Muro eliminado');
+      const res = Service.deleteSelectedScenery();
+      if (res.total > 0) {
+        if (res.walls > 0 && res.lights === 0) {
+          this.showActionToast(res.walls > 1 ? `🗑 ${res.walls} muros eliminados` : '🗑 Muro eliminado');
+        } else if (res.lights > 0 && res.walls === 0) {
+          this.showActionToast(res.lights > 1 ? `🗑 ${res.lights} luces eliminadas` : '🗑 Luz eliminada');
+        } else {
+          this.showActionToast(`🗑 ${res.total} elementos eliminados`);
+        }
       }
     });
 
@@ -723,9 +751,9 @@ export const View = {
       this.syncAudioControlsUi?.();
       if (!TabletopAudio.getPrefs().muted) TabletopAudio.playTokenPickup(1);
     });
-    this.els.shadowModeSeg?.querySelectorAll('[data-shadow-mode]').forEach((btn) => {
+    this.els.graphicsQualitySeg?.querySelectorAll('[data-graphics-quality]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.setShadowMode?.(btn.dataset.shadowMode);
+        this.setGraphicsQuality?.(btn.dataset.graphicsQuality);
       });
     });
     this.els.themePopover?.querySelectorAll('[data-theme-pick]').forEach((btn) => {
@@ -782,6 +810,15 @@ export const View = {
     Service.onBeforeSceneChange = (nextStatePreview) => this.beginSceneDarken?.(nextStatePreview);
   },
 
+  armInitialSceneCurtain() {
+    this._lastSceneTransitionSig = '';
+    this._pendingTransitionSeq = 0;
+    const c = this.els?.sceneTransitionCurtain;
+    if (!c) return;
+    c.classList.remove('is-title-in', 'is-title-out');
+    c.classList.add('is-backdrop-instant', 'is-backdrop-visible');
+  },
+
   applyWorldCameraTransform(state) {
     if (!this.els?.worldLayer || !state?.camera) return;
     const sx = this._cameraShakeOffset?.x || 0;
@@ -822,18 +859,27 @@ export const View = {
     const themeChanged = this._lastFogTheme !== state.theme;
     if (themeChanged) this._lastFogTheme = state.theme;
     const shouldRedrawFog = Boolean(opts.redrawFog || roleChanged || themeChanged);
+    const sceneSig = buildSceneTransitionSignature(state);
+    const skipTransition = Boolean(opts.skipSceneTransition);
+    const isInitialLoad = !skipTransition && !this._lastSceneTransitionSig;
+    const isSceneTransition = !skipTransition && (sceneSig !== this._lastSceneTransitionSig || this._pendingTransitionSeq > 0);
+    if (isInitialLoad && this.els.sceneTransitionCurtain) {
+      const c = this.els.sceneTransitionCurtain;
+      c.classList.add('is-backdrop-instant', 'is-backdrop-visible');
+    }
+
     if (opts.clearExplored) this.clearExploredMemory();
     else if (opts.syncExplored || shouldRedrawFog) this.syncExploredMemoryFromState(state);
     if (opts.redrawMap) this.drawMapCanvas(state);
 
-    const sceneSig = buildSceneTransitionSignature(state);
-    const isSceneTransition = sceneSig !== this._lastSceneTransitionSig || this._pendingTransitionSeq > 0;
     if (isSceneTransition) {
-      const isInitialLoad = !this._lastSceneTransitionSig;
       this._lastSceneTransitionSig = sceneSig;
       this.triggerSceneTransition?.(state, { isInitialLoad });
       if (opts.redrawDraw) this.drawStrokesCanvas(state);
     } else {
+      if (skipTransition && this._lastSceneTransitionSig) {
+        this._lastSceneTransitionSig = sceneSig;
+      }
       this.syncSceneAtmosphere?.(state);
       this.drawWallShadowCanvas?.(state);
       if (opts.redrawGrid) this.drawGridCanvas(state);
@@ -845,6 +891,7 @@ export const View = {
     this.renderCombatTracker(state);
     this.renderTokensLayer(state);
     this.renderMapNotes(state);
+    this.renderMapLights(state);
     this.renderVectorOverlay(state);
     const prevDrawers = this._prevDrawerOpenState || { sheet: true, drawer: true, gmScreen: true, journal: true };
     if (state.sheetOpen || prevDrawers.sheet) this.renderCharacterSheet(state);
@@ -917,7 +964,7 @@ export const View = {
       this.els.lblUiScalePct.textContent = `${Math.round((Service.getUiScale?.() || 1) * 100)}%`;
     }
     this.syncAudioControlsUi?.();
-    this.syncShadowModeUi?.();
+    this.syncGraphicsQualityUi?.();
     if (this.els.railsSwapSeg) {
       const swappedStr = Service.railsSwapped ? 'true' : 'false';
       this.els.railsSwapSeg.querySelectorAll('[data-rails-swapped]').forEach((btn) => {
@@ -956,38 +1003,67 @@ export const View = {
       const showWall = !isPlayer && !isSpectator && state.tool === 'wall';
       this.els.wallModePill.classList.toggle('hidden', !showWall);
       this.els.wallModePill.classList.toggle('flex', showWall);
-      const wMode = state.wallMode === 'select' ? 'select' : 'draw';
-      this.els.wallModeSeg?.querySelectorAll('[data-wall-mode]').forEach((b) => {
-        b.classList.toggle('is-active', b.dataset.wallMode === wMode);
+      const stageLayer = state.stageLayer === 'lights' ? 'lights' : state.stageLayer === 'select' ? 'select' : 'walls';
+      this.els.stageLayerSeg?.querySelectorAll('[data-stage-layer]').forEach((b) => {
+        b.classList.toggle('is-active', b.dataset.stageLayer === stageLayer);
       });
-      const selIds = Array.isArray(state.selectedWallIds) ? state.selectedWallIds : [];
-      const selSet = new Set(selIds);
-      const selectedWalls = (state.walls || []).filter((w) => w && selSet.has(w.id));
-      const count = selectedWalls.length;
+      this.els.stageWallsControls?.classList.toggle('hidden', stageLayer !== 'walls');
+      this.els.stageWallsControls?.classList.toggle('flex', stageLayer === 'walls');
+      this.els.stageLightsControls?.classList.toggle('hidden', stageLayer !== 'lights');
+      this.els.stageLightsControls?.classList.toggle('flex', stageLayer === 'lights');
+      this.els.stageSelectControls?.classList.toggle('hidden', stageLayer !== 'select');
+      this.els.stageSelectControls?.classList.toggle('flex', stageLayer === 'select');
 
-      let activeKind = state.wallDrawKind || 'wall';
-      if (wMode === 'select' && count > 0) {
-        const firstKind = selectedWalls[0].kind || 'wall';
-        activeKind = selectedWalls.every((w) => (w.kind || 'wall') === firstKind) ? firstKind : '';
+      const sceneLights = Selector.getActiveMapLights(state, { includeDisabled: true });
+      if (this.els.lblStageLightsCount) {
+        this.els.lblStageLightsCount.textContent =
+          sceneLights.length === 1 ? '1 luz' : `${sceneLights.length} luces`;
       }
-      this.els.wallKindSeg?.querySelectorAll('[data-wall-kind]').forEach((b) => {
-        b.classList.toggle('is-active', b.dataset.wallKind === activeKind);
+      if (this.els.btnStageToggleAllLights) {
+        const anyEnabled = sceneLights.some((l) => l.enabled !== false);
+        this.els.btnStageToggleAllLights.disabled = sceneLights.length === 0;
+        this.els.btnStageToggleAllLights.textContent = anyEnabled ? 'Apagar todas' : 'Encender todas';
+      }
+
+      const wMode = stageLayer === 'select' ? 'select' : state.wallMode === 'door' ? 'door' : 'draw';
+      const drawKind = normalizeWallKind(state.wallDrawKind || 'wall');
+      this.els.wallDrawToolSeg?.querySelectorAll('.portal-seg-btn').forEach((b) => {
+        const isActive =
+          wMode === 'door'
+            ? b.dataset.wallMode === 'door'
+            : b.dataset.wallKind === drawKind;
+        b.classList.toggle('is-active', isActive);
       });
 
-      if (this.els.btnWallToggleDoorOpen) {
-        const allDoors = wMode === 'select' && count > 0 && selectedWalls.every((w) => w.kind === 'door' || w.kind === 'secret');
-        this.els.btnWallToggleDoorOpen.classList.toggle('hidden', !allDoors);
-        if (allDoors) {
-          const allOpen = selectedWalls.every((w) => Boolean(w.open));
-          this.els.btnWallToggleDoorOpen.textContent = allOpen ? '🔒 Cerrar' : '🔓 Abrir';
+      const selectFilter = state.stageSelectFilter === 'walls' ? 'walls' : state.stageSelectFilter === 'lights' ? 'lights' : 'all';
+      this.els.stageSelectFilterSeg?.querySelectorAll('[data-select-filter]').forEach((b) => {
+        b.classList.toggle('is-active', b.dataset.selectFilter === selectFilter);
+      });
+
+      const selWallIds = Array.isArray(state.selectedWallIds) ? state.selectedWallIds : [];
+      const selWallSet = new Set(selWallIds);
+      const selectedWalls = (state.walls || []).filter((w) => w && selWallSet.has(w.id));
+      const selLightIds = Array.isArray(state.selectedMapLightIds) ? state.selectedMapLightIds : [];
+      const selLightSet = new Set(selLightIds);
+      const selectedLights = sceneLights.filter((l) => l && selLightSet.has(l.id));
+      const wallCount = selectedWalls.length;
+      const lightCount = selectedLights.length;
+      const totalCount = wallCount + lightCount;
+
+      if (this.els.btnSelectToggleLights) {
+        const showLightToggle = stageLayer === 'select' && lightCount > 0 && wallCount === 0;
+        this.els.btnSelectToggleLights.classList.toggle('hidden', !showLightToggle);
+        if (showLightToggle) {
+          const anyEnabled = selectedLights.some((l) => l.enabled !== false);
+          this.els.btnSelectToggleLights.innerHTML = `${renderUiLineIcon('bulb', 'w-3.5 h-3.5 shrink-0')}<span>${anyEnabled ? 'Apagar' : 'Encender'}</span>`;
         }
       }
 
       if (this.els.btnWallDeleteSelected) {
-        this.els.btnWallDeleteSelected.disabled = count === 0;
+        this.els.btnWallDeleteSelected.disabled = totalCount === 0;
       }
       if (this.els.lblWallSelectCount) {
-        this.els.lblWallSelectCount.textContent = count > 0 ? `Eliminar (${count})` : 'Eliminar';
+        this.els.lblWallSelectCount.textContent = totalCount > 0 ? `Eliminar (${totalCount})` : 'Eliminar';
       }
     }
 

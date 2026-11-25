@@ -3,7 +3,7 @@
    Soporta d4, d6, d8, d10 (trapezoedro pentagonal), d12, d20 y d100 (2×d10)
    ========================================================================== */
 
-import { TabletopAudio as DiceAudio } from './tabletopAudio.js?v=20261123a7';
+import { TabletopAudio as DiceAudio } from './tabletopAudio.js?v=20261125a1';
 
 export const Dice3DEngine = {
   renderer: null,
@@ -87,6 +87,21 @@ export const Dice3DEngine = {
     }
   },
 
+  setGraphicsProfile(profile) {
+    if (!profile) return;
+    this.maxDpr = Math.max(1, Number(profile.diceMaxDpr) || 2);
+    this.shadowsEnabled = profile.diceShadows !== false;
+    const targetDpr = typeof window !== 'undefined'
+      ? Math.min(window.devicePixelRatio || 1, this.maxDpr)
+      : 1;
+    if (this.renderer?.setPixelRatio) {
+      this.renderer.setPixelRatio(targetDpr);
+    }
+    if (this.previewRenderer?.setPixelRatio) {
+      this.previewRenderer.setPixelRatio(targetDpr);
+    }
+  },
+
   init(canvas, { overlayEl = null, trayEl = null } = {}) {
     if (!canvas || typeof window.THREE === 'undefined') return;
     this.canvas = canvas;
@@ -94,7 +109,7 @@ export const Dice3DEngine = {
     this.trayEl = trayEl;
     try {
       this.renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.maxDpr || 2));
       this.renderer.setSize(window.innerWidth, window.innerHeight, false);
       this.scene = new window.THREE.Scene();
       this.camera = new window.THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 120);
@@ -224,7 +239,7 @@ export const Dice3DEngine = {
     try {
       if (!this.previewRenderer) {
         this.previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true });
-        this.previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.maxDpr || 2));
         this.previewRenderer.setSize(previewCanvas.width, previewCanvas.height, false);
         this.previewScene = new THREE.Scene();
         this.previewCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 20);

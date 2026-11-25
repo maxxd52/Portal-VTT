@@ -19,17 +19,36 @@ export function normalizeWeatherType(raw) {
   return WEATHER_PRESETS.includes(key) ? key : 'none';
 }
 
+export function resolveWeatherFrameBudget(weather, { fpsScale = 1 } = {}) {
+  const wType = normalizeWeatherType(weather);
+  const scale = Math.min(1, Math.max(0.4, Number(fpsScale) || 1));
+  if (wType === 'mist' || wType === 'snow') {
+    if (scale === 1) return { targetFps: 30, minFrameMs: 33, maxDpr: 1 };
+    const targetFps = Math.max(15, Math.round(30 * scale));
+    return { targetFps, minFrameMs: Math.round(1000 / targetFps), maxDpr: 1 };
+  }
+  if (wType === 'rain' || wType === 'embers') {
+    if (scale === 1) return { targetFps: 45, minFrameMs: 22, maxDpr: 1 };
+    const targetFps = Math.max(15, Math.round(45 * scale));
+    return { targetFps, minFrameMs: Math.round(1000 / targetFps), maxDpr: 1 };
+  }
+  return { targetFps: 0, minFrameMs: 1000, maxDpr: 1 };
+}
+
 export function createWeatherSimulation({
   weather = 'none',
   mode = 'tactical',
   width = 1280,
   height = 800,
-  rng = Math.random
+  rng = Math.random,
+  densityScale = 1
 } = {}) {
   const wType = normalizeWeatherType(weather);
   const wMode = mode === 'narrative' ? 'narrative' : 'tactical';
   const w = Math.max(1, Number(width) || 1280);
   const h = Math.max(1, Number(height) || 800);
+  const dScale = Math.min(1, Math.max(0.25, Number(densityScale) || 1));
+  const scaleCount = (n) => Math.max(1, Math.round(n * dScale));
   const particles = [];
 
   if (wType === 'none') {
@@ -39,19 +58,27 @@ export function createWeatherSimulation({
   if (wType === 'rain') {
     if (wMode === 'tactical') {
       // Steep top-down streaks + ground splash ripples
-      for (let i = 0; i < 55; i++) {
+      const streakCount = scaleCount(55);
+      for (let i = 0; i < streakCount; i++) {
+        const vx = -110 - rng() * 50;
+        const vy = 520 + rng() * 240;
+        const len = 10 + rng() * 10;
+        const mag = Math.hypot(vx, vy) || 1;
         particles.push({
           kind: 'streak',
           x: rng() * w,
           y: rng() * h,
-          vx: -110 - rng() * 50,
-          vy: 520 + rng() * 240,
-          len: 10 + rng() * 10,
+          vx,
+          vy,
+          len,
+          dx: (vx / mag) * len,
+          dy: (vy / mag) * len,
           alpha: 0.14 + rng() * 0.16,
           lw: 1.1
         });
       }
-      for (let i = 0; i < 24; i++) {
+      const rippleCount = scaleCount(24);
+      for (let i = 0; i < rippleCount; i++) {
         particles.push({
           kind: 'ripple',
           x: rng() * w,
@@ -66,22 +93,29 @@ export function createWeatherSimulation({
       }
     } else {
       // Eye-level parallax rain
-      for (let i = 0; i < 95; i++) {
+      const streakCount = scaleCount(95);
+      for (let i = 0; i < streakCount; i++) {
         const depth = 0.45 + rng() * 0.55;
+        const vx = -(90 + rng() * 45) * depth;
+        const vy = (680 + rng() * 340) * depth;
+        const len = 18 + 26 * depth;
+        const mag = Math.hypot(vx, vy) || 1;
         particles.push({
           kind: 'streak',
           x: rng() * w,
           y: rng() * h,
-          vx: -(90 + rng() * 45) * depth,
-          vy: (680 + rng() * 340) * depth,
-          len: 18 + 26 * depth,
+          vx,
+          vy,
+          len,
+          dx: (vx / mag) * len,
+          dy: (vy / mag) * len,
           alpha: 0.12 + 0.2 * depth,
           lw: 0.9 + 0.7 * depth
         });
       }
     }
   } else if (wType === 'snow') {
-    const count = wMode === 'tactical' ? 65 : 80;
+    const count = scaleCount(wMode === 'tactical' ? 65 : 80);
     for (let i = 0; i < count; i++) {
       const depth = wMode === 'tactical' ? 0.65 + rng() * 0.5 : 0.4 + rng() * 0.7;
       particles.push({
@@ -96,7 +130,7 @@ export function createWeatherSimulation({
       });
     }
   } else if (wType === 'embers') {
-    const count = wMode === 'tactical' ? 45 : 55;
+    const count = scaleCount(wMode === 'tactical' ? 45 : 55);
     for (let i = 0; i < count; i++) {
       const warm = rng() > 0.35;
       if (wMode === 'narrative') {
@@ -128,7 +162,7 @@ export function createWeatherSimulation({
     }
   } else if (wType === 'mist') {
     const isNar = wMode === 'narrative';
-    const wispCount = isNar ? 14 : 16;
+    const wispCount = scaleCount(isNar ? 14 : 16);
     for (let i = 0; i < wispCount; i++) {
       particles.push({
         kind: 'mist',
@@ -142,7 +176,7 @@ export function createWeatherSimulation({
         phase: rng() * Math.PI * 2
       });
     }
-    const gustCount = isNar ? 16 : 14;
+    const gustCount = scaleCount(isNar ? 16 : 14);
     for (let i = 0; i < gustCount; i++) {
       particles.push({
         kind: 'gust',
@@ -201,35 +235,66 @@ export function stepWeatherSimulation(sim, dtSec = 0.016) {
   }
 }
 
-export function drawWeatherSimulation(ctx, sim) {
+export function drawWeatherSimulation(ctx, sim, opts = {}) {
   if (!ctx || !sim || !Array.isArray(sim.particles) || sim.particles.length === 0) return;
   const w = sim.width || 1280;
   const h = sim.height || 800;
   ctx.clearRect(0, 0, w, h);
+  const sprites = opts?.sprites || null;
 
   if (sim.weather === 'rain') {
     ctx.save();
     ctx.lineCap = 'round';
+    const streakAlphas = ['0.16', '0.24', '0.32'];
+    const streakBuckets = [[], [], []];
+    const rippleAlphas = ['0.07', '0.15', '0.23'];
+    const rippleBuckets = [[], [], []];
+
     for (let i = 0; i < sim.particles.length; i++) {
       const p = sim.particles[i];
       if (p.kind === 'ripple') {
         const life = Math.max(0, 1 - p.r / (p.maxR || 16));
-        ctx.strokeStyle = `rgba(186, 230, 253, ${(p.alpha * life).toFixed(3)})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.stroke();
+        const idx = life < 0.34 ? 0 : life < 0.68 ? 1 : 2;
+        rippleBuckets[idx].push(p);
       } else {
-        const mag = Math.hypot(p.vx, p.vy) || 1;
-        const dx = (p.vx / mag) * p.len;
-        const dy = (p.vy / mag) * p.len;
-        ctx.strokeStyle = `rgba(203, 213, 225, ${p.alpha.toFixed(3)})`;
-        ctx.lineWidth = p.lw || 1.1;
-        ctx.beginPath();
+        const idx = p.alpha < 0.20 ? 0 : p.alpha < 0.27 ? 1 : 2;
+        streakBuckets[idx].push(p);
+      }
+    }
+
+    ctx.lineWidth = sim.mode === 'narrative' ? 1.25 : 1.1;
+    for (let b = 0; b < 3; b++) {
+      const list = streakBuckets[b];
+      if (list.length === 0) continue;
+      ctx.strokeStyle = `rgba(203, 213, 225, ${streakAlphas[b]})`;
+      ctx.beginPath();
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        let dx = p.dx;
+        let dy = p.dy;
+        if (dx === undefined || dy === undefined) {
+          const mag = Math.hypot(p.vx, p.vy) || 1;
+          dx = (p.vx / mag) * p.len;
+          dy = (p.vy / mag) * p.len;
+        }
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x + dx, p.y + dy);
-        ctx.stroke();
       }
+      ctx.stroke();
+    }
+
+    ctx.lineWidth = 1;
+    for (let b = 0; b < 3; b++) {
+      const list = rippleBuckets[b];
+      if (list.length === 0) continue;
+      ctx.strokeStyle = `rgba(186, 230, 253, ${rippleAlphas[b]})`;
+      ctx.beginPath();
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        ctx.moveTo(p.x + p.r, p.y);
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      }
+      ctx.stroke();
     }
     ctx.restore();
     return;
@@ -237,11 +302,23 @@ export function drawWeatherSimulation(ctx, sim) {
 
   if (sim.weather === 'snow') {
     ctx.save();
+    const snowAlphas = ['0.26', '0.40', '0.54'];
+    const snowBuckets = [[], [], []];
     for (let i = 0; i < sim.particles.length; i++) {
       const p = sim.particles[i];
-      ctx.fillStyle = `rgba(241, 245, 249, ${p.alpha.toFixed(3)})`;
+      const idx = p.alpha < 0.33 ? 0 : p.alpha < 0.47 ? 1 : 2;
+      snowBuckets[idx].push(p);
+    }
+    for (let b = 0; b < 3; b++) {
+      const list = snowBuckets[b];
+      if (list.length === 0) continue;
+      ctx.fillStyle = `rgba(241, 245, 249, ${snowAlphas[b]})`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        ctx.moveTo(p.x + p.r, p.y);
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
     ctx.restore();
@@ -250,18 +327,26 @@ export function drawWeatherSimulation(ctx, sim) {
 
   if (sim.weather === 'embers') {
     ctx.save();
+    const useSprites = Boolean(sprites?.emberWarm && sprites?.emberGold);
     for (let i = 0; i < sim.particles.length; i++) {
       const p = sim.particles[i];
       const pulse = 0.72 + 0.28 * Math.sin((sim.time || 0) * 5 + p.phase);
       const a = Math.min(1, p.alpha * pulse);
-      ctx.fillStyle = `rgba(${p.color}, ${(a * 0.28).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * 2.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(${p.color}, ${a.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
+      if (useSprites) {
+        const sprite = p.color === '253, 224, 71' ? sprites.emberGold : sprites.emberWarm;
+        const drawR = p.r * 2.6;
+        ctx.globalAlpha = a;
+        ctx.drawImage(sprite, p.x - drawR, p.y - drawR, drawR * 2, drawR * 2);
+      } else {
+        ctx.fillStyle = `rgba(${p.color}, ${(a * 0.28).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(${p.color}, ${a.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
     return;
@@ -269,36 +354,50 @@ export function drawWeatherSimulation(ctx, sim) {
 
   if (sim.weather === 'mist') {
     ctx.save();
+    const useSprites = Boolean(sprites?.mistWisp && sprites?.mistGust);
     ctx.lineCap = 'round';
     for (let i = 0; i < sim.particles.length; i++) {
       const p = sim.particles[i];
       if (p.kind === 'gust') {
-        const x1 = p.x;
-        const x2 = p.x + p.len;
-        const grad = ctx.createLinearGradient(x1, p.y, x2, p.y);
-        grad.addColorStop(0, 'rgba(226, 232, 240, 0)');
-        grad.addColorStop(0.5, `rgba(226, 232, 240, ${p.alpha.toFixed(3)})`);
-        grad.addColorStop(1, 'rgba(226, 232, 240, 0)');
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = p.lw || 1.5;
-        ctx.beginPath();
-        ctx.moveTo(x1, p.y);
-        ctx.lineTo(x2, p.y);
-        ctx.stroke();
+        if (useSprites) {
+          const halfH = Math.max(2, (p.lw || 1.5) * 1.5);
+          ctx.globalAlpha = p.alpha;
+          ctx.drawImage(sprites.mistGust, p.x, p.y - halfH, p.len, halfH * 2);
+        } else {
+          const x1 = p.x;
+          const x2 = p.x + p.len;
+          const grad = ctx.createLinearGradient(x1, p.y, x2, p.y);
+          grad.addColorStop(0, 'rgba(226, 232, 240, 0)');
+          grad.addColorStop(0.5, `rgba(226, 232, 240, ${p.alpha.toFixed(3)})`);
+          grad.addColorStop(1, 'rgba(226, 232, 240, 0)');
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = p.lw || 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x1, p.y);
+          ctx.lineTo(x2, p.y);
+          ctx.stroke();
+        }
         continue;
       }
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.scale(1, (p.ry || 120) / (p.rx || 180));
-      const r = p.rx || 180;
-      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-      grad.addColorStop(0, `rgba(203, 213, 225, ${p.alpha.toFixed(3)})`);
-      grad.addColorStop(1, 'rgba(203, 213, 225, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      if (useSprites) {
+        const rx = p.rx || 180;
+        const ry = p.ry || 120;
+        ctx.globalAlpha = p.alpha;
+        ctx.drawImage(sprites.mistWisp, p.x - rx, p.y - ry, rx * 2, ry * 2);
+      } else {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.scale(1, (p.ry || 120) / (p.rx || 180));
+        const r = p.rx || 180;
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+        grad.addColorStop(0, `rgba(203, 213, 225, ${p.alpha.toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(203, 213, 225, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
     ctx.restore();
   }

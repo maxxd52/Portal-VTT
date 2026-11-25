@@ -2,19 +2,19 @@
    MAP GRID EDITOR VIEW: ESCENARIO UNIFICADO (GRILLA/ESCALA + ILUMINACIÓN)
    ========================================================================== */
 
-import { COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { COMPENDIUM_MAPS, buildPresetWallsForMap } from '../data/compendium.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { fitGridToBounds, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
+import { fitGridToBounds, normalizeGridConfig } from '../utils/gridGeometry.js?v=20261125a1';
 import {
   displayValueToMeters,
   formatDistance,
   metersToDisplayValue,
   normalizeSceneLighting
-} from '../utils/lightingModel.js?v=20261123a7';
-import { drawScenePreview } from '../utils/scenePreviewDraw.js?v=20261123a7';
-import { drawPresetMapBackground } from './canvasView.js?v=20261123a7';
+} from '../utils/lightingModel.js?v=20261125a1';
+import { drawScenePreview } from '../utils/scenePreviewDraw.js?v=20261125a1';
+import { drawPresetMapBackground } from './canvasView.js?v=20261125a1';
 
 export const MapGridEditorViewMethods = {
   _ensureMapGridEditorState() {
@@ -539,7 +539,7 @@ export const MapGridEditorViewMethods = {
       this.els.lblSceneExploredStatus.textContent = hasExplored ? 'Con progreso guardado' : 'Sin explorar';
     }
     if (this.els.lblSceneVisionSummary) {
-      this.els.lblSceneVisionSummary.textContent = `Base: ${formatDistance(visionCfg.defaultVisionMeters, unit)} · Antorcha: ${formatDistance(visionCfg.torchMeters, unit)} · Linterna: ${formatDistance(visionCfg.lanternMeters, unit)}`;
+      this.els.lblSceneVisionSummary.textContent = `Detección nocturna: ${formatDistance(visionCfg.nightDetectionMeters, unit)}`;
     }
     if (this.els.btnSceneDrawWalls) {
       this.els.btnSceneDrawWalls.classList.toggle('hidden', !ed.isActiveScene || Service.state.role !== 'gm');

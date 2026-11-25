@@ -19,7 +19,7 @@ const {
   shouldCoalesceImpact,
   normalizeAudioPrefs,
   TabletopAudio
-} = await import('../js/services/tabletopAudio.js?v=20261123a7');
+} = await import('../js/services/tabletopAudio.js?v=20261125a1');
 
 test('computeTokenAudioProfile lowers pitch and deepens weight/decay as token size grows, with anti-fatigue jitter', () => {
   const std = computeTokenAudioProfile(1, 0.5);

@@ -2,6 +2,8 @@
    CONTEXT MENU MODEL: PURE APPLE-STYLE SPEC BUILDERS & SMART POSITIONING
    ========================================================================== */
 
+import { getWallDoorMode, isWallDoor, normalizeWallKind } from './wallGeometry.js?v=20261125a1';
+
 const DEFAULT_MARGIN = 8;
 const FLIP_GAP = 6;
 
@@ -212,8 +214,7 @@ export function buildMapMenuSpec({
     sections: [
       [
         { id: 'ping-here', icon: 'radio', label: 'Ping aquí', shortcut: 'G' },
-        { id: 'add-note', icon: 'pin', label: 'Fijar nota aquí…' },
-        { id: 'spawn-here', icon: 'plus', label: 'Invocar ficha aquí' }
+        { id: 'add-note', icon: 'pin', label: 'Fijar nota aquí…' }
       ],
       [
         {
@@ -223,6 +224,34 @@ export function buildMapMenuSpec({
           checked: Boolean(dynamicLighting)
         },
         { id: 'open-grid', icon: 'sliders', label: 'Escenario (Grilla y Luz)…' }
+      ]
+    ]
+  };
+}
+
+export function buildMapLightMenuSpec(light = {}) {
+  const enabled = light?.enabled !== false;
+  return {
+    header: {
+      title: 'Luz de escenario',
+      subtitle: enabled ? 'Encendida' : 'Apagada'
+    },
+    sections: [
+      [
+        {
+          id: 'toggle-enabled',
+          icon: enabled ? 'eye-off' : 'bulb',
+          label: enabled ? 'Apagar luz' : 'Encender luz',
+          checked: enabled
+        }
+      ],
+      [
+        {
+          id: 'delete-light',
+          icon: 'trash',
+          label: 'Eliminar luz',
+          danger: true
+        }
       ]
     ]
   };
@@ -306,32 +335,39 @@ export function buildWallMenuSpec(walls = []) {
   const list = Array.isArray(walls) ? walls.filter(Boolean) : [];
   const count = list.length;
   const kindLabels = {
-    wall: 'Muro sólido',
-    terrain: 'Pilar / Terreno',
-    door: 'Puerta',
-    secret: 'Puerta secreta',
-    invisible: 'Invisible / Reja'
+    wall: 'Sólido',
+    terrain: 'Relieve',
+    invisible: 'Translúcido'
   };
-  const firstKind = count > 0 ? (list[0].kind || 'wall') : 'wall';
-  const uniformKind = count > 0 && list.every((w) => (w.kind || 'wall') === firstKind) ? firstKind : null;
-  const allDoors = count > 0 && list.every((w) => w.kind === 'door' || w.kind === 'secret');
+  const firstKind = count > 0 ? normalizeWallKind(list[0].kind) : 'wall';
+  const uniformKind = count > 0 && list.every((w) => normalizeWallKind(w.kind) === firstKind) ? firstKind : null;
+  const firstDoor = count > 0 ? getWallDoorMode(list[0]) : 'none';
+  const uniformDoor = count > 0 && list.every((w) => getWallDoorMode(w) === firstDoor) ? firstDoor : null;
+  const allDoors = count > 0 && list.every((w) => isWallDoor(w));
 
-  const headerTitle = count <= 1
-    ? (kindLabels[firstKind] || 'Muro')
-    : `${count} muros seleccionados`;
-  const headerSubtitle = count <= 1 && (firstKind === 'door' || firstKind === 'secret')
+  const singleTitle = firstDoor === 'secret'
+    ? (firstKind === 'wall' ? 'Puerta secreta' : `${kindLabels[firstKind]} · Secreta`)
+    : firstDoor === 'normal'
+      ? (firstKind === 'wall' ? 'Puerta' : `${kindLabels[firstKind]} · Puerta`)
+      : (kindLabels[firstKind] || 'Muro');
+  const headerTitle = count <= 1 ? singleTitle : `${count} muros seleccionados`;
+  const headerSubtitle = count <= 1 && isWallDoor(list[0])
     ? (list[0]?.open ? 'Abierta' : list[0]?.locked ? 'Bloqueada' : 'Cerrada')
     : '';
 
   const typeSection = [
-    { id: 'kind-wall', icon: 'brick', label: 'Muro sólido', checked: uniformKind === 'wall' },
-    { id: 'kind-terrain', icon: 'columns', label: 'Pilar / Terreno', checked: uniformKind === 'terrain' },
-    { id: 'kind-invisible', icon: 'grid', label: 'Invisible / Reja', checked: uniformKind === 'invisible' },
-    { id: 'kind-door', icon: 'door-open', label: 'Puerta', checked: uniformKind === 'door' },
-    { id: 'kind-secret', icon: 'sparkles', label: 'Puerta secreta', checked: uniformKind === 'secret' }
+    { id: 'kind-wall', icon: 'brick', label: 'Sólido', checked: uniformKind === 'wall' },
+    { id: 'kind-invisible', icon: 'grid', label: 'Translúcido', checked: uniformKind === 'invisible' },
+    { id: 'kind-terrain', icon: 'columns', label: 'Relieve', checked: uniformKind === 'terrain' }
   ];
 
-  const sections = [typeSection];
+  const doorSection = [
+    { id: 'door-none', icon: 'ban', label: 'Sin puerta', checked: uniformDoor === 'none' },
+    { id: 'door-normal', icon: 'door-open', label: 'Puerta', checked: uniformDoor === 'normal' },
+    { id: 'door-secret', icon: 'sparkles', label: 'Puerta secreta', checked: uniformDoor === 'secret' }
+  ];
+
+  const sections = [typeSection, doorSection];
   if (allDoors) {
     const allOpen = list.every((w) => Boolean(w.open));
     const allClosed = list.every((w) => !w.open);

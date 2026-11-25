@@ -21,10 +21,10 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 test('S3: all side drawers start collapsed by default for both GM and Player roles and syncPlayerRoleState keeps sheet collapsed', () => {
   globalThis.window.location.search = '';
@@ -49,6 +49,7 @@ test('S3: all side drawers start collapsed by default for both GM and Player rol
     Service.state.role = 'player';
     Service.state.isHostGm = false;
     Service.state.activeInviteId = 'inv-1';
+    Service.state.tokens = [{ id: 'tok-1', name: 'Hero', isAlly: true, x: 400, y: 400, hp: 20, maxHp: 20 }];
     Service.state.playerInvites = [{ id: 'inv-1', label: 'P1', tokenIds: ['tok-1'] }];
     Service.state.selectedTokenId = null;
     Service.state.sheetOpen = false;

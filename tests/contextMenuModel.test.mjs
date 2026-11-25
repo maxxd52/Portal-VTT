@@ -14,8 +14,8 @@ import {
   parseHpInputExpression,
   stepPresetValue,
   shouldAllowNativeContextMenu
-} from '../js/utils/contextMenuModel.js?v=20261123a7';
-import { renderUiLineIcon, hasUiLineIcon } from '../js/utils/uiIcons.js?v=20261123a7';
+} from '../js/utils/contextMenuModel.js?v=20261125a1';
+import { renderUiLineIcon, hasUiLineIcon } from '../js/utils/uiIcons.js?v=20261125a1';
 
 const flattenIds = (spec) => {
   const ids = [];
@@ -133,7 +133,7 @@ test('buildMapMenuSpec enforces strict player zero-leak and separates GM tools',
   assert.equal(gmSpec.showToolsRow, true);
   assert.ok(gmIds.includes('ping-here'));
   assert.ok(gmIds.includes('add-note'));
-  assert.ok(gmIds.includes('spawn-here'));
+  assert.ok(!gmIds.includes('spawn-here'));
   assert.ok(gmIds.includes('toggle-dynlight'));
   assert.ok(gmIds.includes('open-grid'));
   const dyn = gmSpec.sections.flat().find((i) => i.id === 'toggle-dynlight');
@@ -214,21 +214,23 @@ test('shouldAllowNativeContextMenu allows text inputs and contenteditable, block
 });
 
 test('buildWallMenuSpec handles single door and batch multi-wall selection cleanly', () => {
-  const singleDoor = buildWallMenuSpec([{ id: 'w1', kind: 'door', open: false }]);
+  const singleDoor = buildWallMenuSpec([{ id: 'w1', kind: 'wall', door: 'normal', open: false }]);
   assert.equal(singleDoor.header.title, 'Puerta');
   const doorIds = flattenIds(singleDoor);
   assert.ok(doorIds.includes('kind-wall'));
   assert.ok(doorIds.includes('kind-terrain'));
-  assert.ok(doorIds.includes('kind-door'));
-  assert.ok(doorIds.includes('kind-secret'));
+  assert.ok(doorIds.includes('door-none'));
+  assert.ok(doorIds.includes('door-normal'));
+  assert.ok(doorIds.includes('door-secret'));
   assert.ok(doorIds.includes('toggle-open'));
   assert.ok(doorIds.includes('delete-walls'));
-  assert.equal(singleDoor.sections.flat().find((i) => i.id === 'kind-door').checked, true);
+  assert.equal(singleDoor.sections.flat().find((i) => i.id === 'kind-wall').checked, true);
+  assert.equal(singleDoor.sections.flat().find((i) => i.id === 'door-normal').checked, true);
 
   const multiMixed = buildWallMenuSpec([
-    { id: 'w1', kind: 'wall', open: false },
-    { id: 'w2', kind: 'door', open: false },
-    { id: 'w3', kind: 'wall', open: false }
+    { id: 'w1', kind: 'wall', door: 'none', open: false },
+    { id: 'w2', kind: 'terrain', door: 'normal', open: false },
+    { id: 'w3', kind: 'wall', door: 'none', open: false }
   ]);
   assert.equal(multiMixed.header.title, '3 muros seleccionados');
   const multiIds = flattenIds(multiMixed);

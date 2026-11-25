@@ -2,9 +2,9 @@
    GM SCREEN VIEW: CAJÓN LATERAL DERECHO, PESTAÑAS Y BANDEJA DEL COMPENDIO
    ========================================================================== */
 
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS, COMPENDIUM_MAPS } from '../data/compendium.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 export const GmScreenViewMethods = {
   bindGmScreenEvents() {

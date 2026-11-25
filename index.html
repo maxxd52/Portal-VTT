@@ -19,7 +19,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="css/styles.css?v=20261123a7" />
+  <link rel="stylesheet" href="css/styles.css?v=20261125a1" />
 </head>
 <body>
   <!-- ========================================================================
@@ -41,9 +41,10 @@
       <canvas id="fogCanvas" width="2400" height="1600"></canvas>
       <svg id="overlayVectorSvg" width="2400" height="1600" viewBox="0 0 2400 1600"></svg>
       <div id="mapNotesLayer" class="absolute inset-0 pointer-events-none"></div>
+      <div id="mapLightsLayer" class="absolute inset-0 pointer-events-none"></div>
     </div>
     <canvas id="weatherCanvas" class="hidden" aria-hidden="true"></canvas>
-    <div id="sceneTransitionCurtain" class="portal-scene-curtain" aria-hidden="true">
+    <div id="sceneTransitionCurtain" class="portal-scene-curtain is-backdrop-instant is-backdrop-visible" aria-hidden="true">
       <div class="portal-scene-curtain-backdrop"></div>
       <div class="portal-scene-curtain-inner">
         <div id="sceneTransitionTitle" class="portal-scene-curtain-title"></div>
@@ -384,12 +385,14 @@
           </div>
           <div class="px-2 py-1.5 flex flex-col gap-1.5">
             <div class="flex items-center justify-between">
-              <span class="text-[10px] font-semibold uppercase tracking-wider opacity-55">Sombras por luz</span>
+              <span class="text-[10px] font-semibold uppercase tracking-wider opacity-55">Calidad gráfica</span>
+              <span id="lblGraphicsQualityResolved" class="text-[10px] font-mono-tech opacity-65">Alto</span>
             </div>
-            <div id="shadowModeSeg" class="portal-seg grid-cols-3 w-full">
-              <button type="button" data-shadow-mode="auto" class="portal-seg-btn is-active" title="Adapta sombras dinámicas automáticamente según tu equipo">Auto</button>
-              <button type="button" data-shadow-mode="on" class="portal-seg-btn" title="Siempre proyectar sombras según luces del mapa">Activas</button>
-              <button type="button" data-shadow-mode="off" class="portal-seg-btn" title="Solo sombra de contacto (máximo rendimiento)">Básico</button>
+            <div id="graphicsQualitySeg" class="portal-seg grid-cols-4 w-full">
+              <button type="button" data-graphics-quality="auto" class="portal-seg-btn is-active" title="Adapta sombras, desenfoque, clima y 3D automáticamente según tu equipo">Auto</button>
+              <button type="button" data-graphics-quality="high" class="portal-seg-btn" title="Calidad máxima: sombras dinámicas, blur completo y clima 100%">Alto</button>
+              <button type="button" data-graphics-quality="balanced" class="portal-seg-btn" title="Equilibrado: sombras dinámicas, blur reducido y clima optimizado">Medio</button>
+              <button type="button" data-graphics-quality="low" class="portal-seg-btn" title="Máximo rendimiento: sin blur ni sombras dinámicas, clima ligero">Ligero</button>
             </div>
           </div>
           <div class="my-1 portal-hairline"></div>
@@ -627,7 +630,6 @@
       <div id="sheetPaneSkills" class="hidden flex-1 flex-col gap-1.5 min-h-0">
         <div class="flex items-center justify-between gap-1.5 shrink-0">
           <button type="button" id="btnToggleSkillForm" class="portal-btn portal-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold">+ Habilidad</button>
-          <button type="button" id="btnLoadDnd55Skills" class="portal-btn portal-subpanel px-2.5 py-1 rounded-lg text-[10px] font-semibold" title="Cargar las 18 habilidades de D&D 5.5e">Cargar 5.5e</button>
         </div>
         <form id="sheetSkillForm" class="hidden items-center gap-1 shrink-0">
           <input type="text" id="inpSheetSkillName" placeholder="Habilidad..." required class="portal-input px-2 py-1 text-[11px] flex-1 min-w-0" />
@@ -897,6 +899,17 @@
           <option value="consumable">Consumible</option>
           <option value="ability">Capacidad</option>
         </select>
+      </div>
+      <div class="portal-subpanel rounded-xl px-2 py-1.5 flex flex-col gap-1.5">
+        <div id="customItemUsageSeg" class="portal-seg grid grid-cols-3 gap-0.5 text-[10px]">
+          <button type="button" data-item-usage="permanent" class="portal-seg-btn py-1 font-semibold is-active">Permanente</button>
+          <button type="button" data-item-usage="consumable" class="portal-seg-btn py-1 font-semibold">Usos</button>
+          <button type="button" data-item-usage="charges" class="portal-seg-btn py-1 font-semibold">Cargas</button>
+        </div>
+        <div id="customItemUsageCountRow" class="hidden items-center justify-between gap-2 text-[10.5px] px-0.5">
+          <span id="lblCustomItemUsageHint" class="opacity-70 leading-tight">Usos disponibles (se elimina al llegar a 0)</span>
+          <input type="number" id="inpCustomItemMaxUses" min="1" max="999" value="1" class="portal-num-input w-14 py-0.5 text-center text-xs font-semibold tabular-nums shrink-0" />
+        </div>
       </div>
       <div class="portal-subpanel rounded-xl px-2.5 py-2 flex items-center justify-between gap-2.5">
         <button type="button" id="btnToggleItemIconPicker" class="portal-subpanel portal-btn p-0.5 rounded-xl flex items-center gap-1 shrink-0" title="Elegir ícono"></button>
@@ -1345,7 +1358,7 @@
       <button type="button" data-ctx-tool="draw" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Marcador Táctico [P]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
       </button>
-      <button type="button" data-ctx-tool="wall" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Muros y Puertas (Luz Dinámica) [W]">
+      <button type="button" data-ctx-tool="wall" class="portal-subpanel portal-btn h-9 flex-col gap-0" title="Escenografía (Muros y Luces) [W]">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v6M15 10v5M9 15v5"/></svg>
       </button>
     </div>
@@ -1393,45 +1406,92 @@
     </button>
   </div>
 
-  <!-- Píldora unificada para herramienta Muros (Modo + Tipo de muro + Eliminar) -->
+  <!-- Píldora unificada para Escenografía (Muros | Luces | Seleccionar) -->
   <div
     id="wallModePill"
-    class="portal-ui-scaled hidden portal-panel rounded-full p-1 items-center gap-1.5 fixed top-[72px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100vw-24px)] flex-wrap justify-center"
+    class="portal-ui-scaled hidden portal-panel rounded-full px-1.5 py-1 items-center gap-1 fixed top-[72px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto w-max max-w-[calc(100vw-24px)]"
   >
-    <div id="wallModeSeg" class="portal-seg grid-cols-2 min-w-[176px]">
-      <button type="button" data-wall-mode="draw" class="portal-seg-btn is-active" title="Trazar segmentos del tipo elegido (Alt: trazo libre)">✏️ Trazar</button>
-      <button type="button" data-wall-mode="select" class="portal-seg-btn" title="Clic o arrastrar caja para seleccionar muros y transformarlos o eliminarlos">↖ Seleccionar</button>
+    <div id="stageLayerSeg" class="portal-seg grid-cols-3 shrink-0" title="Modo de Escenografía">
+      <button type="button" data-stage-layer="walls" class="portal-seg-btn is-active" title="Trazar muros y colocar puertas">Muros</button>
+      <button type="button" data-stage-layer="lights" class="portal-seg-btn" title="Colocar y editar luces de escenario">Luces</button>
+      <button type="button" data-stage-layer="select" class="portal-seg-btn" title="Seleccionar, mover o editar muros, puertas y luces">Seleccionar</button>
     </div>
 
-    <span class="portal-dock-sep"></span>
+    <span id="stageLayerSep" class="portal-dock-sep"></span>
 
-    <div id="wallKindSeg" class="portal-seg grid-cols-5 min-w-[330px]" title="Tipo de muro al trazar o transformar selección">
-      <button type="button" data-wall-kind="wall" class="portal-seg-btn is-active" title="Muro sólido (bloquea luz y paso)">🧱 Muro</button>
-      <button type="button" data-wall-kind="terrain" class="portal-seg-btn" title="Pilar / Terreno (muestra el interior y proyecta sombra detrás)">🏛 Pilar</button>
-      <button type="button" data-wall-kind="invisible" class="portal-seg-btn" title="Invisible / Reja (deja ver a través, bloquea el paso de jugadores)">🪟 Reja</button>
-      <button type="button" data-wall-kind="door" class="portal-seg-btn" title="Puerta interactiva (jugadores pueden abrir/cerrar)">🚪 Puerta</button>
-      <button type="button" data-wall-kind="secret" class="portal-seg-btn" title="Puerta secreta (oculta como muro sólido para jugadores)">🔮 Secreta</button>
+    <div id="stageWallsControls" class="flex items-center gap-1">
+      <div id="wallDrawToolSeg" class="portal-seg grid-cols-4 shrink-0" title="Tipo de trazo o puerta">
+        <button type="button" data-wall-kind="wall" class="portal-seg-btn is-active" title="Sólido (bloquea luz y paso)">
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="4" x2="12" y2="10"/><line x1="8" y1="10" x2="8" y2="15"/><line x1="16" y1="10" x2="16" y2="15"/><line x1="12" y1="15" x2="12" y2="20"/></svg>
+          <span>Sólido</span>
+        </button>
+        <button type="button" data-wall-kind="invisible" class="portal-seg-btn" title="Translúcido (deja ver a través, bloquea el paso)">
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+          <span>Translúcido</span>
+        </button>
+        <button type="button" data-wall-kind="terrain" class="portal-seg-btn" title="Relieve (atenúa en el primer impacto y bloquea detrás; permite paso)">
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V4"/><path d="M18 20V4"/><path d="M4 4h16"/><path d="M4 20h16"/><path d="M10 4v16"/><path d="M14 4v16"/></svg>
+          <span>Relieve</span>
+        </button>
+        <button type="button" data-wall-mode="door" class="portal-seg-btn" title="Clic en un muro para añadir puerta (abre sus propiedades) o arrastra para ajustar ancho">
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg>
+          <span>Puerta</span>
+        </button>
+      </div>
     </div>
 
-    <button
-      type="button"
-      id="btnWallToggleDoorOpen"
-      class="hidden portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold"
-      title="Abrir o cerrar puerta(s) seleccionada(s)"
-    >
-      🔓 Abrir
-    </button>
+    <div id="stageLightsControls" class="hidden items-center gap-1.5 px-1">
+      <svg class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+      <span class="text-[11px] opacity-70 select-none whitespace-nowrap">Clic para colocar</span>
+      <span class="portal-dock-sep"></span>
+      <span id="lblStageLightsCount" class="font-mono-tech text-[10px] opacity-65 tabular-nums whitespace-nowrap">0 luces</span>
+      <button
+        type="button"
+        id="btnStageToggleAllLights"
+        class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap disabled:opacity-35 disabled:pointer-events-none"
+        title="Encender o apagar todas las luces de esta escena"
+        disabled
+      >
+        Encender todas
+      </button>
+    </div>
 
-    <button
-      type="button"
-      id="btnWallDeleteSelected"
-      class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold text-rose-400 hover:opacity-100 disabled:opacity-35 disabled:pointer-events-none"
-      title="Eliminar muros seleccionados [Supr]"
-      disabled
-    >
-      <span>🗑</span>
-      <span id="lblWallSelectCount">Eliminar</span>
-    </button>
+    <div id="stageSelectControls" class="hidden items-center gap-1">
+      <div id="stageSelectFilterSeg" class="portal-seg grid-cols-3 shrink-0" title="Filtrar qué elementos seleccionar">
+        <button type="button" data-select-filter="all" class="portal-seg-btn is-active" title="Seleccionar muros, puertas y luces">
+          <span>Todo</span>
+        </button>
+        <button type="button" data-select-filter="walls" class="portal-seg-btn" title="Seleccionar solo muros y puertas">
+          <span>Muros</span>
+        </button>
+        <button type="button" data-select-filter="lights" class="portal-seg-btn" title="Seleccionar solo luces">
+          <span>Luces</span>
+        </button>
+      </div>
+
+      <span class="portal-dock-sep"></span>
+
+      <button
+        type="button"
+        id="btnSelectToggleLights"
+        class="hidden portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold inline-flex items-center gap-1 whitespace-nowrap"
+        title="Encender o apagar las luces seleccionadas"
+      >
+        <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+        <span>Encender</span>
+      </button>
+
+      <button
+        type="button"
+        id="btnWallDeleteSelected"
+        class="portal-btn portal-subpanel px-2.5 py-1 rounded-full text-[11px] font-semibold text-rose-400 inline-flex items-center gap-1 whitespace-nowrap disabled:opacity-35 disabled:pointer-events-none"
+        title="Eliminar elementos seleccionados [Supr]"
+        disabled
+      >
+        <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        <span id="lblWallSelectCount">Eliminar</span>
+      </button>
+    </div>
   </div>
 
   <!-- Editor compacto de Nota / Pin en el mapa -->
@@ -1837,37 +1897,10 @@
             <input
               id="inpPortalName"
               type="text"
-              placeholder="Ej. Crónicas del Bastión"
+              placeholder="Ej. Mi Nueva Mesa"
               class="portal-input w-full px-3 py-2 rounded-xl text-xs"
             />
           </label>
-
-          <div class="grid grid-cols-2 gap-2.5">
-            <label class="flex flex-col gap-1">
-              <span class="text-[11px] font-medium opacity-80">Módulo de reglas</span>
-              <select id="selPortalRuleset" class="portal-input w-full px-2.5 py-2 rounded-xl text-xs">
-                <option value="dnd55" selected>D&amp;D 5.5 (1d20 + mod)</option>
-                <option value="pbta">PbtA / Dungeon World (2d6 + stat)</option>
-                <option value="pool">Reserva de Dados (Éxitos d10)</option>
-                <option value="d100">Percentil / BRP (1d100)</option>
-                <option value="vieja_escuela">Vieja Escuela (OSR 1d20)</option>
-                <option value="free">Sistema Genérico (Personalizable)</option>
-              </select>
-            </label>
-
-            <label class="flex flex-col gap-1">
-              <span class="text-[11px] font-medium opacity-80">Escenario inicial</span>
-              <select id="selPortalMap" class="portal-input w-full px-2.5 py-2 rounded-xl text-xs">
-                <option value="bastion" selected>Bastión Subterráneo</option>
-                <option value="forest">Claro del Bosque</option>
-                <option value="tavern">Taberna Engranaje</option>
-                <option value="crypt">Cripta Antigua</option>
-                <option value="arena">Arena de Combate</option>
-                <option value="cavern">Caverna Subterránea</option>
-                <option value="empty">Tablero Vacío</option>
-              </select>
-            </label>
-          </div>
 
           <div class="portal-settings-group">
             <label class="portal-settings-row cursor-pointer select-none">
@@ -1933,7 +1966,7 @@
   <!-- ========================================================================
        10. MOTOR DE APLICACIÓN (ES MODULES)
        ======================================================================== -->
-  <script type="module" src="js/main.js?v=20261123a7"></script>
+  <script type="module" src="js/main.js?v=20261125a1"></script>
 
   <!-- Visor flotante de Handout compartido en mesa -->
   <div id="handoutModal" class="fixed inset-0 bg-black/75 z-50 flex portal-modal-backdrop items-center justify-center p-4" role="dialog" aria-modal="true">
@@ -2272,7 +2305,7 @@
                 <span class="font-medium">Referencia en vista previa</span>
                 <span class="text-[10px] opacity-60">Arrastra "PJ"</span>
               </div>
-              <span id="lblSceneVisionSummary" class="text-[10px] opacity-75">Base: 9 m · Antorcha: 6 m · Linterna: 12 m</span>
+              <span id="lblSceneVisionSummary" class="text-[10px] opacity-75">Detección nocturna: 12 m</span>
               <div class="flex items-center justify-between gap-1.5 pt-0.5">
                 <span class="text-[10px] opacity-65 shrink-0">1 ficha =</span>
                 <div class="portal-stepper justify-between flex-1 px-1 py-0.5">
@@ -2288,7 +2321,7 @@
                   </button>
                 </div>
               </div>
-              <button type="button" id="btnSceneOpenSystemVision" class="text-left text-[10.5px] font-medium hover:underline pt-0.5" style="color: var(--accent-primary);">Ajustar visión base del sistema →</button>
+              <button type="button" id="btnSceneOpenSystemVision" class="text-left text-[10.5px] font-medium hover:underline pt-0.5" style="color: var(--accent-primary);">Ajustar detección nocturna y luces →</button>
             </div>
 
             <button type="button" id="btnSceneDrawWalls" class="portal-btn portal-panel w-full py-1.5 rounded-xl text-[11px] font-medium">🧱 Dibujar muros y puertas [W]</button>

@@ -19,11 +19,11 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
-const { Dice3DEngine } = await import('../js/services/dice3dEngine.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
+const { Dice3DEngine } = await import('../js/services/dice3dEngine.js?v=20261125a1');
 
 function resetState(role = 'gm', isHostGm = role === 'gm') {
   Service.cancelAllTokenGlides();

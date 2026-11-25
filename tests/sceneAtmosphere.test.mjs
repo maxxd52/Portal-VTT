@@ -13,8 +13,8 @@ const {
   blendRgbToAtmosphere,
   stepCameraInertia,
   stepSmoothZoom
-} = await import('../js/utils/sceneAtmosphere.js?v=20261123a7');
-const { TokenPhysicsViewMethods } = await import('../js/ui/tokenPhysicsView.js?v=20261123a7');
+} = await import('../js/utils/sceneAtmosphere.js?v=20261125a1');
+const { TokenPhysicsViewMethods } = await import('../js/ui/tokenPhysicsView.js?v=20261125a1');
 
 test('resolveSceneAtmosphere returns distinct atmospheric palettes for presets and aligns board/dice shadow direction', () => {
   const tavern = resolveSceneAtmosphere('tavern');

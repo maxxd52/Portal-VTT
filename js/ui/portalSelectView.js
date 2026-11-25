@@ -6,7 +6,7 @@ import {
   computeAnchoredDropdownPosition,
   filterSelectOptionGroups,
   shouldShowSelectSearch
-} from '../utils/pickerModel.js?v=20261123a7';
+} from '../utils/pickerModel.js?v=20261125a1';
 
 function extractSelectOptionGroups(selectEl) {
   if (!selectEl) return { groups: [], totalOptions: 0 };

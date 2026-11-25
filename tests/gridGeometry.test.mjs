@@ -26,11 +26,11 @@ const {
   normalizeGridConfig,
   resolveGridStrokeStyle,
   snapToGrid
-} = await import('../js/utils/gridGeometry.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+} = await import('../js/utils/gridGeometry.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 test('normalizeGridConfig provides safe defaults and clamps invalid or out-of-range fields', () => {
   assert.deepEqual(normalizeGridConfig({}), {
@@ -167,6 +167,8 @@ test('Service.updateMapGridForScene and changeMap preserve independent square/he
     Service.state = createInitialState();
     Service.state.role = 'gm';
     Service.state.isHostGm = true;
+    Service.state.mapId = 'bastion';
+    Service.state.activeMapKey = 'bastion';
 
     // Configure active bastion map as hex-v with dark lines
     Service.updateMapGridForScene('bastion', { type: 'hex-v', cellSize: 72, color: 'dark', opacity: 0.45 });

@@ -1,18 +1,19 @@
-import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { BrowserVault } from './browserVault.js?v=20261123a7';
-import { CartridgePacker } from './cartridgePacker.js?v=20261123a7';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+import { COMPENDIUM_ACTORS, COMPENDIUM_ITEMS } from '../data/compendium.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { BrowserVault } from './browserVault.js?v=20261125a1';
+import { CartridgePacker } from './cartridgePacker.js?v=20261125a1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261125a1';
 import { DriveUrlHelper } from '../utils/driveUrlHelper.js';
-import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261123a7';
-import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
-import { normalizeSceneLighting } from '../utils/lightingModel.js?v=20261123a7';
+import { normalizeGridConfig } from '../utils/gridGeometry.js?v=20261125a1';
+import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261125a1';
+import { normalizeSceneLighting, resolveTokenDarkvisionMeters } from '../utils/lightingModel.js?v=20261125a1';
 import {
   applyActorTemplateToLiveToken,
   clampTokenSize,
+  normalizeItemUsage,
   normalizeTemplateStats,
   reconcileInventoryWithStarterItems
-} from '../utils/tokenTemplateSync.js?v=20261123a7';
+} from '../utils/tokenTemplateSync.js?v=20261125a1';
 
 /**
  * Custom compendium CRUD, folder management & .portal cartridge/shelf methods mixed into Service.
@@ -47,6 +48,9 @@ export const CompendiumServiceMethods = {
         : null;
     const rawLight = tpl.lightMeters !== undefined ? tpl.lightMeters : existing?.lightMeters;
     const lightMeters = Math.max(0, Math.min(60, Number(rawLight) || 0));
+    const darkvisionMeters = resolveTokenDarkvisionMeters(
+      tpl.darkvisionMeters !== undefined || tpl.darkvision !== undefined ? tpl : existing
+    );
     const hasStarterItems = Array.isArray(tpl.starterItems);
     const starterItems = hasStarterItems
       ? tpl.starterItems.filter(Boolean)
@@ -78,6 +82,8 @@ export const CompendiumServiceMethods = {
       isAlly,
       visionMeters,
       lightMeters,
+      darkvisionMeters,
+      darkvision: darkvisionMeters > 0,
       imageUrl: cleanImg,
       mediaId,
       publicDescription: String(tpl.publicDescription !== undefined ? tpl.publicDescription : existing?.publicDescription || '').trim(),
@@ -174,12 +180,15 @@ export const CompendiumServiceMethods = {
       else if (kind === 'consumable') badge = 'Consumible';
       else badge = 'Equipo';
     }
+    const { usageMode, maxUses } = normalizeItemUsage(tpl);
     const entry = {
-      key: tpl.key || `citem-${Date.now().toString(36)}`,
+      key: tpl.key || `citem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
       isCustom: true,
       folder,
       name: String(tpl.name || 'Complemento').trim(),
       kind,
+      usageMode,
+      maxUses,
       badge,
       message: String(tpl.message || '').trim(),
       formula: String(tpl.formula || '').trim(),
@@ -213,6 +222,26 @@ export const CompendiumServiceMethods = {
     this.notify({ flushVault: true });
   },
 
+  /**
+   * Duplicates a custom compendium item so GMs can iterate on an existing item without mutating the original.
+   * @param {string} key
+   * @returns {object|null}
+   */
+  duplicateCustomItem(key) {
+    const list = Array.isArray(this.state.customItems) ? this.state.customItems : [];
+    const orig = list.find((i) => i.key === key);
+    if (!orig) return null;
+    const folder = String(this.state.compendiumFolderOverrides?.items?.[key] ?? orig.folder ?? '').trim();
+    const cloned = JSON.parse(JSON.stringify(orig));
+    delete cloned.key;
+    return this.saveCustomItem({
+      ...cloned,
+      name: `${orig.name} (Copia)`,
+      folder,
+      isCustom: true
+    });
+  },
+
   saveCustomMap(tpl) {
     const folder = String(tpl.folder || '').trim();
     const list = Array.isArray(this.state.customMaps) ? this.state.customMaps : [];
@@ -234,7 +263,7 @@ export const CompendiumServiceMethods = {
             ? 'narrative'
             : 'tactical';
     const entry = {
-      key: tpl.key || `cmap-${Date.now().toString(36)}`,
+      key: tpl.key || `cmap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
       isCustom: true,
       folder,
       name: String(tpl.name || 'Escenario').trim(),
@@ -302,6 +331,88 @@ export const CompendiumServiceMethods = {
     this.state.customMaps = this.state.customMaps.filter((m) => m.key !== key);
     this.pruneUnusedMediaAssets?.();
     this.notify({ flushVault: true });
+  },
+
+  /**
+   * Duplicates a custom scenario along with its grid, lighting, ambient, weather, walls, and map lights
+   * while resetting explored fog-of-war state.
+   * @param {string} key
+   * @returns {object|null}
+   */
+  duplicateCustomMap(key) {
+    const list = Array.isArray(this.state.customMaps) ? this.state.customMaps : [];
+    const orig = list.find((m) => m.key === key);
+    if (!orig) return null;
+
+    const isActive = this.getActiveSceneKey() === key;
+    const folder = String(this.state.compendiumFolderOverrides?.maps?.[key] ?? orig.folder ?? '').trim();
+    const rawGrid = this.state.mapGrids?.[key] || orig.grid || (isActive ? this.state.grid : null);
+    const srcLighting = this.state.sceneLighting?.[key] || orig.lighting || null;
+    const weather = normalizeWeatherType(this.state.sceneWeathers?.[key] ?? orig.weather ?? 'none');
+
+    const copy = this.saveCustomMap({
+      ...orig,
+      key: undefined,
+      name: `${orig.name} (Copia)`,
+      folder,
+      grid: rawGrid ? JSON.parse(JSON.stringify(rawGrid)) : undefined,
+      lighting: srcLighting
+        ? {
+            dynamicLighting: srcLighting.dynamicLighting !== false,
+            rememberExplored: srcLighting.rememberExplored !== false
+          }
+        : undefined,
+      weather,
+      isCustom: true
+    });
+
+    if (srcLighting) {
+      if (!this.state.sceneLighting || typeof this.state.sceneLighting !== 'object') {
+        this.state.sceneLighting = {};
+      }
+      this.state.sceneLighting[copy.key] = normalizeSceneLighting({
+        dynamicLighting: srcLighting.dynamicLighting !== false,
+        rememberExplored: srcLighting.rememberExplored !== false,
+        ambient: srcLighting.ambient ?? (isActive ? this.state.sceneAmbientLight : 'day'),
+        exploredMask: '',
+        exploredRev: 0
+      });
+    }
+
+    if (weather !== 'none') {
+      if (!this.state.sceneWeathers || typeof this.state.sceneWeathers !== 'object') {
+        this.state.sceneWeathers = {};
+      }
+      this.state.sceneWeathers[copy.key] = weather;
+    }
+
+    const srcWalls = isActive ? this.state.walls : this.state.sceneLayers?.[key]?.walls;
+    if (Array.isArray(srcWalls) && srcWalls.length > 0) {
+      if (!this.state.sceneLayers || typeof this.state.sceneLayers !== 'object') {
+        this.state.sceneLayers = {};
+      }
+      this.state.sceneLayers[copy.key] = {
+        tokens: [],
+        walls: JSON.parse(JSON.stringify(srcWalls)),
+        strokes: []
+      };
+    }
+
+    if (Array.isArray(this.state.mapLights) && this.state.mapLights.length > 0) {
+      const clonedLights = this.state.mapLights
+        .filter((l) => l && l.sceneKey === key)
+        .map((l, idx) => ({
+          ...JSON.parse(JSON.stringify(l)),
+          id: `ml-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).slice(2, 5)}`,
+          sceneKey: copy.key
+        }));
+      if (clonedLights.length > 0) {
+        this.state.mapLights.push(...clonedLights);
+      }
+    }
+
+    this.notify({ flushVault: true });
+    return copy;
   },
 
   async activateMapTemplate(tpl) {

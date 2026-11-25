@@ -1,8 +1,8 @@
-import { BrowserVault } from '../services/browserVault.js?v=20261123a7';
-import { CartridgePacker } from '../services/cartridgePacker.js?v=20261123a7';
-import { GmHostLock } from '../services/gmHostLock.js?v=20261123a7';
-import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { BrowserVault } from '../services/browserVault.js?v=20261125a1';
+import { CartridgePacker } from '../services/cartridgePacker.js?v=20261125a1';
+import { GmHostLock } from '../services/gmHostLock.js?v=20261125a1';
+import { RealtimeBridge } from '../services/realtimeBridge.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 /**
  * Portal-VTT entry lobby: create a portal with ruleset/options, join by code/URL, or resume recent portals.
@@ -41,7 +41,8 @@ export const PortalLobbyViewMethods = {
     Service.state.sheetOpen = false;
     Service.state.drawerOpen = false;
     Service.state.gmScreenOpen = false;
-    Service.notify({ skipVaultSave: true });
+    Service.notify({ skipVaultSave: true, skipSceneTransition: true });
+    this.els.sceneTransitionCurtain?.classList.remove('is-backdrop-instant', 'is-backdrop-visible', 'is-title-in', 'is-title-out');
     try {
       window.history.replaceState(null, '', window.location.pathname);
     } catch (_) {}
@@ -65,7 +66,6 @@ export const PortalLobbyViewMethods = {
       return;
     }
 
-    const rulesetLabel = { dnd55: 'D&D 5.5', pbta: 'PbtA 2d6', pool: 'Pool d10', d100: '1d100', vieja_escuela: 'Vieja Escuela', free: 'Genérico' };
     box.innerHTML = rooms
       .slice(0, 6)
       .map(
@@ -74,7 +74,7 @@ export const PortalLobbyViewMethods = {
           <button type="button" data-open-portal="${r.code}" class="flex-1 min-w-0 text-left">
             <div class="flex items-center gap-2">
               <span class="font-semibold text-xs truncate">${r.title}</span>
-              <span class="text-[9px] px-1.5 py-0.5 rounded-full font-mono-tech bg-white/10 opacity-80">${rulesetLabel[r.ruleset] || 'D&D 5.5'}</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded-full font-mono-tech bg-white/10 opacity-80">Genérico</span>
             </div>
             <div class="text-[10px] opacity-60 font-mono-tech truncate">${r.code} · ${r.tokenCount} fichas</div>
           </button>
@@ -94,6 +94,7 @@ export const PortalLobbyViewMethods = {
           );
           return;
         }
+        this.armInitialSceneCurtain?.();
         await Service.openPortal(code, 'gm');
         RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => (Service.isHostNetwork() ? 'gm' : 'player'));
         this.startPresenceHeartbeat();
@@ -123,11 +124,12 @@ export const PortalLobbyViewMethods = {
       this.els.createPortalForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const title = this.els.inpPortalName?.value.trim() || '';
-        const ruleset = this.els.selPortalRuleset?.value || 'dnd55';
-        const mapId = this.els.selPortalMap?.value || 'bastion';
+        const ruleset = 'free';
+        const mapId = 'empty';
         const dynamicLighting = Boolean(this.els.chkPortalDynLight?.checked);
         const showGrid = Boolean(this.els.chkPortalGrid?.checked);
 
+        this.armInitialSceneCurtain?.();
         const code = await Service.createPortal({
           title,
           ruleset,
@@ -159,6 +161,7 @@ export const PortalLobbyViewMethods = {
             return;
           }
         }
+        this.armInitialSceneCurtain?.();
         await Service.openPortal(code, role);
         RealtimeBridge.connect(code, (msg) => this.handleRealtimeMessage(msg), () => (Service.isHostNetwork() ? 'gm' : 'player'));
         this.startPresenceHeartbeat();
@@ -175,9 +178,10 @@ export const PortalLobbyViewMethods = {
         try {
           const buffer = await file.arrayBuffer();
           const parsed = await CartridgePacker.parseCartridgeBuffer(buffer);
+          this.armInitialSceneCurtain?.();
           const code = await Service.createPortal({
             title: parsed.world?.moduleTitle || file.name.replace(/\.[^.]+$/, ''),
-            ruleset: parsed.world?.ruleset || 'dnd55'
+            ruleset: 'free'
           });
           await GmHostLock.acquire(code);
           await Service.loadModulePackage(parsed);

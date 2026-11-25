@@ -2,11 +2,11 @@
    SYSTEM OPTIONS VIEW: PREFERENCIAS ESTILO APPLE (REGLAS, INICIATIVA Y ESTADOS)
    ========================================================================== */
 
-import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261123a7';
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
-import { displayValueToMeters, formatDistance, metersToDisplayValue } from '../utils/lightingModel.js?v=20261123a7';
-import { SVG_ICONS, SystemBlockBuilderViewMethods } from './systemBlockBuilderView.js?v=20261123a7';
+import { DEFAULT_STATUS_DEFS, SYSTEM_PRESETS } from '../core/model.js?v=20261125a1';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
+import { displayValueToMeters, formatDistance, metersToDisplayValue } from '../utils/lightingModel.js?v=20261125a1';
+import { SVG_ICONS, SystemBlockBuilderViewMethods } from './systemBlockBuilderView.js?v=20261125a1';
 
 export const SystemOptionsViewMethods = {
   ...SystemBlockBuilderViewMethods,
@@ -23,11 +23,11 @@ export const SystemOptionsViewMethods = {
     if (!body) return;
     const esc = (s) => this.escapeHtml(s);
 
-    let cfg = state.systemConfig || SYSTEM_PRESETS.dnd55;
-    const presetKey = cfg.preset || (state.ruleset === 'free' ? 'free' : 'dnd55');
-    const presetInfo = SYSTEM_PRESETS[presetKey] || SYSTEM_PRESETS.free;
-    const isGeneric = presetKey === 'free';
-    if (isGeneric && (!Array.isArray(cfg.sheetBlocks) || !Array.isArray(cfg.sheetTabs))) {
+    let cfg = state.systemConfig || SYSTEM_PRESETS.free;
+    const presetKey = 'free';
+    const presetInfo = SYSTEM_PRESETS.free;
+    const isGeneric = true;
+    if (!Array.isArray(cfg.sheetBlocks) || !Array.isArray(cfg.sheetTabs)) {
       Service.ensureGenericBlocksInitialized(true);
       cfg = Service.state.systemConfig;
     }
@@ -188,25 +188,7 @@ export const SystemOptionsViewMethods = {
         labelFields.push(['fumble', 'Pifia', oc.labels.fumble]);
       }
 
-      const poolSection = !isGeneric && presetKey === 'pool'
-        ? `<div class="flex flex-col gap-1.5">
-            <span class="portal-settings-label">Reserva de dados</span>
-            <div class="portal-settings-group">
-              <div class="portal-settings-col">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <label class="flex flex-col gap-1">
-                    <span class="text-[10.5px] opacity-70">Fórmula de reserva</span>
-                    <input type="text" id="inpSysRollFormula" value="${esc(cfg.rollFormula || '@statd10')}" class="portal-input px-2.5 py-1.5 text-xs font-mono-tech" />
-                  </label>
-                  <label class="flex flex-col gap-1">
-                    <span class="text-[10.5px] opacity-70">Umbral de éxito (≥)</span>
-                    <input type="number" id="inpSysThreshold" min="1" max="100" value="${Number(cfg.successThreshold) || 6}" class="portal-input px-2.5 py-1.5 text-xs tabular-nums" />
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>`
-        : '';
+      const poolSection = '';
 
       const genericRollAndOutcome = isGeneric
         ? `<div class="flex flex-col gap-1.5">
@@ -322,9 +304,7 @@ export const SystemOptionsViewMethods = {
           const v = Selector.getSystemVisionConfig(state);
           const u = v.distanceUnit;
           const isFt = u === 'ft';
-          const visDisp = metersToDisplayValue(v.defaultVisionMeters, u);
-          const torchDisp = metersToDisplayValue(v.torchMeters, u);
-          const lanternDisp = metersToDisplayValue(v.lanternMeters, u);
+          const nightDisp = metersToDisplayValue(v.nightDetectionMeters, u);
           return `
             <div class="flex flex-col gap-1.5">
               <span class="portal-settings-label">Visión e Iluminación</span>
@@ -332,7 +312,7 @@ export const SystemOptionsViewMethods = {
                 <div class="portal-settings-row">
                   <div class="flex flex-col min-w-0">
                     <span class="text-xs font-medium">Unidad de distancia</span>
-                    <span class="text-[10.5px] opacity-60">Aplica a reglas, visión base y luces</span>
+                    <span class="text-[10.5px] opacity-60">Aplica a reglas, detección nocturna y luces</span>
                   </div>
                   <div class="portal-seg inline-grid grid-cols-2 gap-0.5 text-[10.5px] shrink-0">
                     <button type="button" data-sys-dist-unit="m" class="portal-seg-btn px-2.5 py-1 font-medium ${!isFt ? 'is-active' : ''}">Metros (m)</button>
@@ -341,26 +321,11 @@ export const SystemOptionsViewMethods = {
                 </div>
                 <div class="portal-settings-col">
                   <div class="flex items-center justify-between gap-2">
-                    <span class="text-xs font-medium">Visión base de protagonistas</span>
-                    <span id="lblSysDefaultVision" class="text-[11px] font-semibold font-mono-tech tabular-nums">${esc(formatDistance(v.defaultVisionMeters, u))}</span>
+                    <span class="text-xs font-medium">Detección en modo Noche</span>
+                    <span id="lblSysNightDetection" class="text-[11px] font-semibold font-mono-tech tabular-nums">${esc(formatDistance(v.nightDetectionMeters, u))}</span>
                   </div>
-                  <input type="range" id="rngSysDefaultVision" min="0" max="${isFt ? 120 : 36}" step="${isFt ? 5 : 0.5}" value="${visDisp}" class="portal-slider" />
-                  <span class="text-[10px] opacity-55">Alcance circular que heredan las fichas aliadas salvo ajuste propio.</span>
-                </div>
-                <div class="portal-settings-row flex-wrap gap-2">
-                  <span class="text-xs font-medium">Luces portátiles</span>
-                  <div class="flex items-center gap-2 text-[11px]">
-                    <label class="flex items-center gap-1">
-                      <span class="opacity-65">Antorcha</span>
-                      <input type="number" id="inpSysTorchDist" min="${isFt ? 5 : 0.5}" max="${isFt ? 200 : 60}" step="${isFt ? 5 : 0.5}" value="${torchDisp}" class="portal-input w-14 px-1.5 py-1 text-center text-[11px] font-semibold tabular-nums" />
-                      <span class="opacity-55">${u}</span>
-                    </label>
-                    <label class="flex items-center gap-1">
-                      <span class="opacity-65">Linterna</span>
-                      <input type="number" id="inpSysLanternDist" min="${isFt ? 5 : 0.5}" max="${isFt ? 200 : 60}" step="${isFt ? 5 : 0.5}" value="${lanternDisp}" class="portal-input w-14 px-1.5 py-1 text-center text-[11px] font-semibold tabular-nums" />
-                      <span class="opacity-55">${u}</span>
-                    </label>
-                  </div>
+                  <input type="range" id="rngSysNightDetection" min="0" max="${isFt ? 120 : 36}" step="${isFt ? 5 : 0.5}" value="${nightDisp}" class="portal-slider" />
+                  <span class="text-[10px] opacity-55">Distancia a la que se detectan enemigos en modo Noche sin luz ni visión oscura (0 = solo con luz).</span>
                 </div>
                 <div class="portal-settings-row">
                   <div class="flex flex-col min-w-0">
@@ -432,8 +397,6 @@ export const SystemOptionsViewMethods = {
         <span class="portal-settings-label">Opciones de ficha</span>
         <div class="portal-settings-group">
           ${renderCheck('showDefense', cfg.showDefense !== false, 'Bloque Defensa / CA', 'Muestra Defensa e Iniciativa en la cabecera')}
-          ${presetKey === 'dnd55' ? renderCheck('showLevelPb', cfg.showLevelPb !== false, 'Nivel, BC y Velocidad', 'Cálculo automático de Bono de Competencia por nivel') : ''}
-          ${presetKey === 'dnd55' ? renderCheck('showScores', cfg.showScores !== false, 'Puntuación (3–20) y Salvaciones', 'Desactivalo si preferís usar modificadores directos') : ''}
           ${renderCheck('tab_skills', enabledTabs.skills !== false, 'Pestaña Habilidades', 'Lista de pericias de personaje')}
           ${renderCheck('tab_traits', enabledTabs.traits !== false, 'Pestaña Rasgos', 'Rasgos, dotes o movimientos')}
           ${renderCheck('tab_inventory', enabledTabs.inventory !== false, 'Inventario y Capacidades', 'Equipo, consumibles y capacidades desde el Compendio')}
@@ -674,24 +637,16 @@ export const SystemOptionsViewMethods = {
         Service.updateSystemVisionConfig({ distanceUnit: btn.dataset.sysDistUnit === 'ft' ? 'ft' : 'm' });
       });
     });
-    const rngVis = body.querySelector('#rngSysDefaultVision');
-    const lblVis = body.querySelector('#lblSysDefaultVision');
-    rngVis?.addEventListener('input', () => {
+    const rngNight = body.querySelector('#rngSysNightDetection');
+    const lblNight = body.querySelector('#lblSysNightDetection');
+    rngNight?.addEventListener('input', () => {
       const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
-      const meters = displayValueToMeters(Number(rngVis.value) || 0, u);
-      if (lblVis) lblVis.textContent = formatDistance(meters, u);
+      const meters = displayValueToMeters(Number(rngNight.value) || 0, u);
+      if (lblNight) lblNight.textContent = formatDistance(meters, u);
     });
-    rngVis?.addEventListener('change', () => {
+    rngNight?.addEventListener('change', () => {
       const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
-      Service.updateSystemVisionConfig({ defaultVisionMeters: displayValueToMeters(Number(rngVis.value) || 0, u) });
-    });
-    body.querySelector('#inpSysTorchDist')?.addEventListener('change', (e) => {
-      const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
-      Service.updateSystemVisionConfig({ torchMeters: displayValueToMeters(Number(e.target.value) || 1, u) });
-    });
-    body.querySelector('#inpSysLanternDist')?.addEventListener('change', (e) => {
-      const u = Selector.getSystemVisionConfig(Service.state).distanceUnit;
-      Service.updateSystemVisionConfig({ lanternMeters: displayValueToMeters(Number(e.target.value) || 1, u) });
+      Service.updateSystemVisionConfig({ nightDetectionMeters: displayValueToMeters(Number(rngNight.value) || 0, u) });
     });
     body.querySelectorAll('[data-sys-vision-mode]').forEach((btn) => {
       btn.addEventListener('click', () => {

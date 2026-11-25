@@ -9,22 +9,28 @@ import {
   computePickupShadow,
   sampleDropBounce,
   computeHeavyLandingShake
-} from '../utils/tabletopPhysics.js?v=20261123a7';
+} from '../utils/tabletopPhysics.js?v=20261125a1';
 import {
   resolveSceneAtmosphere,
   stepCameraInertia,
   stepSmoothZoom
-} from '../utils/sceneAtmosphere.js?v=20261123a7';
+} from '../utils/sceneAtmosphere.js?v=20261125a1';
 import {
   buildShadowCacheKey,
   computeContactShadowModulation,
   computeTokenCastShadow,
   resolveDynamicShadowMode
-} from '../utils/tokenShadowModel.js?v=20261123a7';
-import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+} from '../utils/tokenShadowModel.js?v=20261125a1';
+import {
+  migrateLegacyShadowMode,
+  normalizeGraphicsQuality,
+  resolveGraphicsProfile
+} from '../utils/graphicsProfileModel.js?v=20261125a1';
+import { Dice3DEngine } from '../services/dice3dEngine.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 
 const SHADOW_MODE_STORAGE_KEY = 'portal_shadow_mode_v1';
+const GRAPHICS_QUALITY_STORAGE_KEY = 'portal_graphics_quality_v1';
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' &&
@@ -153,31 +159,8 @@ export const TokenPhysicsViewMethods = {
     Dice3DEngine.setSceneAtmosphere?.(atmo);
   },
 
-  loadShadowMode() {
-    let saved = 'auto';
-    try {
-      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SHADOW_MODE_STORAGE_KEY) : '';
-      if (raw === 'auto' || raw === 'on' || raw === 'off') saved = raw;
-    } catch (_) {}
-    this.shadowMode = saved;
-    return saved;
-  },
-
-  setShadowMode(mode) {
-    const clean = mode === 'on' || mode === 'off' ? mode : 'auto';
-    this.shadowMode = clean;
-    try {
-      if (typeof localStorage !== 'undefined') localStorage.setItem(SHADOW_MODE_STORAGE_KEY, clean);
-    } catch (_) {}
-    this.syncShadowModeUi?.();
-    this.drawWallShadowCanvas?.(Service.state);
-    this.renderTokensLayer?.(Service.state);
-    return clean;
-  },
-
-  isDynamicShadowsEnabled() {
-    const mode = this.shadowMode || 'auto';
-    const env = {
+  _readGraphicsEnv() {
+    return {
       prefersReducedMotion: prefersReducedMotion(),
       hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 8,
       deviceMemory: typeof navigator !== 'undefined' ? navigator.deviceMemory : 8,
@@ -185,7 +168,64 @@ export const TokenPhysicsViewMethods = {
         ? window.matchMedia('(pointer: coarse)').matches
         : false
     };
-    return resolveDynamicShadowMode(mode, env);
+  },
+
+  loadGraphicsQuality() {
+    let saved = '';
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(GRAPHICS_QUALITY_STORAGE_KEY) : '';
+      if (raw) {
+        saved = normalizeGraphicsQuality(raw);
+      } else {
+        const legacy = typeof localStorage !== 'undefined' ? localStorage.getItem(SHADOW_MODE_STORAGE_KEY) : '';
+        saved = legacy ? migrateLegacyShadowMode(legacy) : 'auto';
+      }
+    } catch (_) {
+      saved = 'auto';
+    }
+    this.graphicsQuality = saved || 'auto';
+    this.applyGraphicsProfileToRuntime();
+    return this.graphicsQuality;
+  },
+
+  getGraphicsProfile() {
+    return resolveGraphicsProfile(this.graphicsQuality || 'auto', this._readGraphicsEnv());
+  },
+
+  applyGraphicsProfileToRuntime() {
+    const profile = this.getGraphicsProfile();
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.graphicsQuality = profile.tier;
+      document.documentElement.setAttribute('data-tabletop-fx', profile.dynamicShadows ? 'rich' : 'basic');
+    }
+    Dice3DEngine.setGraphicsProfile?.(profile);
+    return profile;
+  },
+
+  setGraphicsQuality(mode) {
+    const clean = normalizeGraphicsQuality(mode);
+    this.graphicsQuality = clean;
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(GRAPHICS_QUALITY_STORAGE_KEY, clean);
+    } catch (_) {}
+    this.applyGraphicsProfileToRuntime();
+    this.syncGraphicsQualityUi?.();
+    this.syncWeatherOverlay?.(Service.state);
+    this.drawWallShadowCanvas?.(Service.state);
+    this.renderTokensLayer?.(Service.state);
+    return clean;
+  },
+
+  loadShadowMode() {
+    return this.loadGraphicsQuality();
+  },
+
+  setShadowMode(mode) {
+    return this.setGraphicsQuality(migrateLegacyShadowMode(mode));
+  },
+
+  isDynamicShadowsEnabled() {
+    return this.getGraphicsProfile().dynamicShadows;
   },
 
   applyTokenDualShadows(el, tok, { diameterPx, lightSources, walls, ambientDir } = {}) {

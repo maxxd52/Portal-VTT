@@ -2,7 +2,8 @@
    SHEET INVENTORY VIEW: INVENTARIO, MENÚ CONTEXTUAL Y DRAG & DROP
    ========================================================================== */
 
-import { Service } from '../core/service.js?v=20261123a7';
+import { Service } from '../core/service.js?v=20261125a1';
+import { normalizeItemUsage } from '../utils/tokenTemplateSync.js?v=20261125a1';
 
 export const SheetInventoryViewMethods = {
   renderSheetInventory(tok, sheetTab, isInvTab) {
@@ -12,15 +13,26 @@ export const SheetInventoryViewMethods = {
     const visibleInv = inv.filter((item) => this.getItemCategory(item.kind) === activeInv);
     this.els.sheetInventoryList.innerHTML = visibleInv.length
       ? visibleInv
-          .map(
-            (item) => `
+          .map((item) => {
+            const { usageMode, maxUses } = normalizeItemUsage(item);
+            const curUses = item.uses !== undefined ? Math.max(0, Math.trunc(Number(item.uses) || 0)) : maxUses;
+            const usagePill =
+              usageMode === 'consumable'
+                ? `<span class="text-[9.5px] font-mono-tech font-semibold px-1.5 py-0.5 rounded-full bg-white/10 opacity-85 shrink-0">×${curUses}</span>`
+                : usageMode === 'charges'
+                  ? `<span class="text-[9.5px] font-mono-tech font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${curUses <= 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 opacity-85'}">${curUses}/${maxUses}</span>`
+                  : '';
+            return `
           <div
             draggable="true"
             data-inv-uid="${item.uid}"
-            class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors"
+            class="group portal-list-row px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] cursor-grab transition-colors${usageMode === 'charges' && curUses <= 0 ? ' opacity-70' : ''}"
           >
-            <div class="min-w-0 pl-0.5">
-              <div class="font-semibold text-xs truncate">${this.escapeHtml(item.name)}</div>
+            <div class="min-w-0 pl-0.5 flex-1">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="font-semibold text-xs truncate">${this.escapeHtml(item.name)}</span>
+                ${usagePill}
+              </div>
               <div class="text-[10px] opacity-65 truncate">${this.escapeHtml(item.badge || '')}</div>
             </div>
             <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -30,15 +42,17 @@ export const SheetInventoryViewMethods = {
               ${this.renderItemIconBadge(item, { interactive: true })}
             </div>
           </div>
-        `
-          )
+        `;
+          })
           .join('')
       : `<div class="text-[11px] opacity-55 text-center py-6 px-2">Arrastra armas, escudos o pociones desde el Compendio.</div>`;
 
     const openInvMenu = (uid, cx, cy) => {
       const item = visibleInv.find((x) => x.uid === uid);
       if (!item) return;
-      this.openListContextMenu(cx, cy, item.name, item.badge || 'Objeto', [
+      const { usageMode, maxUses } = normalizeItemUsage(item);
+      const curUses = item.uses !== undefined ? Math.max(0, Math.trunc(Number(item.uses) || 0)) : maxUses;
+      const actions = [
         {
           icon: 'zap',
           label: 'Usar / Tirar',
@@ -46,14 +60,39 @@ export const SheetInventoryViewMethods = {
             const msg = Service.useTokenInventoryItem(tok.id, item.uid);
             if (msg) this.showActionToast(msg);
           }
-        },
-        {
-          icon: 'trash',
-          label: 'Quitar del inventario',
-          danger: true,
-          onClick: () => Service.removeTokenInventoryItem(tok.id, item.uid)
         }
-      ]);
+      ];
+      if (usageMode === 'charges' && curUses < maxUses) {
+        actions.push({
+          icon: 'sparkles',
+          label: `Recargar (${maxUses}/${maxUses})`,
+          onClick: () => {
+            Service.rechargeTokenItem(tok.id, item.uid);
+            this.showActionToast(`${item.name} recargado (${maxUses}/${maxUses}).`);
+          }
+        });
+      }
+      if (usageMode !== 'permanent') {
+        actions.push(
+          {
+            icon: 'plus',
+            label: usageMode === 'charges' ? '+1 carga' : '+1 uso',
+            onClick: () => Service.adjustTokenItemUses(tok.id, item.uid, 1)
+          },
+          {
+            icon: 'sliders',
+            label: usageMode === 'charges' ? '-1 carga' : '-1 uso',
+            onClick: () => Service.adjustTokenItemUses(tok.id, item.uid, -1)
+          }
+        );
+      }
+      actions.push({
+        icon: 'trash',
+        label: 'Quitar del inventario',
+        danger: true,
+        onClick: () => Service.removeTokenInventoryItem(tok.id, item.uid)
+      });
+      this.openListContextMenu(cx, cy, item.name, item.badge || 'Objeto', actions);
     };
 
     this.els.sheetInventoryList.querySelectorAll('[data-inv-uid]').forEach((row) => {

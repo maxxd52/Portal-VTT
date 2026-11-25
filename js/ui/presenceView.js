@@ -2,8 +2,8 @@
    PRESENCE VIEW: ASIENTOS SUPERIORES (GM/JUGADORES), SUB-TOKENS Y TURNOS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { Service } from '../core/service.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { Service } from '../core/service.js?v=20261125a1';
 import { WebPConverter } from '../utils/webpConverter.js';
 
 export const PresenceViewMethods = {

@@ -21,8 +21,16 @@ globalThis.localStorage = {
 
 const {
   WALL_KINDS,
+  WALL_DOOR_MODES,
+  normalizeWallKind,
+  getWallDoorMode,
+  isWallDoor,
+  isWallSecretDoor,
+  normalizeWall,
+  normalizeWalls,
   isDoorKind,
   isWallOpenDoor,
+  isWallBlockingSight,
   isWallBlockingMovement,
   resolveWallDrawPoint,
   findWallNearPoint,
@@ -33,13 +41,20 @@ const {
   isDoorVisibleToSeat,
   resolveDoorVisualState,
   resolveMovementAgainstWalls,
-  redactWallsForPlayer
-} = await import('../js/utils/wallGeometry.js?v=20261123a7');
-const { buildWallMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { hasWallOcclusion } = await import('../js/utils/tokenShadowModel.js?v=20261123a7');
+  redactWallsForPlayer,
+  projectPointOnWall,
+  computeDoorPlacementOnWall,
+  splitWallForDoor,
+  findConnectedWallEndpoints,
+  computeDoorResizePoint,
+  computeDoorSlideOffset,
+  findMapLightsInRect
+} = await import('../js/utils/wallGeometry.js?v=20261125a1');
+const { buildWallMenuSpec } = await import('../js/utils/contextMenuModel.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { hasWallOcclusion } = await import('../js/utils/tokenShadowModel.js?v=20261125a1');
 
 function makePillarWalls(cx, cy, half, kind = 'terrain') {
   return [
@@ -51,12 +66,15 @@ function makePillarWalls(cx, cy, half, kind = 'terrain') {
 }
 
 test('S1: terrain pillar walls pass 1st hit so pillar interior stays visible and block on 2nd hit behind pillar', () => {
-  assert.deepEqual(WALL_KINDS, ['wall', 'terrain', 'door', 'secret', 'invisible']);
+  assert.deepEqual(WALL_KINDS, ['wall', 'terrain', 'invisible']);
+  assert.deepEqual(WALL_DOOR_MODES, ['none', 'normal', 'secret']);
   assert.equal(isDoorKind('door'), true);
   assert.equal(isDoorKind('secret'), true);
   assert.equal(isDoorKind('terrain'), false);
   assert.equal(isWallOpenDoor({ kind: 'secret', open: true }), true);
   assert.equal(isWallOpenDoor({ kind: 'secret', open: false }), false);
+  assert.equal(isWallOpenDoor({ kind: 'invisible', door: 'normal', open: true }), true);
+  assert.equal(isWallOpenDoor({ kind: 'invisible', door: 'normal', open: false }), false);
 
   // Observer at (200, 400), square pillar centered at (400, 400) with half=40 -> x in [360, 440]
   const terrainPillar = makePillarWalls(400, 400, 40, 'terrain');
@@ -111,15 +129,17 @@ test('S2: secret doors redact to solid walls for players, toggle for GM only, an
   Service.state.walls = [];
 
   // Add a secret door across x=300
-  Service.addWallSegment(300, 200, 300, 400, 'secret');
+  Service.addWallSegment(300, 200, 300, 400, 'wall', 'secret');
   assert.equal(Service.state.walls.length, 1);
   const secretId = Service.state.walls[0].id;
-  assert.equal(Service.state.walls[0].kind, 'secret');
+  assert.equal(Service.state.walls[0].kind, 'wall');
+  assert.equal(Service.state.walls[0].door, 'secret');
   assert.equal(Service.state.walls[0].open, false);
 
   // Zero-leak P2P redaction: closed secret door is sent to players as a plain solid wall
   const redactedClosed = Selector.extractWorldForSeat(Service.state, 'seat-p1');
   assert.equal(redactedClosed.walls[0].kind, 'wall', 'Closed secret door must redact to plain wall for players');
+  assert.equal(redactedClosed.walls[0].door, 'none', 'Closed secret door must redact door to none for players');
 
   // GM can find & toggle secret door; player cannot find closed secret door
   assert.equal(Selector.findDoorNearPoint(Service.state, 302, 300, 20)?.id, secretId);
@@ -170,18 +190,20 @@ test('S3: findWallsInRect detects inside and crossing segments and Service batch
   Service.addWallSegment(400, 400, 500, 400, 'wall');
   const [w1, w2, w3] = Service.state.walls;
 
-  // Batch convert 2 walls to doors
-  const changed = Service.setWallsKind([w1.id, w2.id], 'door');
+  // Batch convert 2 walls to doors (material stays 'wall', door becomes 'normal')
+  const changed = Service.setWallsDoor([w1.id, w2.id], 'normal');
   assert.equal(changed, 2);
-  assert.equal(Service.state.walls[0].kind, 'door');
-  assert.equal(Service.state.walls[1].kind, 'door');
-  assert.equal(Service.state.walls[2].kind, 'wall');
+  assert.equal(Service.state.walls[0].kind, 'wall');
+  assert.equal(Service.state.walls[0].door, 'normal');
+  assert.equal(Service.state.walls[1].door, 'normal');
+  assert.equal(Service.state.walls[2].door, 'none');
 
-  // Open door, then convert back to solid wall -> open resets to false
+  // Open door, then remove door property -> open resets to false
   Service.toggleDoor(w1.id);
   assert.equal(Service.state.walls[0].open, true);
-  Service.setWallsKind([w1.id], 'wall');
+  Service.setWallsDoor([w1.id], 'none');
   assert.equal(Service.state.walls[0].kind, 'wall');
+  assert.equal(Service.state.walls[0].door, 'none');
   assert.equal(Service.state.walls[0].open, false);
 
   // Batch delete with single undo
@@ -227,20 +249,23 @@ test('S5: wall pill applyWallKind sets draw kind in draw mode and transforms sel
   Service.state.walls = [];
   Service.setTool('wall');
 
-  // Default wallMode is 'draw' and wallDrawKind is 'wall'
+  // Default wallMode is 'draw', wallDrawKind is 'wall', wallDrawDoor is 'none'
   assert.equal(Service.state.wallMode || 'draw', 'draw');
   assert.equal(Service.state.wallDrawKind || 'wall', 'wall');
+  assert.equal(Service.state.wallDrawDoor || 'none', 'none');
 
-  // In draw mode, applyWallKind changes wallDrawKind and new segments inherit it
-  const drawRes = Service.applyWallKind('door');
-  assert.equal(drawRes.mode, 'draw');
-  assert.equal(Service.state.wallDrawKind, 'door');
+  // In draw mode, applyWallKind + applyWallDoor change draw defaults and new segments inherit them
+  const doorDrawRes = Service.applyWallDoor('normal');
+  assert.equal(doorDrawRes.mode, 'draw');
+  assert.equal(Service.state.wallDrawDoor, 'normal');
   Service.addWallSegment(100, 100, 200, 100);
-  Service.addWallSegment(200, 100, 300, 100, 'wall');
-  assert.equal(Service.state.walls[0].kind, 'door', 'addWallSegment without explicit kind uses state.wallDrawKind');
-  assert.equal(Service.state.walls[1].kind, 'wall', 'addWallSegment with explicit kind respects argument');
+  Service.addWallSegment(200, 100, 300, 100, 'wall', 'none');
+  assert.equal(Service.state.walls[0].kind, 'wall');
+  assert.equal(Service.state.walls[0].door, 'normal', 'addWallSegment without explicit door uses state.wallDrawDoor');
+  assert.equal(Service.state.walls[1].kind, 'wall');
+  assert.equal(Service.state.walls[1].door, 'none', 'addWallSegment with explicit door respects argument');
 
-  // Switch to select mode with 2 selected walls -> applyWallKind mutates both walls and updates wallDrawKind
+  // Switch to select mode with 2 selected walls -> applyWallKind mutates material on both while preserving door
   Service.setWallMode('select');
   const [w1, w2] = Service.state.walls;
   Service.setSelectedWallIds([w1.id, w2.id]);
@@ -248,6 +273,7 @@ test('S5: wall pill applyWallKind sets draw kind in draw mode and transforms sel
   assert.equal(selRes.mode, 'transform');
   assert.equal(selRes.count, 2);
   assert.equal(Service.state.walls[0].kind, 'terrain');
+  assert.equal(Service.state.walls[0].door, 'normal');
   assert.equal(Service.state.walls[1].kind, 'terrain');
 
   // Delete selected walls via pill action with undo support
@@ -441,6 +467,386 @@ test('S7: locked doors block players, GM can lock/unlock via context menu, and w
   Service.moveToken(tok.id, 480, 200, true);
   assert.ok(tok.x > 400, 'Player must pass freely through an open door');
 });
+
+test('S9-RED: players can only toggle doors within adjacency reach of a controlled token and without blocking walls in between; GM has no distance limit', () => {
+  Service.state = createInitialState();
+  Service.state.grid = { type: 'square', cellSize: 80, metersPerUnit: 1.5 };
+  Service.state.role = 'player';
+  Service.state.isHostGm = false;
+  Service.state.activeInviteId = 'inv-reach';
+  Service.state.playerInvites = [{ id: 'inv-reach', tokenIds: ['ally-1'] }];
+
+  const door = { id: 'd-reach', kind: 'door', x1: 400, y1: 200, x2: 400, y2: 280, open: false, locked: false };
+  const frameWall = { id: 'w-frame', kind: 'wall', x1: 400, y1: 120, x2: 400, y2: 200 }; // shares endpoint (400,200)
+  Service.state.walls = [door, frameWall];
+
+  // 1. Adjacent 1x1 frontal (0.5 cell = 40px) & diagonal (like Lyra/Kaelen, ~0.707 cell) -> can reach & toggle
+  const ally1 = { id: 'ally-1', isAlly: true, size: 1, x: 360, y: 240, hidden: false };
+  Service.state.tokens = [ally1];
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), true);
+  const opened = Service.toggleDoor('d-reach');
+  assert.equal(opened?.open, true);
+  Service.toggleDoor('d-reach'); // close back
+  assert.equal(door.open, false);
+
+  ally1.x = 360;
+  ally1.y = 160; // diagonal adjacent cell
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), true);
+
+  // 2. 1 full empty cell away (1.5 cells = 120px, like Vex) -> blocked
+  ally1.x = 280;
+  ally1.y = 240;
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), false);
+  assert.equal(Service.toggleDoor('d-reach'), null);
+  assert.equal(door.open, false);
+
+  // 3. Unassigned nearby ally does NOT grant reach when player has assigned token elsewhere
+  const unassignedAlly = { id: 'ally-other', isAlly: true, size: 1, x: 360, y: 240, hidden: false };
+  Service.state.tokens = [ally1, unassignedAlly];
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), false);
+
+  // 4. Large 2x2, Huge 3x3, and Gargantuan 4x4 tokens diagonally adjacent -> can reach; 1 full empty cell away -> blocked
+  ally1.size = 2;
+  ally1.x = 320;
+  ally1.y = 120;
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), true);
+  ally1.x = 240;
+  ally1.y = 240;
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), false);
+
+  ally1.size = 3;
+  ally1.x = 280;
+  ally1.y = 80; // bottom-right corner (400, 200) touches door
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), true);
+  ally1.x = 200;
+  ally1.y = 240; // 1 full empty cell away
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), false);
+
+  ally1.size = 4;
+  ally1.x = 240;
+  ally1.y = 40; // bottom-right corner (400, 200) touches door
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), true);
+  ally1.x = 160;
+  ally1.y = 240; // 1 full empty cell away
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), false);
+
+  // 5. Blocking solid wall between adjacent token and door -> blocked
+  ally1.size = 1;
+  ally1.x = 340;
+  ally1.y = 240;
+  Service.state.walls.push({ id: 'w-block', kind: 'wall', x1: 360, y1: 160, x2: 360, y2: 320 });
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), false);
+  assert.equal(Service.toggleDoor('d-reach'), null);
+
+  // 6. GM has no distance or wall-occlusion limit
+  Service.state.role = 'gm';
+  Service.state.isHostGm = true;
+  ally1.x = 80;
+  assert.equal(Selector.canPlayerReachDoor(Service.state, door), true);
+  assert.equal(Service.toggleDoor('d-reach')?.open, true);
+});
+
+test('S9: door-as-property supports any material, converts legacy doors, and never leaks secret doors', () => {
+  // 1. Legacy mapping & normalizeWall
+  assert.equal(normalizeWallKind('door'), 'wall');
+  assert.equal(normalizeWallKind('secret'), 'wall');
+  assert.equal(getWallDoorMode({ kind: 'door' }), 'normal');
+  assert.equal(getWallDoorMode({ kind: 'secret' }), 'secret');
+  assert.equal(getWallDoorMode({ kind: 'invisible', door: 'normal' }), 'normal');
+  assert.equal(isWallDoor({ kind: 'invisible', door: 'normal' }), true);
+  assert.equal(isWallSecretDoor({ kind: 'terrain', door: 'secret' }), true);
+
+  const normLegacy = normalizeWall({ id: 'old-d', kind: 'door', open: true, locked: false });
+  assert.deepEqual(
+    { id: normLegacy.id, kind: normLegacy.kind, door: normLegacy.door, open: normLegacy.open, locked: normLegacy.locked },
+    { id: 'old-d', kind: 'wall', door: 'normal', open: true, locked: false }
+  );
+  const normNonDoor = normalizeWall({ id: 'plain', kind: 'wall', open: true, locked: true });
+  assert.equal(normNonDoor.door, 'none');
+  assert.equal(normNonDoor.open, false);
+  assert.equal(normNonDoor.locked, false);
+  assert.equal(normalizeWalls([{ id: 'x', kind: 'secret' }])[0].door, 'secret');
+
+  // 2. Grate door ({ kind: 'invisible', door: 'normal' }): never blocks sight; blocks movement only while closed
+  const grateClosed = { id: 'g1', kind: 'invisible', door: 'normal', open: false };
+  const grateOpen = { id: 'g1', kind: 'invisible', door: 'normal', open: true };
+  assert.equal(isWallBlockingSight(grateClosed), false);
+  assert.equal(isWallBlockingSight(grateOpen), false);
+  assert.equal(isWallBlockingMovement(grateClosed), true);
+  assert.equal(isWallBlockingMovement(grateOpen), false);
+
+  // 3. Redaction: legacy secret & invisible secret never leak "secret" when closed; open secret becomes door: 'normal'
+  const redacted = redactWallsForPlayer([
+    { id: 's-legacy', kind: 'secret', open: false, locked: true },
+    { id: 's-invis-closed', kind: 'invisible', door: 'secret', open: false, locked: true },
+    { id: 's-invis-open', kind: 'invisible', door: 'secret', open: true, locked: false }
+  ]);
+  assert.equal(JSON.stringify(redacted).includes('"secret"'), false, 'Closed or open secret doors must never leak "secret"');
+  assert.equal(redacted[0].kind, 'wall');
+  assert.equal(redacted[0].door, 'none');
+  assert.equal(redacted[1].kind, 'invisible');
+  assert.equal(redacted[1].door, 'none');
+  assert.equal(redacted[2].kind, 'invisible');
+  assert.equal(redacted[2].door, 'normal');
+  assert.equal(redacted[2].open, true);
+
+  // 4. Service: setWallsKind preserves door + open, toggleDoor works on invisible door, player cannot toggle closed secret
+  Service.cancelAllTokenGlides();
+  Service.listeners = [];
+  Service.state = createInitialState();
+  Service.state.role = 'gm';
+  Service.state.isHostGm = true;
+  Service.state.walls = [];
+  Service.setTool('wall');
+
+  Service.applyWallKind('invisible');
+  Service.applyWallDoor('normal');
+  Service.addWallSegment(100, 100, 100, 200);
+  const grate = Service.state.walls[0];
+  assert.equal(grate.kind, 'invisible');
+  assert.equal(grate.door, 'normal');
+
+  assert.equal(Service.toggleDoor(grate.id)?.open, true, 'GM can toggle invisible door');
+  Service.setWallsKind([grate.id], 'terrain');
+  assert.equal(grate.kind, 'terrain');
+  assert.equal(grate.door, 'normal', 'setWallsKind must preserve door property');
+  assert.equal(grate.open, true, 'setWallsKind must preserve open state');
+
+  Service.setWallsDoor([grate.id], 'secret');
+  Service.toggleDoor(grate.id); // closes it
+  assert.equal(grate.open, false);
+  Service.state.role = 'player';
+  assert.equal(Service.toggleDoor(grate.id), null, 'Player cannot toggle closed secret door');
+});
+
+test('S10: direct door stamp placement splits walls by click (1 cell) or drag (custom width), preserves material, supports undo, and linked-vertex resize keeps corners sealed', () => {
+  const longWall = { id: 'w-long', x1: 0, y1: 200, x2: 400, y2: 200, kind: 'invisible', door: 'none', open: false, locked: false };
+  const shortWall = { id: 'w-short', x1: 0, y1: 100, x2: 80, y2: 100, kind: 'wall', door: 'none', open: false, locked: false };
+
+  // 1. projectPointOnWall clamps to [0, 1]
+  const proj = projectPointOnWall(longWall, 200, 210);
+  assert.equal(Math.round(proj.x), 200);
+  assert.equal(Math.round(proj.y), 200);
+  assert.equal(Math.round(proj.dist), 10);
+  assert.equal(proj.t, 0.5);
+
+  // 2. Single click on long wall -> 1-cell (80px) split centered near click
+  const singleClick = computeDoorPlacementOnWall(longWall, { x: 200, y: 200 }, null, { cellSize: 80, snap: true });
+  assert.equal(singleClick.mode, 'split');
+  assert.equal(singleClick.x1, 160);
+  assert.equal(singleClick.x2, 240);
+  assert.equal(singleClick.widthPx, 80);
+
+  // 3. Short wall -> convert in place
+  const shortClick = computeDoorPlacementOnWall(shortWall, { x: 40, y: 100 }, null, { cellSize: 80, snap: true });
+  assert.equal(shortClick.mode, 'convert');
+  assert.equal(shortClick.x1, 0);
+  assert.equal(shortClick.x2, 80);
+
+  // 4. Drag along wall -> custom 2-cell (160px) door
+  const dragTwoCells = computeDoorPlacementOnWall(
+    longWall,
+    { x: 80, y: 200 },
+    { x: 240, y: 200 },
+    { cellSize: 80, snap: true }
+  );
+  assert.equal(dragTwoCells.mode, 'split');
+  assert.equal(dragTwoCells.x1, 80);
+  assert.equal(dragTwoCells.x2, 240);
+  assert.equal(dragTwoCells.widthPx, 160);
+
+  // 5. Micro-stub < 12px snaps cleanly to wall end
+  const nearStart = computeDoorPlacementOnWall(
+    longWall,
+    { x: 8, y: 200 },
+    { x: 160, y: 200 },
+    { cellSize: 80, snap: false }
+  );
+  assert.equal(nearStart.x1, 0);
+
+  // 6. Service.insertDoorOnWall splits invisible wall into left + secret door + right, preserving kind, and undo restores
+  Service.cancelAllTokenGlides();
+  Service.listeners = [];
+  Service.state = createInitialState();
+  Service.state.role = 'gm';
+  Service.state.isHostGm = true;
+  Service.state.grid = { ...Service.state.grid, cellSize: 80, snap: true, type: 'square' };
+  Service.state.walls = [{ ...longWall }];
+  Service.setTool('wall');
+  Service.setWallMode('door');
+  Service.setWallDoorStampMode('secret');
+
+  const res = Service.insertDoorOnWall('w-long', { x: 200, y: 200 }, null);
+  assert.ok(res && res.door, 'insertDoorOnWall should return created door');
+  assert.equal(Service.state.walls.length, 3);
+  const [leftSeg, doorSeg, rightSeg] = Service.state.walls;
+  assert.equal(leftSeg.kind, 'invisible');
+  assert.equal(leftSeg.door, 'none');
+  assert.equal(leftSeg.x2, doorSeg.x1);
+  assert.equal(doorSeg.kind, 'invisible');
+  assert.equal(doorSeg.door, 'secret');
+  assert.equal(doorSeg.x1, 160);
+  assert.equal(doorSeg.x2, 240);
+  assert.equal(rightSeg.kind, 'invisible');
+  assert.equal(rightSeg.door, 'none');
+  assert.equal(rightSeg.x1, doorSeg.x2);
+
+  Service.undo();
+  assert.equal(Service.state.walls.length, 1);
+  assert.equal(Service.state.walls[0].id, 'w-long');
+  assert.equal(Service.state.walls[0].door, 'none');
+
+  // 7. Linked-vertex endpoint move keeps door jamb and adjacent wall sealed together
+  Service.insertDoorOnWall('w-long', { x: 200, y: 200 }, null);
+  const [, dSeg, rSeg] = Service.state.walls;
+  const linked = findConnectedWallEndpoints(Service.state.walls, dSeg.x2, dSeg.y2, { excludeWallId: dSeg.id, tol: 2 });
+  assert.equal(linked.length, 1);
+  assert.equal(linked[0].wallId, rSeg.id);
+  assert.equal(linked[0].endKey, 'start');
+
+  Service.moveWallEndpoint(dSeg.id, 'end', 280, 200, { commit: true, linkedEndpoints: linked });
+  assert.equal(dSeg.x2, 280);
+  assert.equal(rSeg.x1, 280, 'Adjacent wall start must move with door end to prevent light leaks');
+});
+
+test('S11: computeDoorResizePoint and computeDoorSlideOffset constrain along wall axis, snap to half-cell, and respect minStubPx', () => {
+  const walls = [
+    { id: 'w-left', x1: 0, y1: 200, x2: 160, y2: 200, kind: 'wall', door: 'none', open: false, locked: false },
+    { id: 'd-mid', x1: 160, y1: 200, x2: 240, y2: 200, kind: 'wall', door: 'normal', open: false, locked: false },
+    { id: 'w-right', x1: 240, y1: 200, x2: 400, y2: 200, kind: 'wall', door: 'none', open: false, locked: false }
+  ];
+  const door = walls[1];
+  const linkedStart = [{ wallId: 'w-left', endKey: 'end' }];
+  const linkedEnd = [{ wallId: 'w-right', endKey: 'start' }];
+
+  // 1. Off-axis cursor (320, 260) while resizing 'end' stays strictly on y=200 and snaps to 320 (2-cell door)
+  const widened = computeDoorResizePoint(door, 'end', linkedEnd, walls, 318, 260, { cellSize: 80, snap: true });
+  assert.equal(widened.x, 320);
+  assert.equal(widened.y, 200);
+  assert.equal(widened.widthPx, 160);
+
+  // 2. Resizing past right wall end clamps so right stub keeps >= minStubPx (12px -> max x = 388)
+  const clampedMax = computeDoorResizePoint(door, 'end', linkedEnd, walls, 450, 200, { cellSize: 80, snap: false, minStubPx: 12 });
+  assert.equal(clampedMax.x, 388);
+  assert.equal(clampedMax.y, 200);
+
+  // 3. Shrinking below minDoorPx clamps to minDoorPx (18px -> min x = 178)
+  const clampedMin = computeDoorResizePoint(door, 'end', linkedEnd, walls, 100, 200, { cellSize: 80, snap: false, minDoorPx: 18 });
+  assert.equal(clampedMin.x, 178);
+  assert.equal(clampedMin.y, 200);
+
+  // 4. Sliding door right by +82px snaps to +80px on x-axis
+  const slideSnap = computeDoorSlideOffset(
+    door,
+    linkedStart,
+    linkedEnd,
+    walls,
+    { x: 200, y: 200 },
+    { x: 282, y: 245 },
+    { cellSize: 80, snap: true }
+  );
+  assert.equal(slideSnap.dx, 80);
+  assert.equal(slideSnap.dy, 0);
+  assert.equal(slideSnap.shift, 80);
+
+  // 5. Sliding far left clamps so left stub (160px) retains >= 12px (shift >= -148)
+  const slideClamp = computeDoorSlideOffset(
+    door,
+    linkedStart,
+    linkedEnd,
+    walls,
+    { x: 200, y: 200 },
+    { x: -100, y: 200 },
+    { cellSize: 80, snap: false, minStubPx: 12 }
+  );
+  assert.equal(slideClamp.dx, -148);
+  assert.equal(slideClamp.dy, 0);
+});
+
+test('S12: Relief (terrain) walls stop innerPoly on 1st hit for subtle shading while poly reaches 2nd hit', () => {
+  const segs = [
+    { x1: 200, y1: 100, x2: 200, y2: 300, kind: 'terrain' },
+    { x1: 300, y1: 100, x2: 300, y2: 300, kind: 'terrain' }
+  ];
+  const hitDefault = castVisibilityRay(100, 200, 1, 0, 500, segs);
+  const hitFirst = castVisibilityRay(100, 200, 1, 0, 500, segs, { terrainBlocksOnFirstHit: true });
+  assert.equal(Math.round(hitDefault.x), 300, 'Default 2nd-hit ray passes front face and blocks on back face');
+  assert.equal(Math.round(hitFirst.x), 200, '1st-hit ray stops on front face of Relief obstacle');
+
+  const st = createInitialState();
+  st.role = 'gm';
+  st.dynamicLighting = true;
+  st.tokens = [{ id: 'hero', name: 'Hero', isAlly: true, x: 100, y: 200, size: 1, visionMeters: 20 }];
+  st.walls = [
+    { id: 't-front', x1: 200, y1: 100, x2: 200, y2: 300, kind: 'terrain', door: 'none' },
+    { id: 't-back', x1: 300, y1: 100, x2: 300, y2: 300, kind: 'terrain', door: 'none' }
+  ];
+  const sourcesWithRelief = Selector.getAlliedVisibilityPolygons(st);
+  assert.equal(sourcesWithRelief.length, 1);
+  assert.ok(Array.isArray(sourcesWithRelief[0].innerPoly) && sourcesWithRelief[0].innerPoly.length >= 3);
+  assert.equal(Selector.isPointInPolygon({ x: 250, y: 200 }, sourcesWithRelief[0].poly), true, 'Interior is inside outer poly');
+  assert.equal(Selector.isPointInPolygon({ x: 250, y: 200 }, sourcesWithRelief[0].innerPoly), false, 'Interior is outside 1st-hit innerPoly');
+
+  st.walls = [{ id: 'w-solid', x1: 200, y1: 100, x2: 200, y2: 300, kind: 'wall', door: 'none' }];
+  const sourcesNoRelief = Selector.getAlliedVisibilityPolygons(st);
+  assert.equal(sourcesNoRelief[0].innerPoly, null, 'No Relief walls -> innerPoly is null');
+});
+
+test('S13: Seleccionar filter (all/walls/lights), marquee light selection, light toggle, and unified scenery delete with undo', () => {
+  const lights = [
+    { id: 'l-1', x: 150, y: 150, sceneKey: 'bastion', enabled: false },
+    { id: 'l-2', x: 400, y: 400, sceneKey: 'bastion', enabled: true }
+  ];
+  const inBox = findMapLightsInRect(lights, { x1: 100, y1: 100, x2: 200, y2: 200 });
+  assert.deepEqual(inBox.map((l) => l.id), ['l-1']);
+
+  Service.cancelAllTokenGlides();
+  Service.listeners = [];
+  Service.state = createInitialState();
+  Service.state.role = 'gm';
+  Service.state.isHostGm = true;
+  Service.state.mapId = 'bastion';
+  Service.state.activeMapKey = 'bastion';
+  Service.state.walls = [{ id: 'w-1', x1: 100, y1: 100, x2: 200, y2: 100, kind: 'wall', door: 'none' }];
+  Service.state.mapLights = lights.map((l) => ({ ...l }));
+  Service.setTool('wall');
+  Service.setStageLayer('select');
+
+  Service.setSelectedWallIds(['w-1']);
+  Service.setSelectedMapLightIds(['l-1']);
+  assert.deepEqual(Service.state.selectedWallIds, ['w-1']);
+  assert.deepEqual(Service.state.selectedMapLightIds, ['l-1']);
+
+  // Switching filter to 'walls' clears selected lights; switching to 'lights' clears selected walls
+  Service.setStageSelectFilter('walls');
+  assert.deepEqual(Service.state.selectedMapLightIds, []);
+  Service.setSelectedMapLightIds(['l-1']);
+  Service.setStageSelectFilter('lights');
+  assert.deepEqual(Service.state.selectedWallIds, []);
+
+  // Toggle selected lights enabled
+  const toggled = Service.setSelectedMapLightsEnabled(true);
+  assert.equal(toggled, 1);
+  assert.equal(Service.state.mapLights.find((l) => l.id === 'l-1').enabled, true);
+
+  // Unified delete of both walls and lights with undo
+  Service.setStageSelectFilter('all');
+  Service.setSelectedWallIds(['w-1']);
+  Service.setSelectedMapLightIds(['l-1']);
+  const del = Service.deleteSelectedScenery();
+  assert.equal(del.walls, 1);
+  assert.equal(del.lights, 1);
+  assert.equal(del.total, 2);
+  assert.equal(Service.state.walls.length, 0);
+  assert.equal(Service.state.mapLights.length, 1);
+  assert.deepEqual(Service.state.selectedWallIds, []);
+  assert.deepEqual(Service.state.selectedMapLightIds, []);
+
+  Service.undo();
+  assert.equal(Service.state.walls.length, 1);
+  assert.equal(Service.state.mapLights.length, 2);
+});
+
 
 
 

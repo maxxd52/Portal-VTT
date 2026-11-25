@@ -2,8 +2,8 @@
    EMPAQUETADOR BINARIO .PORTAL (ZIP + WEBP)
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { WebPConverter } from '../utils/webpConverter.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { WebPConverter } from '../utils/webpConverter.js?v=20261125a1';
 
 function bytesToBase64(bytes) {
   if (typeof Buffer !== 'undefined') {

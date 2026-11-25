@@ -5,8 +5,8 @@ globalThis.window = globalThis.window || {
   location: { search: '', origin: 'http://localhost', pathname: '/' }
 };
 
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
 
 test('normalizeItemSchema preserves rollKind:"opposed" with opposedStatKey and opposedFormula', () => {
   const norm = Selector.normalizeItemSchema({
@@ -105,6 +105,10 @@ test('Service opposed roll step rolls caster, sends symmetric or asymmetric requ
     Service.state = {
       role: 'gm',
       selectedTokenId: 't2',
+      sheetSchema: [
+        { key: 'str', label: 'FUE', alias: 'fue' },
+        { key: 'dex', label: 'DES', alias: 'des' }
+      ],
       systemConfig: {
         rollFormula: '1d20+@stat',
         stats: [

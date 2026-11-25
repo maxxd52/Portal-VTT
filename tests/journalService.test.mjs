@@ -19,10 +19,10 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 function resetGmState() {
   Service.cancelAllTokenGlides();
@@ -34,6 +34,11 @@ function resetGmState() {
   Service.state = createInitialState();
   Service.state.role = 'gm';
   Service.state.isHostGm = true;
+  Service.state.tokens = [
+    { id: 'tok-1', name: 'Kaelen', isAlly: true, x: 440, y: 440, hp: 24, maxHp: 24, ac: 16, size: 1, inventory: [] },
+    { id: 'tok-2', name: 'Lyra', isAlly: true, x: 360, y: 600, hp: 14, maxHp: 14, ac: 12, size: 1, inventory: [] },
+    { id: 'tok-4', name: 'Acechador Trasgo', isAlly: false, x: 1080, y: 480, hp: 10, maxHp: 10, ac: 13, size: 1, inventory: [] }
+  ];
   Service.state.playerInvites = [
     { id: 'inv-1', label: 'Jugador 1', tokenIds: ['tok-1'] },
     { id: 'inv-2', label: 'Jugador 2', tokenIds: ['tok-2'] }

@@ -20,11 +20,11 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { JournalViewMethods } = await import('../js/ui/journalView.js?v=20261123a7');
-const { JournalShareViewMethods } = await import('../js/ui/journalShareView.js?v=20261123a7');
-const { JournalPresentationViewMethods } = await import('../js/ui/journalPresentationView.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { JournalViewMethods } = await import('../js/ui/journalView.js?v=20261125a1');
+const { JournalShareViewMethods } = await import('../js/ui/journalShareView.js?v=20261125a1');
+const { JournalPresentationViewMethods } = await import('../js/ui/journalPresentationView.js?v=20261125a1');
 
 function makeClassList() {
   const set = new Set();

@@ -11,7 +11,7 @@ Minimalist, 100% client-side Virtual Tabletop (VTT) built with **native ES Modul
 ## Architectural Pattern & Layering
 Strict unidirectional separation of concerns with **Facade Mixins** (`Object.assign` / spread) for `Service` and `View`:
 
-1. **`js/core/model.js`** — Initial state factory (`createInitialState`), `SYSTEM_PRESETS`, `DEFAULT_DICE_STYLE`, and ID/room code generators (`PORTAL-XXXX`).
+1. **`js/core/model.js`** — Initial state factory (`createInitialState`), `SYSTEM_PRESETS.free` (`Sistema Genérico`), `GENERIC_STARTER_BLOCKS`, `DEFAULT_DICE_STYLE`, and ID/room code generators (`PORTAL-XXXX`).
 2. **`js/core/selector.js`** — **100% pure** read/compute functions (visibility polygons, grid snapping, seat-redacted serialization `extractWorldForSeat`, `extractSerializableWorld`). No side effects, no state mutations, no DOM access.
 3. **`js/core/service.js` + `js/services/*`** — Single source of state mutation, persistence (`BrowserVault`), and sync (`RealtimeBridge`). External callers invoke `Service.*`.
 4. **`js/core/view.js` + `js/ui/*`** — DOM/Canvas rendering and event delegation back to `Service`. External callers invoke `View.*`.
@@ -31,8 +31,15 @@ Service (js/core/service.js + js/services/*) ──► Selector (js/core/selecto
 - `Selector` and `js/utils/*` MUST NOT import `Service`, `View`, or access DOM globals.
 - `View` and `js/ui/*` MUST NOT mutate `Service.state` directly; all mutations go through `Service.*`.
 
+## Generic Core & System Packages
+- **Single Data-Driven Engine (`Sistema Genérico` / `free`):** All game mechanics, character sheets (`sheetBlocks`, `sheetTabs`), dice formulas, statuses, and GM Screen layouts run on a single generic engine. Hardcoded per-system branches in core/UI code are forbidden.
+- **System Packages (JSON) vs. Campaign Cartridges (`.portal`):**
+  - **System Package (JSON):** Portable ruleset definition (`schemaVersion`, `systemConfig`, `sheetBlocks`, `sheetTabs`, `statusesSchema`, `gmScreen`, and optional compendium templates). Supports an optional `locked` (read-only core) flag so GMs can play a system as-is or extract/clone it into an editable copy.
+  - **Campaign Cartridge (`.portal`):** Full playable world state (maps, walls, tokens, journal, media assets, plus an embedded snapshot of the active system).
+- **Testing Contract:** Test the generic engine and JSON schema validation/migration; do not add per-system test suites unless a new capability is added to the generic engine itself.
+
 ## Modularity & Cache-Busting Rules
-- **Module Size Target:** Keep JS modules `<= 400-500` lines (recommended hard limit `~600` lines), except cohesive graphics engines (`dice3dEngine.js`) or pure data catalogs (`compendium.js`, `viejaEscuela.js`).
+- **Module Size Target:** Keep JS modules `<= 400-500` lines (recommended hard limit `~600` lines), except cohesive graphics engines (`dice3dEngine.js`) or pure data catalogs (`compendium.js`).
 - **Cache-Busting (`?v=YYYYMMDDx`):** Without a bundler, every `?v=...` query string on ES Module imports across `index.html`, `js/main.js`, `js/core/*`, `js/services/*`, `js/ui/*`, and `tests/*.test.mjs` MUST stay synchronized to prevent duplicate singletons or stale browser cache. (Enforced by `tests/sessionPolish.test.mjs`.)
 
 ## Verification

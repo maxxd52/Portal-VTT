@@ -2,17 +2,18 @@
    SCENE PREVIEW DRAW: RENDER VISUAL DE GRILLA, TOKEN DE PRUEBA Y LUZ EN PREVIEW
    ========================================================================== */
 
-import { fillFogMist } from './fogShader.js?v=20261123a7';
-import { drawGridOverlay, normalizeGridConfig } from './gridGeometry.js?v=20261123a7';
-import { formatDistance, metersToPixels } from './lightingModel.js?v=20261123a7';
+import { fillFogMist } from './fogShader.js?v=20261125a1';
+import { drawGridOverlay, normalizeGridConfig } from './gridGeometry.js?v=20261125a1';
+import { formatDistance, metersToPixels } from './lightingModel.js?v=20261125a1';
+import { isWallDoor, isWallSecretDoor, normalizeWallKind } from './wallGeometry.js?v=20261125a1';
 
 function drawWorldWalls(ctx, walls, invZoom) {
   for (const w of walls || []) {
     if (!w) continue;
     ctx.save();
     ctx.lineCap = 'round';
-    if (w.kind === 'door' || w.kind === 'secret') {
-      const isSecret = w.kind === 'secret';
+    if (isWallDoor(w)) {
+      const isSecret = isWallSecretDoor(w);
       ctx.strokeStyle = w.open ? '#10b981' : (isSecret ? '#a855f7' : '#f59e0b');
       ctx.lineWidth = Math.max(4, 6 * invZoom);
       if (w.open) ctx.setLineDash([8 * invZoom, 8 * invZoom]);
@@ -29,7 +30,8 @@ function drawWorldWalls(ctx, walls, invZoom) {
       ctx.arc(mx, my, Math.max(5, 7 * invZoom), 0, Math.PI * 2);
       ctx.fill();
     } else {
-      ctx.strokeStyle = w.kind === 'terrain' ? '#34d399' : '#38bdf8';
+      const kind = normalizeWallKind(w.kind);
+      ctx.strokeStyle = kind === 'terrain' ? '#34d399' : (kind === 'invisible' ? '#22d3ee' : '#38bdf8');
       ctx.lineWidth = Math.max(3, 4 * invZoom);
       ctx.beginPath();
       ctx.moveTo(w.x1, w.y1);
@@ -141,10 +143,8 @@ export function drawScenePreview({
 
   if (activeTab === 'lighting') {
     const unit = visionCfg?.distanceUnit || 'm';
-    const baseMeters = Number(visionCfg?.defaultVisionMeters) || 0;
-    const torchMeters = Number(visionCfg?.torchMeters) || 0;
-    const visRadiusPx = metersToPixels(baseMeters, g);
-    const torchRadiusPx = metersToPixels(torchMeters, g);
+    const nightMeters = Number(visionCfg?.nightDetectionMeters ?? 12) || 0;
+    const visRadiusPx = metersToPixels(nightMeters, g);
 
     if (lighting?.dynamicLighting && fogPreviewCanvas) {
       const fctx = fogPreviewCanvas.getContext('2d');
@@ -209,27 +209,8 @@ export function drawScenePreview({
         ctx,
         probePos.x,
         labelY,
-        `Visión base · ${formatDistance(baseMeters, unit)}`,
+        `Noche · ${formatDistance(nightMeters, unit)}`,
         'rgba(167, 139, 250, 0.85)',
-        invZoom
-      );
-    }
-
-    if (torchRadiusPx > 0 && Math.abs(torchRadiusPx - visRadiusPx) > 22) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.78)';
-      ctx.lineWidth = Math.max(1.5, 2 * invZoom);
-      ctx.setLineDash([6 * invZoom, 8 * invZoom]);
-      ctx.beginPath();
-      ctx.arc(probePos.x, probePos.y, torchRadiusPx, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-      drawPreviewPill(
-        ctx,
-        probePos.x,
-        probePos.y + torchRadiusPx,
-        `Antorcha · ${formatDistance(torchMeters, unit)}`,
-        'rgba(251, 191, 36, 0.75)',
         invZoom
       );
     }

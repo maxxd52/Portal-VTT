@@ -9,14 +9,14 @@ globalThis.localStorage = {
   removeItem(k) { this._store.delete(k); }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
 const {
   parseDragSpec,
   resolveDropAction,
   resolveEntryFolder
-} = await import('../js/utils/compendiumDragModel.js?v=20261123a7');
+} = await import('../js/utils/compendiumDragModel.js?v=20261125a1');
 
 test('S1-DND: resolveDropAction enforces strict drop targets for map, actor, item, and Baúl folders', () => {
   assert.deepEqual(parseDragSpec('map:bastion'), { kind: 'map', tab: 'maps', key: 'bastion' });

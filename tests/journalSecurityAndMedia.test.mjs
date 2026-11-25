@@ -19,16 +19,16 @@ globalThis.localStorage = {
   }
 };
 
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
-const { CartridgePacker } = await import('../js/services/cartridgePacker.js?v=20261123a7');
-const { WebPConverter } = await import('../js/utils/webpConverter.js?v=20261123a7');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
+const { CartridgePacker } = await import('../js/services/cartridgePacker.js?v=20261125a1');
+const { WebPConverter } = await import('../js/utils/webpConverter.js?v=20261125a1');
 const {
   collectPlayerAuthorizedMedia,
   redactTokenForNonOwner
-} = await import('../js/utils/worldRedaction.js?v=20261123a7');
+} = await import('../js/utils/worldRedaction.js?v=20261125a1');
 
 function resetGmForTest() {
   Service.cancelAllTokenGlides();
@@ -39,6 +39,11 @@ function resetGmForTest() {
   Service.state = createInitialState();
   Service.state.role = 'gm';
   Service.state.isHostGm = true;
+  Service.state.tokens = [
+    { id: 'tok-1', name: 'Kaelen', isAlly: true, x: 440, y: 440, hp: 24, maxHp: 24, ac: 16, size: 1, stats: { str: 3 }, inventory: [{ uid: 'inv-1', name: 'Espada' }] },
+    { id: 'tok-2', name: 'Lyra', isAlly: true, x: 360, y: 600, hp: 14, maxHp: 14, ac: 12, size: 1, stats: { int: 3 }, inventory: [] },
+    { id: 'tok-4', name: 'Acechador Trasgo', isAlly: false, x: 1080, y: 480, hp: 10, maxHp: 10, ac: 13, size: 1, stats: { dex: 2 }, inventory: [{ uid: 'scim-1', name: 'Cimitarra' }] }
+  ];
   return Service.state;
 }
 
@@ -274,6 +279,7 @@ test('S1: Media Registry deduplicates, retains journal-used images after token d
 test('Dynamic lighting hides behind-wall enemy portraits from player gallery & wire world, and excludes raw mapUrl', () => {
   const state = resetGmForTest();
   state.dynamicLighting = true;
+  state.walls = [{ id: 'w-mid', x1: 800, y1: 100, x2: 800, y2: 1400, kind: 'wall', open: false }];
   state.mapId = 'custom';
   state.customMapUrl = 'data:image/webp;base64,FULL_SPOILER_MAP';
   state.playerInvites = [{ id: 'inv-1', label: 'P1', tokenIds: ['tok-1'] }];

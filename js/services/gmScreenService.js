@@ -2,10 +2,10 @@
    GM SCREEN SERVICE: ESTADO PRIVADO DEL NARRADOR, PINES Y HERRAMIENTAS
    ========================================================================== */
 
-import { Selector } from '../core/selector.js?v=20261123a7';
-import { createDefaultGmScreen, GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261123a7';
-import { BrowserVault } from './browserVault.js?v=20261123a7';
-import { RealtimeBridge } from './realtimeBridge.js?v=20261123a7';
+import { Selector } from '../core/selector.js?v=20261125a1';
+import { createDefaultGmScreen, GM_WIDGET_TYPES } from '../data/gmScreenPresets.js?v=20261125a1';
+import { BrowserVault } from './browserVault.js?v=20261125a1';
+import { RealtimeBridge } from './realtimeBridge.js?v=20261125a1';
 
 const makeGmId = (prefix) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -102,9 +102,8 @@ export const GmScreenServiceMethods = {
   },
 
   resetGmScreenToPreset(preservePinsAndNotes = true) {
-    const presetKey = this.state.systemConfig?.preset || (this.state.ruleset === 'free' ? 'free' : 'dnd55');
     const prev = preservePinsAndNotes && this.state.gmScreen ? this.state.gmScreen : null;
-    const next = createDefaultGmScreen(presetKey);
+    const next = createDefaultGmScreen('free');
     if (prev) {
       const fallbackStagingTabId =
         next.tabs.find((t) => t.allowCompendium)?.id || next.tabs[0]?.id || 'prep';

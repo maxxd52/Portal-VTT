@@ -4,6 +4,7 @@
 - **Run unit tests:** `node --test tests/*.test.mjs`
 - **Run locally in browser:** Serve repo root with any static HTTP server (e.g., `npx serve .` or `python -m http.server 8080`) and open `http://localhost:8080`. Native ES Modules require HTTP(S), not `file://`.
 - **Lint / Build:** None (no `package.json`, no bundler, no build step).
+- **Local Browser-Test Fixture:** `tests/fixtures/local/anatema.portal` (gitignored, contains private copyrighted art) is the local cartridge fixture to import in browser verification sessions when testing real tokens, maps, and items.
 
 ## Repo-Specific Conventions
 - **Facade Mixin Pattern:** `Service` (`js/core/service.js`) and `View` (`js/core/view.js`) compose domain methods from `js/services/*` and `js/ui/*` via `Object.assign` / object spread. Keep public entry points on `Service.*` and `View.*`.

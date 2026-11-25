@@ -33,15 +33,15 @@ const {
   resolveTokenVisionMeters,
   resolveTokenLightMeters,
   hasExplicitTokenVision
-} = await import('../js/utils/lightingModel.js?v=20261123a7');
-const { normalizeGridConfig, snapToGrid, measureGridDistance } = await import('../js/utils/gridGeometry.js?v=20261123a7');
-const { generateFogMistPixels } = await import('../js/utils/fogShader.js?v=20261123a7');
-const { createInitialState } = await import('../js/core/model.js?v=20261123a7');
-const { Selector } = await import('../js/core/selector.js?v=20261123a7');
-const { Service } = await import('../js/core/service.js?v=20261123a7');
-const { BrowserVault } = await import('../js/services/browserVault.js?v=20261123a7');
-const { COMPENDIUM_ITEMS } = await import('../js/data/compendium.js?v=20261123a7');
-const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261123a7');
+} = await import('../js/utils/lightingModel.js?v=20261125a1');
+const { normalizeGridConfig, snapToGrid, measureGridDistance } = await import('../js/utils/gridGeometry.js?v=20261125a1');
+const { generateFogMistPixels } = await import('../js/utils/fogShader.js?v=20261125a1');
+const { createInitialState } = await import('../js/core/model.js?v=20261125a1');
+const { Selector } = await import('../js/core/selector.js?v=20261125a1');
+const { Service } = await import('../js/core/service.js?v=20261125a1');
+const { BrowserVault } = await import('../js/services/browserVault.js?v=20261125a1');
+const { COMPENDIUM_ITEMS } = await import('../js/data/compendium.js?v=20261125a1');
+const { RealtimeBridge } = await import('../js/services/realtimeBridge.js?v=20261125a1');
 
 function resetGmService() {
   Service.cancelAllTokenGlides();
@@ -90,7 +90,8 @@ test('lightingModel normalizes vision/scene config and converts units accurately
     dynamicLighting: false,
     rememberExplored: false,
     exploredMask: '',
-    exploredRev: 2
+    exploredRev: 2,
+    ambient: 'day'
   });
 });
 
@@ -133,11 +134,12 @@ test('Selector.getAlliedVisibilityPolygons scales by map scale, enforces individ
     ];
     state.walls = [];
 
-    // GM / shared: t1 gets 9m => 300px; t2 is blinded (0); t3 is enemy so NEVER reveals fog for players
+    // GM / shared: t1 gets full-map LoS (2900px); t2 is blinded (0); t3 is enemy so NEVER reveals fog for players
     const polysShared = Selector.getAlliedVisibilityPolygons(state);
     assert.equal(polysShared.length, 1);
     assert.equal(polysShared[0].token.id, 't1');
-    assert.equal(polysShared[0].radius, 300);
+    assert.equal(polysShared[0].fullMapSight, true);
+    assert.equal(polysShared[0].radius, 2900);
 
     // Giving t2 a manual light restores radius around lightMeters (6m -> 200px) without altering visionMeters
     state.tokens[1].lightMeters = 6;
@@ -157,19 +159,19 @@ test('Selector.getAlliedVisibilityPolygons scales by map scale, enforces individ
     state.playerInvites = [{ id: 'inv-1', label: 'Spectator', tokenIds: [] }];
     assert.equal(Selector.getAlliedVisibilityPolygons(state).length, 2);
 
-    // Equipping a torch extends effective radius via lightMeters without mutating personal visionMeters/visionRadius
+    // Equipping a torch extends lightRadiusPx without mutating personal visionMeters/visionRadius
     state.role = 'gm';
-    state.tokens[0].visionMeters = 3; // 100px personal sight
-    const torch = COMPENDIUM_ITEMS.find((i) => i.key === 'torch');
+    state.tokens[0].visionMeters = 3;
+    const torch = { key: 'torch', name: 'Antorcha Táctica', kind: 'light', lightMeters: 6 };
     const equipped = Service.equipItemToToken('t1', torch);
     assert.equal(state.tokens[0].visionMeters, 3, 'Equipping torch must not mutate personal visionMeters');
     assert.equal(state.tokens[0].visionRadius, undefined, 'Equipping torch must not inject legacy visionRadius');
     const afterEquip = Selector.getAlliedVisibilityPolygons(state).find((p) => p.token.id === 't1');
-    assert.equal(afterEquip.radius, 200, 'Torch light (6m = 200px) extends beyond 3m personal vision');
+    assert.equal(afterEquip.lightRadiusPx, 250, 'Torch light (occupiedHalfPx 50px + 6m 200px) attaches to token lightRadiusPx');
 
     Service.removeTokenInventoryItem('t1', equipped.item.uid);
     const afterRemove = Selector.getAlliedVisibilityPolygons(state).find((p) => p.token.id === 't1');
-    assert.equal(afterRemove.radius, 100, 'Removing torch cleanly reverts to personal vision');
+    assert.equal(afterRemove.lightRadiusPx, 0, 'Removing torch cleanly reverts lightRadiusPx to 0');
   } finally {
     RealtimeBridge.send = origSend;
   }
@@ -185,6 +187,9 @@ test('Service persists per-scene lighting and explored fog across map changes, r
 
   try {
     const state = resetGmService();
+    state.mapId = 'bastion';
+    state.activeMapKey = 'bastion';
+    state.walls = [{ id: 'w-1', x1: 160, y1: 160, x2: 800, y2: 160, kind: 'wall', open: false }];
     Service.subscribe((_st, opts) => notifications.push(opts));
     Service.setExploredMaskCapture(() => fakeCanvasMask);
 

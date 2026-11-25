@@ -2,36 +2,44 @@
    SELECTOR: CONSULTAS PURAS DE COORDENADAS, RAYCASTING 2D Y SERIALIZACIÓN
    ========================================================================== */
 
-import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261123a7';
-import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261123a7';
-import { normalizeGridConfig, snapToGrid } from '../utils/gridGeometry.js?v=20261123a7';
-import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261123a7';
+import { DEFAULT_SHEET_SCHEMA, DEFAULT_STATUS_DEFS } from './model.js?v=20261125a1';
+import { createDefaultGmScreen } from '../data/gmScreenPresets.js?v=20261125a1';
+import { normalizeGridConfig, snapToGrid } from '../utils/gridGeometry.js?v=20261125a1';
+import { normalizeWeatherType } from '../utils/weatherEngine.js?v=20261125a1';
 import {
   castVisibilityRay,
+  clipSegmentToRect,
   collectUniqueRayAngles,
   findWallNearPoint,
   isWallBlockingSight,
   isWallOpenDoor,
+  normalizeWallKind,
   redactWallsForPlayer
-} from '../utils/wallGeometry.js?v=20261123a7';
+} from '../utils/wallGeometry.js?v=20261125a1';
 import {
+  FULL_MAP_LOS_PX,
+  NIGHT_DETECTION_METERS,
+  normalizeAmbientLight,
+  normalizeMapLight,
   normalizeSceneLighting,
   normalizeVisionConfig,
+  resolveEffectiveTokenVisionMeters,
   resolveTokenVisionMeters,
   resolveTokenLightMeters,
   metersToPixels
-} from '../utils/lightingModel.js?v=20261123a7';
+} from '../utils/lightingModel.js?v=20261125a1';
 import {
   canSeatSeeJournalBlock,
   collectPlayerAuthorizedMedia,
   collectReferencedMediaIds,
+  filterVisibleMapLights,
   filterVisibleMapNotes,
   getSeatAllowedTokenIds,
   hashMediaSource,
   normalizeMediaAssets,
   redactCombatForSeat,
   redactTokenForNonOwner
-} from '../utils/worldRedaction.js?v=20261123a7';
+} from '../utils/worldRedaction.js?v=20261125a1';
 
 export const Selector = {
   normalizeStatKey(raw) {
@@ -73,12 +81,11 @@ export const Selector = {
       out.push({ key, label, alias, tabId });
     }
     if (tok && tok.stats && typeof tok.stats === 'object') {
-      const isDndPreset = (state?.systemConfig?.preset || state?.ruleset || 'dnd55') === 'dnd55';
       const coreDndKeys = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
       for (const rawKey of Object.keys(tok.stats)) {
         const key = this.normalizeStatKey(rawKey);
         if (!key || seen.has(key)) continue;
-        if (!isDndPreset && coreDndKeys.has(key) && Number(tok.stats[rawKey]) === 0) continue;
+        if (coreDndKeys.has(key) && Number(tok.stats[rawKey]) === 0) continue;
         seen.add(key);
         const label = rawKey.length <= 4 ? rawKey.toUpperCase() : rawKey;
         out.push({ key, label, alias: key, tabId: 'attrs' });
@@ -426,12 +433,78 @@ export const Selector = {
   },
 
   findDoorNearPoint(state, wx, wy, maxDist = 22) {
-    const allowedKinds = state?.role === 'gm' ? ['door', 'secret'] : ['door'];
-    return findWallNearPoint(state?.walls || [], wx, wy, maxDist, { kinds: allowedKinds });
+    const doorModes = state?.role === 'gm' ? ['normal', 'secret'] : ['normal'];
+    return findWallNearPoint(state?.walls || [], wx, wy, maxDist, { doorModes });
+  },
+
+  /**
+   * Checks whether a player (or seat) has at least one controlled token within
+   * melee/adjacency reach of a door segment with an unobstructed path.
+   * GM is always unrestricted.
+   */
+  canPlayerReachDoor(state, door, seatKey = '') {
+    if (!state || !door) return false;
+    if (!seatKey && state.role === 'gm') return true;
+
+    const assignedIds = seatKey ? getSeatAllowedTokenIds(state, seatKey) : this.getPlayerAssignedTokenIds(state);
+    const allies = (state.tokens || []).filter((t) => t && !t.hidden && t.isAlly !== false);
+    const controlled = assignedIds.length > 0 ? allies.filter((t) => assignedIds.includes(t.id)) : allies;
+    if (controlled.length === 0) return false;
+
+    const cellSize = normalizeGridConfig(state.grid).cellSize;
+    const margin = cellSize * 0.25;
+    const blockingWalls = (state.walls || []).filter(
+      (w) => w && w.id !== door.id && normalizeWallKind(w.kind) !== 'terrain' && !isWallOpenDoor(w)
+    );
+
+    const ccw = (ax, ay, bx, by, cx, cy) => (cy - ay) * (bx - ax) > (by - ay) * (cx - ax);
+    const intersects = (ax, ay, bx, by, cx, cy, dx, dy) =>
+      ccw(ax, ay, cx, cy, dx, dy) !== ccw(bx, by, cx, cy, dx, dy) &&
+      ccw(ax, ay, bx, by, cx, cy) !== ccw(ax, ay, bx, by, dx, dy);
+
+    const dx = door.x2 - door.x1;
+    const dy = door.y2 - door.y1;
+    const l2 = dx * dx + dy * dy;
+
+    const segmentHitsBox = (minX, minY, maxX, maxY) => {
+      let t0 = 0;
+      let t1 = 1;
+      const p = [-dx, dx, -dy, dy];
+      const q = [door.x1 - minX, maxX - door.x1, door.y1 - minY, maxY - door.y1];
+      for (let i = 0; i < 4; i++) {
+        if (p[i] === 0) {
+          if (q[i] < 0) return false;
+        } else {
+          const r = q[i] / p[i];
+          if (p[i] < 0) {
+            if (r > t1) return false;
+            if (r > t0) t0 = r;
+          } else {
+            if (r < t0) return false;
+            if (r < t1) t1 = r;
+          }
+        }
+      }
+      return t0 <= t1;
+    };
+
+    for (const tok of controlled) {
+      const half = Math.max(1, Number(tok.size) || 1) * cellSize * 0.5 + margin;
+      if (!segmentHitsBox(tok.x - half, tok.y - half, tok.x + half, tok.y + half)) continue;
+
+      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((tok.x - door.x1) * dx + (tok.y - door.y1) * dy) / l2));
+      const cx = door.x1 + t * dx;
+      const cy = door.y1 + t * dy;
+      const tx = tok.x + (cx - tok.x) * 0.96;
+      const ty = tok.y + (cy - tok.y) * 0.96;
+      const blocked = blockingWalls.some((w) => intersects(tok.x, tok.y, tx, ty, w.x1, w.y1, w.x2, w.y2));
+      if (!blocked) return true;
+    }
+    return false;
   },
 
   // Raycasting 2D: calcula el polígono de visibilidad alrededor de (ox, oy) hasta radius
-  computeVisibilityPolygon(origin, radius, walls) {
+  computeVisibilityPolygon(origin, radius, walls, { terrainBlocksOnFirstHit = false } = {}) {
     const ox = origin.x;
     const oy = origin.y;
     const R = Math.max(16, Number(radius) || 520);
@@ -452,7 +525,10 @@ export const Selector = {
       if (!isWallBlockingSight(w)) continue;
       if (Math.max(w.x1, w.x2) < minX || Math.min(w.x1, w.x2) > maxX) continue;
       if (Math.max(w.y1, w.y2) < minY || Math.min(w.y1, w.y2) > maxY) continue;
-      segments.push(w);
+      const clipped = clipSegmentToRect(w.x1, w.y1, w.x2, w.y2, minX, minY, maxX, maxY);
+      if (clipped) {
+        segments.push({ ...w, x1: clipped.x1, y1: clipped.y1, x2: clipped.x2, y2: clipped.y2 });
+      }
     }
 
     // Recolectar ángulos únicos deduplicados hacia vértices compartidos (±eps)
@@ -461,7 +537,9 @@ export const Selector = {
     const hits = [];
     for (let i = 0; i < angles.length; i++) {
       const angle = angles[i];
-      const hit = castVisibilityRay(ox, oy, Math.cos(angle), Math.sin(angle), maxT, segments);
+      const hit = castVisibilityRay(ox, oy, Math.cos(angle), Math.sin(angle), maxT, segments, {
+        terrainBlocksOnFirstHit
+      });
       hits.push({ angle, x: hit.x, y: hit.y });
     }
 
@@ -497,9 +575,110 @@ export const Selector = {
     });
   },
 
+  getActiveAmbientLight(state) {
+    const key = state?.activeMapKey || state?.mapId || 'bastion';
+    return normalizeAmbientLight(state?.sceneAmbientLight || state?.sceneLighting?.[key]?.ambient, 'day');
+  },
+
+  getActiveMapLights(state, { includeDisabled = false } = {}) {
+    const key = state?.activeMapKey || state?.mapId || 'bastion';
+    const raw = Array.isArray(state?.mapLights) ? state.mapLights : [];
+    const out = [];
+    for (const item of raw) {
+      if (!item) continue;
+      const norm = normalizeMapLight(item, key);
+      if (!norm.id) continue;
+      if (norm.sceneKey !== key) continue;
+      if (!includeDisabled && norm.enabled === false) continue;
+      out.push(norm);
+    }
+    return out;
+  },
+
+  _ensureVisPolyCache(walls) {
+    const list = Array.isArray(walls) ? walls : [];
+    let wallsSig = `${list.length}`;
+    for (let i = 0; i < list.length; i++) {
+      const w = list[i];
+      if (!isWallBlockingSight(w)) continue;
+      wallsSig += `|${w.x1},${w.y1},${w.x2},${w.y2},${w.kind === 'terrain' ? 't' : 's'}`;
+    }
+    if (!this._visPolyCache) this._visPolyCache = new Map();
+    if (this._visPolyCacheWallsSig !== wallsSig) {
+      this._visPolyCache.clear();
+      this._visPolyCacheWallsSig = wallsSig;
+    }
+    return list;
+  },
+
+  _getCachedVisPoly(cacheKey, origin, radius, walls, opts = null) {
+    const fullKey = opts?.terrainBlocksOnFirstHit ? `${cacheKey}|t1` : cacheKey;
+    let poly = this._visPolyCache.get(fullKey);
+    if (!poly) {
+      poly = this.computeVisibilityPolygon(origin, radius, walls, opts || undefined);
+      if (this._visPolyCache.size > 96) {
+        const oldest = this._visPolyCache.keys().next().value;
+        if (oldest !== undefined) this._visPolyCache.delete(oldest);
+      }
+      this._visPolyCache.set(fullKey, poly);
+    }
+    return poly;
+  },
+
+  getActiveLightPolygons(state) {
+    const grid = normalizeGridConfig(state?.grid);
+    const walls = this._ensureVisPolyCache(state?.walls);
+    const out = [];
+
+    for (const ml of this.getActiveMapLights(state, { includeDisabled: false })) {
+      const radiusPx = metersToPixels(ml.radiusMeters, grid);
+      if (radiusPx <= 0) continue;
+      const cacheKey = `ml|${ml.id}|${Math.round(ml.x * 2)}|${Math.round(ml.y * 2)}|${Math.round(radiusPx * 2)}`;
+      const poly = this._getCachedVisPoly(cacheKey, { x: ml.x, y: ml.y }, radiusPx, walls);
+      out.push({
+        id: ml.id,
+        kind: 'map',
+        x: ml.x,
+        y: ml.y,
+        radiusPx,
+        radiusMeters: ml.radiusMeters,
+        tone: ml.tone,
+        animation: ml.animation || 'steady',
+        flicker: ml.flicker,
+        poly
+      });
+    }
+
+    for (const tok of Array.isArray(state?.tokens) ? state.tokens : []) {
+      if (!tok || tok.hidden) continue;
+      const lightMeters = resolveTokenLightMeters(tok);
+      if (lightMeters <= 0) continue;
+      const occupiedHalfPx = Math.max(1, Number(tok.size) || 1) * grid.cellSize * 0.5;
+      const radiusPx = occupiedHalfPx + metersToPixels(lightMeters, grid);
+      if (radiusPx <= 0) continue;
+      const cacheKey = `tl|${tok.id}|${Math.round(tok.x * 2)}|${Math.round(tok.y * 2)}|${Math.round(radiusPx * 2)}`;
+      const poly = this._getCachedVisPoly(cacheKey, { x: tok.x, y: tok.y }, radiusPx, walls);
+      out.push({
+        id: tok.id,
+        kind: 'token',
+        x: tok.x,
+        y: tok.y,
+        occupiedHalfPx,
+        radiusPx,
+        radiusMeters: lightMeters,
+        tone: 'warm',
+        flicker: true,
+        poly
+      });
+    }
+
+    return out;
+  },
+
   getAlliedVisibilityPolygons(state, seatKey = '') {
     const visionCfg = this.getSystemVisionConfig(state);
     const grid = normalizeGridConfig(state?.grid);
+    const ambient = this.getActiveAmbientLight(state);
     let viewers = (state?.tokens || []).filter((t) => !t.hidden && t.isAlly !== false);
 
     if (visionCfg.visionMode === 'individual' && (seatKey || state?.role === 'player')) {
@@ -510,42 +689,46 @@ export const Selector = {
       }
     }
 
-    const walls = Array.isArray(state?.walls) ? state.walls : [];
-    let wallsSig = `${walls.length}`;
-    for (let i = 0; i < walls.length; i++) {
-      const w = walls[i];
-      if (!isWallBlockingSight(w)) continue;
-      wallsSig += `|${w.x1},${w.y1},${w.x2},${w.y2},${w.kind === 'terrain' ? 't' : 's'}`;
-    }
-    if (!this._visPolyCache) this._visPolyCache = new Map();
-    if (this._visPolyCacheWallsSig !== wallsSig) {
-      this._visPolyCache.clear();
-      this._visPolyCacheWallsSig = wallsSig;
-    }
-
+    const walls = this._ensureVisPolyCache(state?.walls);
+    const hasReliefWalls = walls.some((w) => w && w.kind === 'terrain' && isWallBlockingSight(w));
     const out = [];
     for (const tok of viewers) {
       const visionMeters = resolveTokenVisionMeters(tok, visionCfg);
       const lightMeters = resolveTokenLightMeters(tok);
-      const effectiveMeters = Math.max(visionMeters, lightMeters);
-      const radius = metersToPixels(effectiveMeters, grid);
+      const eff = resolveEffectiveTokenVisionMeters(tok, visionCfg, ambient);
+      const radius = eff.fullMapSight ? FULL_MAP_LOS_PX : metersToPixels(eff.sightMeters, grid);
       if (radius <= 0) continue;
+      const occupiedHalfPx = Math.max(1, Number(tok.size) || 1) * grid.cellSize * 0.5;
+      const lightRadiusPx = lightMeters > 0 ? occupiedHalfPx + metersToPixels(lightMeters, grid) : 0;
+      const darkvisionRadiusPx = eff.darkvisionMeters > 0 ? occupiedHalfPx + metersToPixels(eff.darkvisionMeters, grid) : 0;
+      const minSelfClearPx = eff.fullMapSight ? occupiedHalfPx + grid.cellSize * 0.5 : 0;
+      const nightDetectRadiusPx =
+        ambient === 'night' && eff.fullMapSight
+          ? visionCfg.nightDetectionMeters > 0
+            ? occupiedHalfPx + metersToPixels(visionCfg.nightDetectionMeters, grid)
+            : occupiedHalfPx + grid.cellSize * 0.5
+          : 0;
       const cacheKey = `${tok.id}|${Math.round(tok.x * 2)}|${Math.round(tok.y * 2)}|${Math.round(radius * 2)}`;
-      let poly = this._visPolyCache.get(cacheKey);
-      if (!poly) {
-        poly = this.computeVisibilityPolygon({ x: tok.x, y: tok.y }, radius, walls);
-        if (this._visPolyCache.size > 64) {
-          const oldest = this._visPolyCache.keys().next().value;
-          if (oldest !== undefined) this._visPolyCache.delete(oldest);
-        }
-        this._visPolyCache.set(cacheKey, poly);
-      }
+      const poly = this._getCachedVisPoly(cacheKey, { x: tok.x, y: tok.y }, radius, walls);
+      const innerPoly = hasReliefWalls
+        ? this._getCachedVisPoly(cacheKey, { x: tok.x, y: tok.y }, radius, walls, { terrainBlocksOnFirstHit: true })
+        : null;
       out.push({
         token: tok,
         radius,
+        occupiedHalfPx,
+        nightDetectRadiusPx,
+        fullMapSight: eff.fullMapSight,
         visionRadiusPx: metersToPixels(visionMeters, grid),
-        lightRadiusPx: metersToPixels(lightMeters, grid),
-        poly
+        lightRadiusPx,
+        clearRadiusPx:
+          eff.fullMapSight && ambient !== 'darkness'
+            ? FULL_MAP_LOS_PX
+            : Math.max(lightRadiusPx, minSelfClearPx),
+        darkvisionRadiusPx,
+        darkvision: eff.darkvisionMeters > 0,
+        poly,
+        innerPoly
       });
     }
     return out;
@@ -553,20 +736,41 @@ export const Selector = {
 
   /**
    * Resolves tokens visible on the board for the current role or a specific player seat,
-   * enforcing both hidden flag and dynamic lighting line-of-sight polygons.
+   * enforcing hidden flag, dynamic lighting LoS polygons, and pitch-darkness light rules.
    */
   getVisibleTokensForSeat(state, seatKey = '') {
     const tokens = Array.isArray(state?.tokens) ? state.tokens : [];
     if (!seatKey && state?.role === 'gm') return tokens;
     const visSources = state?.dynamicLighting ? this.getAlliedVisibilityPolygons(state, seatKey) : null;
+    const ambient = this.getActiveAmbientLight(state);
+    const isPitchDark = Boolean(state?.dynamicLighting && ambient === 'darkness');
+    const isNight = Boolean(state?.dynamicLighting && ambient === 'night');
+    const lightPolys = isPitchDark || isNight ? this.getActiveLightPolygons(state) : null;
+    const visionCfg = isNight ? this.getSystemVisionConfig(state) : null;
+    const nightDetectPx = isNight
+      ? metersToPixels(visionCfg.nightDetectionMeters, normalizeGridConfig(state?.grid))
+      : 0;
+
     return tokens.filter((t) => {
       if (!t || t.hidden) return false;
       if (visSources && t.isAlly === false) {
-        return visSources.some(
-          (src) =>
-            Math.hypot(t.x - src.token.x, t.y - src.token.y) <= src.radius &&
-            this.isPointInPolygon({ x: t.x, y: t.y }, src.poly)
-        );
+        return visSources.some((src) => {
+          const dist = Math.hypot(t.x - src.token.x, t.y - src.token.y);
+          if (dist > src.radius || !this.isPointInPolygon({ x: t.x, y: t.y }, src.poly)) {
+            return false;
+          }
+          if (!isPitchDark && !isNight) return true;
+          const nightRangePx = nightDetectPx > 0 ? (src.occupiedHalfPx || 0) + nightDetectPx : 0;
+          const selfSightPx = isPitchDark
+            ? Math.max(src.clearRadiusPx || 0, src.darkvisionRadiusPx || 0)
+            : Math.max(nightRangePx, src.lightRadiusPx || 0, src.darkvisionRadiusPx || 0);
+          if (dist <= selfSightPx) return true;
+          return lightPolys.some(
+            (lp) =>
+              Math.hypot(t.x - lp.x, t.y - lp.y) <= lp.radiusPx &&
+              this.isPointInPolygon({ x: t.x, y: t.y }, lp.poly)
+          );
+        });
       }
       return true;
     });
@@ -656,11 +860,6 @@ export const Selector = {
         deck: Boolean(saved.deck)
       };
     }
-    const preset = cfg?.preset || state?.ruleset || 'dnd55';
-    if (preset === 'pbta') return { dice: ['6'], coin: false, fudge: false, deck: false };
-    if (preset === 'pool') return { dice: ['10'], coin: false, fudge: false, deck: false };
-    if (preset === 'd100') return { dice: ['10', '100'], coin: false, fudge: false, deck: false };
-    if (preset === 'vieja_escuela') return { dice: ['4', '6', '8', '10', '12', '20'], coin: false, fudge: false, deck: false };
     return { dice: [...ALL_DICE], coin: false, fudge: false, deck: false };
   },
 
@@ -672,20 +871,13 @@ export const Selector = {
       const list = ALL_MODES.filter((m) => set.has(m));
       if (list.length > 0) return list;
     }
-    const preset = cfg?.preset || state?.ruleset || 'dnd55';
-    if (preset === 'pbta') return ['sum'];
-    if (preset === 'pool') return ['success', 'sum'];
-    if (preset === 'd100') return ['sum'];
-    if (preset === 'vieja_escuela') return ['sum', 'each'];
     return [...ALL_MODES];
   },
 
   getSystemOutcomeConfig(state) {
     const cfg = state?.systemConfig || {};
-    const preset = cfg.preset || state?.ruleset || 'dnd55';
     const validRules = ['none', 'high', 'low', 'tiered'];
-    const defaultRule = preset === 'pbta' ? 'tiered' : preset === 'd100' ? 'low' : 'high';
-    const outcomeRule = validRules.includes(cfg.outcomeRule) ? cfg.outcomeRule : defaultRule;
+    const outcomeRule = validRules.includes(cfg.outcomeRule) ? cfg.outcomeRule : 'high';
     const showCrits = cfg.showCrits !== undefined
       ? Boolean(cfg.showCrits)
       : (outcomeRule === 'high' || outcomeRule === 'low');
@@ -863,10 +1055,9 @@ export const Selector = {
   },
 
   getGmScreenState(state) {
-    const presetKey = state?.systemConfig?.preset || (state?.ruleset === 'free' ? 'free' : 'dnd55');
     const raw = state?.gmScreen;
     if (!raw || typeof raw !== 'object' || !Array.isArray(raw.tabs) || raw.tabs.length === 0) {
-      return createDefaultGmScreen(presetKey);
+      return createDefaultGmScreen('free');
     }
     const tabs = raw.tabs
       .filter((t) => t && t.id)
@@ -1314,12 +1505,12 @@ export const Selector = {
       const world = {
         moduleTitle: state.room.moduleTitle,
         playerInvites: JSON.parse(JSON.stringify(this.getPlayerInvites(state))),
-        ruleset: state.ruleset || 'dnd55',
+        ruleset: state.ruleset || 'free',
         systemConfig: JSON.parse(JSON.stringify(state.systemConfig || {})),
         sheetSchema: JSON.parse(JSON.stringify(state.sheetSchema || [])),
         deck: state.deck ? JSON.parse(JSON.stringify(state.deck)) : null,
         mapId: state.mapId,
-        activeMapKey: state.activeMapKey || state.mapId || 'bastion',
+        activeMapKey: state.activeMapKey || state.mapId || 'empty',
         sceneMode: state.sceneMode === 'narrative' ? 'narrative' : 'tactical',
         sceneWeather: normalizeWeatherType(state.sceneWeather),
         customMapUrl: state.customMapUrl,
@@ -1328,10 +1519,12 @@ export const Selector = {
         notes: JSON.parse(JSON.stringify(state.notes || [])),
         combat: JSON.parse(JSON.stringify(state.combat || { active: false, round: 1, turnIndex: 0, order: [] })),
         dynamicLighting: Boolean(state.dynamicLighting),
+        sceneAmbientLight: this.getActiveAmbientLight(state),
         rememberExplored: state.rememberExplored !== false,
         exploredMask: String(state.exploredMask || ''),
         exploredRev: Math.max(0, Math.trunc(Number(state.exploredRev) || 0)),
         walls: JSON.parse(JSON.stringify(state.walls || [])),
+        mapLights: JSON.parse(JSON.stringify(state.mapLights || [])),
         grid: { ...state.grid },
         customActors: JSON.parse(JSON.stringify(state.customActors || [])),
         customItems: JSON.parse(JSON.stringify(state.customItems || [])),
@@ -1386,12 +1579,12 @@ export const Selector = {
       _redactedWorld: true,
       moduleTitle: state.room.moduleTitle,
       playerInvites: JSON.parse(JSON.stringify(this.getPlayerInvites(state))),
-      ruleset: state.ruleset || 'dnd55',
+      ruleset: state.ruleset || 'free',
       systemConfig: JSON.parse(JSON.stringify(state.systemConfig || {})),
       sheetSchema: JSON.parse(JSON.stringify(state.sheetSchema || [])),
       deck: state.deck ? JSON.parse(JSON.stringify(state.deck)) : null,
       mapId: state.mapId,
-      activeMapKey: state.activeMapKey || state.mapId || 'bastion',
+      activeMapKey: state.activeMapKey || state.mapId || 'empty',
       sceneMode: state.sceneMode === 'narrative' ? 'narrative' : 'tactical',
       sceneWeather: normalizeWeatherType(state.sceneWeather),
       customMapUrl: state.customMapUrl,
@@ -1399,10 +1592,14 @@ export const Selector = {
       notes: filterVisibleMapNotes(state.notes, false),
       combat: redactCombatForSeat(state.combat, state.tokens, state.systemConfig?.combatTrackerPublic !== false),
       dynamicLighting: Boolean(state.dynamicLighting),
+      sceneAmbientLight: this.getActiveAmbientLight(state),
       rememberExplored: state.rememberExplored !== false,
       exploredMask: String(state.exploredMask || ''),
       exploredRev: Math.max(0, Math.trunc(Number(state.exploredRev) || 0)),
       walls: redactWallsForPlayer(state.walls || []),
+      mapLights: filterVisibleMapLights(state.mapLights, state.activeMapKey || state.mapId || 'bastion', {
+        includeDisabled: false
+      }),
       grid: { ...state.grid },
       customActors: [],
       customItems: [],
